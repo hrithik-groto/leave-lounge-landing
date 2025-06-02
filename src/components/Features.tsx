@@ -52,10 +52,10 @@ const Features = () => {
           {features.map((feature, index) => (
             <div
               key={index}
-              className="p-8 rounded-xl bg-gray-50 hover:bg-blue-50 transition-all duration-300 hover:shadow-lg hover-scale group"
+              className="p-8 rounded-xl bg-gray-50 hover:bg-purple-50 transition-all duration-300 hover:shadow-lg hover-scale group"
             >
-              <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-blue-200 transition-colors duration-300">
-                <feature.icon className="h-7 w-7 text-blue-600" />
+              <div className="w-14 h-14 bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl flex items-center justify-center mb-6 group-hover:from-purple-200 group-hover:to-pink-200 transition-colors duration-300">
+                <feature.icon className="h-7 w-7 text-purple-600" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 {feature.title}
@@ -68,7 +68,7 @@ const Features = () => {
         </div>
 
         <div className="mt-16 text-center">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors duration-200">
+          <button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors duration-200">
             Explore All Features
           </button>
         </div>

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -19,7 +20,7 @@ const Header = () => {
           {/* Logo */}
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-blue-600">LeaveEase</h1>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">Timeloo</h1>
             </div>
           </div>
 
@@ -29,28 +30,40 @@ const Header = () => {
               <a
                 key={item.name}
                 href={item.href}
-                className="text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors duration-200"
+                className="text-gray-700 hover:text-purple-600 px-3 py-2 text-sm font-medium transition-colors duration-200"
               >
                 {item.name}
               </a>
             ))}
           </nav>
 
-          {/* Desktop CTA Buttons */}
+          {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-4">
-            <Button variant="ghost" className="text-gray-700 hover:text-blue-600">
-              Login
-            </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-              Sign Up
-            </Button>
+            <SignedOut>
+              <SignInButton>
+                <Button variant="ghost" className="text-gray-700 hover:text-purple-600">
+                  Login
+                </Button>
+              </SignInButton>
+              <SignUpButton>
+                <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
+                  Sign Up
+                </Button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white mr-2">
+                Go to App
+              </Button>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
           </div>
 
           {/* Mobile menu button */}
           <div className="md:hidden">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-gray-700 hover:text-blue-600 p-2"
+              className="text-gray-700 hover:text-purple-600 p-2"
             >
               {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -65,19 +78,33 @@ const Header = () => {
                 <a
                   key={item.name}
                   href={item.href}
-                  className="block px-3 py-2 text-gray-700 hover:text-blue-600 text-base font-medium"
+                  className="block px-3 py-2 text-gray-700 hover:text-purple-600 text-base font-medium"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   {item.name}
                 </a>
               ))}
               <div className="pt-4 space-y-2">
-                <Button variant="ghost" className="w-full justify-start text-gray-700 hover:text-blue-600">
-                  Login
-                </Button>
-                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                  Sign Up
-                </Button>
+                <SignedOut>
+                  <SignInButton>
+                    <Button variant="ghost" className="w-full justify-start text-gray-700 hover:text-purple-600">
+                      Login
+                    </Button>
+                  </SignInButton>
+                  <SignUpButton>
+                    <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
+                      Sign Up
+                    </Button>
+                  </SignUpButton>
+                </SignedOut>
+                <SignedIn>
+                  <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white mb-2">
+                    Go to App
+                  </Button>
+                  <div className="flex justify-center">
+                    <UserButton afterSignOutUrl="/" />
+                  </div>
+                </SignedIn>
               </div>
             </div>
           </div>
