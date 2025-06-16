@@ -3,15 +3,22 @@ import React, { useState } from 'react';
 import { Menu, X, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
+import { useNavigate } from 'react-router-dom';
+import NotificationBell from './NotificationBell';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const navItems = [
     { name: 'Home', href: '#home' },
     { name: 'About Us', href: '#about' },
     { name: 'Pricing', href: '#pricing' },
   ];
+
+  const handleGoToApp = () => {
+    navigate('/dashboard');
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
@@ -61,7 +68,11 @@ const Header = () => {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
-              <Button className="bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:from-purple-700 hover:via-pink-600 hover:to-orange-500 text-white font-medium px-8 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 mr-3">
+              <NotificationBell />
+              <Button 
+                onClick={handleGoToApp}
+                className="bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:from-purple-700 hover:via-pink-600 hover:to-orange-500 text-white font-medium px-8 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 mr-3"
+              >
                 Go to App
               </Button>
               <div className="p-1 bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 rounded-full">
@@ -116,7 +127,13 @@ const Header = () => {
                   </SignUpButton>
                 </SignedOut>
                 <SignedIn>
-                  <Button className="w-full bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:from-purple-700 hover:via-pink-600 hover:to-orange-500 text-white font-medium py-3 rounded-xl shadow-lg mb-3">
+                  <div className="flex justify-center mb-3">
+                    <NotificationBell />
+                  </div>
+                  <Button 
+                    onClick={handleGoToApp}
+                    className="w-full bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:from-purple-700 hover:via-pink-600 hover:to-orange-500 text-white font-medium py-3 rounded-xl shadow-lg mb-3"
+                  >
                     Go to App
                   </Button>
                   <div className="flex justify-center">
