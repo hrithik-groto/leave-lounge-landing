@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Users, Calendar, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 
 const AdminDashboard = () => {
   const { user, isLoaded } = useUser();
@@ -21,13 +21,38 @@ const AdminDashboard = () => {
   const [orgName, setOrgName] = useState('');
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [userProfiles, setUserProfiles] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [additionalLeaves, setAdditionalLeaves] = useState('');
+  const [isAddingLeaves, setIsAddingLeaves] = useState(false);
   const { toast } = useToast();
 
+  // Check if current user is admin
+  const isAdmin = user?.id === '23510de5-ed66-402d-9511-0c8de9f59ad7';
+
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && isAdmin) {
       fetchAllLeaveApplications();
+      fetchUserProfiles();
     }
-  }, [isLoaded]);
+  }, [isLoaded, isAdmin]);
+
+  const fetchUserProfiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching user profiles:', error);
+      } else {
+        setUserProfiles(data || []);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
 
   const fetchAllLeaveApplications = async () => {
     try {
@@ -161,12 +186,63 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleAddLeaves = async () => {
+    if (!selectedUserId || !additionalLeaves) {
+      toast({
+        title: "Error",
+        description: "Please select a user and enter number of leaves",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsAddingLeaves(true);
+    try {
+      // Create notification for the user about additional leaves
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: selectedUserId,
+          message: `Admin has added ${additionalLeaves} additional leave days to your account.`,
+          type: 'success'
+        });
+
+      toast({
+        title: "Success",
+        description: `Added ${additionalLeaves} leave days to user's account!`
+      });
+
+      setSelectedUserId('');
+      setAdditionalLeaves('');
+    } catch (error) {
+      console.error('Error adding leaves:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add leaves",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAddingLeaves(false);
+    }
+  };
+
   if (!isLoaded) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
   if (!user) {
     return <div className="flex items-center justify-center min-h-screen">Please sign in to access the admin dashboard.</div>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+          <p className="text-gray-600">You don't have admin privileges to access this page.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -179,38 +255,40 @@ const AdminDashboard = () => {
             <p className="text-gray-600 mt-2">Manage leave applications and organizations</p>
           </div>
           
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Organization
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Organization</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="org-name">Organization Name</Label>
-                  <Input
-                    id="org-name"
-                    placeholder="Enter organization name..."
-                    value={orgName}
-                    onChange={(e) => setOrgName(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <Button 
-                  onClick={handleCreateOrganization} 
-                  disabled={isCreatingOrg}
-                  className="w-full"
-                >
-                  {isCreatingOrg ? 'Creating...' : 'Create Organization'}
+          <div className="flex space-x-4">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Organization
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Organization</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="org-name">Organization Name</Label>
+                    <Input
+                      id="org-name"
+                      placeholder="Enter organization name..."
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleCreateOrganization} 
+                    disabled={isCreatingOrg}
+                    className="w-full"
+                  >
+                    {isCreatingOrg ? 'Creating...' : 'Create Organization'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -256,6 +334,51 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
+        {/* Add Leaves Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Add Additional Leaves</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex space-x-4 items-end">
+              <div className="flex-1">
+                <Label htmlFor="user-select">Select User</Label>
+                <select
+                  id="user-select"
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full p-2 border rounded-md mt-1"
+                >
+                  <option value="">Select a user...</option>
+                  {userProfiles.map((profile: any) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} ({profile.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <Label htmlFor="additional-leaves">Additional Leaves</Label>
+                <Input
+                  id="additional-leaves"
+                  type="number"
+                  placeholder="Enter number of leaves"
+                  value={additionalLeaves}
+                  onChange={(e) => setAdditionalLeaves(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <Button 
+                onClick={handleAddLeaves}
+                disabled={isAddingLeaves}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {isAddingLeaves ? 'Adding...' : 'Add Leaves'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Current Organization */}
         {organization && (
           <Card className="mb-8">
@@ -280,6 +403,7 @@ const AdminDashboard = () => {
                   <TableHead>Employee</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Leave Dates</TableHead>
+                  <TableHead>Duration</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Applied Date</TableHead>
@@ -295,6 +419,9 @@ const AdminDashboard = () => {
                     <TableCell>{application.profiles?.email || 'No email'}</TableCell>
                     <TableCell>
                       {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
+                    </TableCell>
+                    <TableCell>
+                      {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{application.reason || 'No reason provided'}</TableCell>
                     <TableCell>

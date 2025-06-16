@@ -8,10 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { CalendarDays, Plus } from 'lucide-react';
+import { CalendarDays, Plus, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
@@ -21,12 +21,14 @@ const Dashboard = () => {
   const [isApplyingLeave, setIsApplyingLeave] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [leaveApplications, setLeaveApplications] = useState([]);
+  const [leaveBalance, setLeaveBalance] = useState(20);
   const { toast } = useToast();
 
   useEffect(() => {
     if (user && isLoaded) {
       createOrUpdateProfile();
       fetchLeaveApplications();
+      calculateLeaveBalance();
     }
   }, [user, isLoaded]);
 
@@ -72,11 +74,49 @@ const Dashboard = () => {
     }
   };
 
+  const calculateLeaveBalance = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('leave_applied_users')
+        .select('start_date, end_date, status')
+        .eq('user_id', user.id)
+        .in('status', ['approved', 'pending']);
+
+      if (error) {
+        console.error('Error calculating leave balance:', error);
+        return;
+      }
+
+      let usedLeaves = 0;
+      data?.forEach((leave: any) => {
+        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
+        usedLeaves += days;
+      });
+
+      setLeaveBalance(20 - usedLeaves);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
   const handleApplyLeave = async () => {
     if (!user || !selectedDate || !endDate) {
       toast({
         title: "Error",
         description: "Please select both start and end dates",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const leaveDays = differenceInDays(endDate, selectedDate) + 1;
+    
+    if (leaveDays > leaveBalance) {
+      toast({
+        title: "Error",
+        description: `You don't have enough leave balance. Available: ${leaveBalance} days, Requested: ${leaveDays} days`,
         variant: "destructive"
       });
       return;
@@ -99,6 +139,15 @@ const Dashboard = () => {
         throw error;
       }
 
+      // Notify admin about new leave application
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: '23510de5-ed66-402d-9511-0c8de9f59ad7', // Admin ID
+          message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')}`,
+          type: 'info'
+        });
+
       toast({
         title: "Success",
         description: "Leave application submitted successfully!"
@@ -109,6 +158,7 @@ const Dashboard = () => {
       setReason('');
       setIsDialogOpen(false);
       fetchLeaveApplications();
+      calculateLeaveBalance();
 
     } catch (error) {
       console.error('Error applying for leave:', error);
@@ -119,6 +169,35 @@ const Dashboard = () => {
       });
     } finally {
       setIsApplyingLeave(false);
+    }
+  };
+
+  const handleRevertLeave = async (applicationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('leave_applied_users')
+        .delete()
+        .eq('id', applicationId)
+        .eq('user_id', user?.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: "Leave application reverted successfully!"
+      });
+
+      fetchLeaveApplications();
+      calculateLeaveBalance();
+    } catch (error) {
+      console.error('Error reverting leave:', error);
+      toast({
+        title: "Error",
+        description: "Failed to revert leave application",
+        variant: "destructive"
+      });
     }
   };
 
@@ -137,7 +216,7 @@ const Dashboard = () => {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user.firstName}!</h1>
-            <p className="text-gray-600 mt-2">Manage your leave applications and view your calendar</p>
+            <p className="text-gray-600 mt-2">Leave Balance: {leaveBalance} days remaining</p>
           </div>
           
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -147,18 +226,23 @@ const Dashboard = () => {
                 Apply for Leave
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Apply for Leave</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
                   <Label htmlFor="start-date">Start Date</Label>
-                  <div className="mt-2">
+                  <div className="mt-2 flex justify-center">
                     <Calendar
                       mode="single"
                       selected={selectedDate}
-                      onSelect={setSelectedDate}
+                      onSelect={(date) => {
+                        setSelectedDate(date);
+                        if (endDate && date && endDate < date) {
+                          setEndDate(undefined);
+                        }
+                      }}
                       className="rounded-md border"
                       disabled={(date) => date < new Date()}
                     />
@@ -167,7 +251,7 @@ const Dashboard = () => {
                 
                 <div>
                   <Label htmlFor="end-date">End Date</Label>
-                  <div className="mt-2">
+                  <div className="mt-2 flex justify-center">
                     <Calendar
                       mode="single"
                       selected={endDate}
@@ -177,6 +261,17 @@ const Dashboard = () => {
                     />
                   </div>
                 </div>
+
+                {selectedDate && endDate && (
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      Leave Duration: {differenceInDays(endDate, selectedDate) + 1} day(s)
+                    </p>
+                    <p className="text-sm text-blue-600">
+                      From {format(selectedDate, 'MMM dd, yyyy')} to {format(endDate, 'MMM dd, yyyy')}
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="reason">Reason (Optional)</Label>
@@ -252,16 +347,31 @@ const Dashboard = () => {
                             </p>
                             <p className="text-sm text-gray-600">{application.reason}</p>
                           </div>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            application.status === 'approved' ? 'bg-green-100 text-green-800' :
-                            application.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {application.status}
-                          </span>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              application.status === 'approved' ? 'bg-green-100 text-green-800' :
+                              application.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {application.status}
+                            </span>
+                            {application.status === 'pending' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRevertLeave(application.id)}
+                                className="p-1 h-6 w-6"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-gray-500">
                           Applied: {format(new Date(application.applied_at), 'MMM dd, yyyy')}
+                        </p>
+                        <p className="text-xs text-blue-600">
+                          Duration: {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
                         </p>
                       </div>
                     ))
