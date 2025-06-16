@@ -12,6 +12,7 @@ import { Users, Calendar, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
+import { UserButton } from '@clerk/clerk-react';
 
 const AdminDashboard = () => {
   const { user, isLoaded } = useUser();
@@ -95,12 +96,12 @@ const AdminDashboard = () => {
         .from('notifications')
         .insert({
           user_id: userId,
-          message: 'Your leave application has been approved!',
+          message: 'Your leave application has been approved! 🎉',
           type: 'success'
         });
 
       toast({
-        title: "Success",
+        title: "Success! ✅",
         description: "Leave application approved successfully!"
       });
 
@@ -203,7 +204,7 @@ const AdminDashboard = () => {
         .from('notifications')
         .insert({
           user_id: selectedUserId,
-          message: `Admin has added ${additionalLeaves} additional leave days to your account.`,
+          message: `Admin has added ${additionalLeaves} additional leave days to your account. 🎁`,
           type: 'success'
         });
 
@@ -246,225 +247,247 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-gray-600 mt-2">Manage leave applications and organizations</p>
-          </div>
-          
-          <div className="flex space-x-4">
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Organization
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Organization</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="org-name">Organization Name</Label>
-                    <Input
-                      id="org-name"
-                      placeholder="Enter organization name..."
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <Button 
-                    onClick={handleCreateOrganization} 
-                    disabled={isCreatingOrg}
-                    className="w-full"
-                  >
-                    {isCreatingOrg ? 'Creating...' : 'Create Organization'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Navigation */}
+      <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
+            Admin Dashboard
+          </h1>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-600">Admin Panel</span>
+            <UserButton afterSignOutUrl="/" />
           </div>
         </div>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <Users className="h-8 w-8 text-blue-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Applications</p>
-                  <p className="text-2xl font-bold text-gray-900">{leaveApplications.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <Calendar className="h-8 w-8 text-green-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Pending</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {leaveApplications.filter((app: any) => app.status === 'pending').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <CheckCircle className="h-8 w-8 text-purple-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Approved</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {leaveApplications.filter((app: any) => app.status === 'approved').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Add Leaves Section */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Add Additional Leaves</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex space-x-4 items-end">
-              <div className="flex-1">
-                <Label htmlFor="user-select">Select User</Label>
-                <select
-                  id="user-select"
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full p-2 border rounded-md mt-1"
-                >
-                  <option value="">Select a user...</option>
-                  {userProfiles.map((profile: any) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name} ({profile.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <Label htmlFor="additional-leaves">Additional Leaves</Label>
-                <Input
-                  id="additional-leaves"
-                  type="number"
-                  placeholder="Enter number of leaves"
-                  value={additionalLeaves}
-                  onChange={(e) => setAdditionalLeaves(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <Button 
-                onClick={handleAddLeaves}
-                disabled={isAddingLeaves}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {isAddingLeaves ? 'Adding...' : 'Add Leaves'}
-              </Button>
+      <div className="pt-6 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <p className="text-gray-600 mt-2">Manage leave applications and organizations</p>
             </div>
-          </CardContent>
-        </Card>
+            
+            <div className="flex space-x-4">
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Organization
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Organization</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="org-name">Organization Name</Label>
+                      <Input
+                        id="org-name"
+                        placeholder="Enter organization name..."
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <Button 
+                      onClick={handleCreateOrganization} 
+                      disabled={isCreatingOrg}
+                      className="w-full"
+                    >
+                      {isCreatingOrg ? 'Creating...' : 'Create Organization'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
 
-        {/* Current Organization */}
-        {organization && (
-          <Card className="mb-8">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card className="hover:shadow-lg transition-shadow duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <Users className="h-8 w-8 text-blue-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Applications</p>
+                    <p className="text-2xl font-bold text-gray-900">{leaveApplications.length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="hover:shadow-lg transition-shadow duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <Calendar className="h-8 w-8 text-yellow-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Pending</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {leaveApplications.filter((app: any) => app.status === 'pending').length}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="hover:shadow-lg transition-shadow duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Approved</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {leaveApplications.filter((app: any) => app.status === 'approved').length}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Add Leaves Section */}
+          <Card className="mb-8 hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle>Current Organization: {organization.name}</CardTitle>
+              <CardTitle>Add Additional Leaves</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">You are managing the {organization.name} organization.</p>
+              <div className="flex space-x-4 items-end">
+                <div className="flex-1">
+                  <Label htmlFor="user-select">Select User</Label>
+                  <select
+                    id="user-select"
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="w-full p-2 border rounded-md mt-1"
+                  >
+                    <option value="">Select a user...</option>
+                    {userProfiles.map((profile: any) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name} ({profile.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="additional-leaves">Additional Leaves</Label>
+                  <Input
+                    id="additional-leaves"
+                    type="number"
+                    placeholder="Enter number of leaves"
+                    value={additionalLeaves}
+                    onChange={(e) => setAdditionalLeaves(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <Button 
+                  onClick={handleAddLeaves}
+                  disabled={isAddingLeaves}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isAddingLeaves ? 'Adding...' : 'Add Leaves'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Leave Applications Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Leave Applications</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Leave Dates</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Applied Date</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leaveApplications.map((application: any) => (
-                  <TableRow key={application.id}>
-                    <TableCell className="font-medium">
-                      {application.profiles?.name || 'Unknown User'}
-                    </TableCell>
-                    <TableCell>{application.profiles?.email || 'No email'}</TableCell>
-                    <TableCell>
-                      {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
-                    </TableCell>
-                    <TableCell>
-                      {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">{application.reason || 'No reason provided'}</TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        application.status === 'approved' ? 'default' :
-                        application.status === 'rejected' ? 'destructive' :
-                        'secondary'
-                      }>
-                        {application.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{format(new Date(application.applied_at), 'MMM dd, yyyy')}</TableCell>
-                    <TableCell>
-                      {application.status === 'pending' && (
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleApproveLeave(application.id, application.user_id)}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleRejectLeave(application.id, application.user_id)}
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </TableCell>
+          {/* Current Organization */}
+          {organization && (
+            <Card className="mb-8 hover:shadow-lg transition-shadow duration-300">
+              <CardHeader>
+                <CardTitle>Current Organization: {organization.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">You are managing the {organization.name} organization.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Leave Applications Table */}
+          <Card className="hover:shadow-lg transition-shadow duration-300">
+            <CardHeader>
+              <CardTitle>Leave Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Leave Dates</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Applied Date</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {leaveApplications.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No leave applications found</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {leaveApplications.map((application: any) => (
+                    <TableRow key={application.id} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">
+                        {application.profiles?.name || 'Unknown User'}
+                      </TableCell>
+                      <TableCell>{application.profiles?.email || 'No email'}</TableCell>
+                      <TableCell>
+                        {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
+                      </TableCell>
+                      <TableCell>
+                        {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate">{application.reason || 'No reason provided'}</TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          application.status === 'approved' ? 'default' :
+                          application.status === 'rejected' ? 'destructive' :
+                          'secondary'
+                        }>
+                          {application.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{format(new Date(application.applied_at), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>
+                        {application.status === 'pending' && (
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApproveLeave(application.id, application.user_id)}
+                              className="bg-green-600 hover:bg-green-700 transition-colors duration-200"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleRejectLeave(application.id, application.user_id)}
+                              className="hover:bg-red-700 transition-colors duration-200"
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                        {application.status !== 'pending' && (
+                          <span className="text-gray-400 text-sm">
+                            {application.status === 'approved' ? 'Approved' : 'Rejected'}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {leaveApplications.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No leave applications found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
