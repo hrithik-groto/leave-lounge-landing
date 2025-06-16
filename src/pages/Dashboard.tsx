@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from '@/components/ui/calendar';
@@ -8,12 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield } from 'lucide-react';
+import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
 import { UserButton } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
+import NotificationBell from '@/components/NotificationBell';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
@@ -27,6 +28,9 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Check if current user is admin
+  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
 
   useEffect(() => {
     if (user && isLoaded) {
@@ -117,10 +121,29 @@ const Dashboard = () => {
 
     const leaveDays = differenceInDays(endDate, selectedDate) + 1;
     
-    if (leaveDays > leaveBalance) {
+    // Check if requested days exceed 20
+    if (leaveDays > 20) {
       toast({
         title: "Error",
+        description: "You cannot apply for more than 20 days of leave at once",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (leaveDays > leaveBalance) {
+      toast({
+        title: "Insufficient Leave Balance",
         description: `You don't have enough leave balance. Available: ${leaveBalance} days, Requested: ${leaveDays} days`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (leaveBalance <= 0) {
+      toast({
+        title: "No Leave Balance",
+        description: "You have used all your annual leave. Please contact HR for additional leave requests.",
         variant: "destructive"
       });
       return;
@@ -148,7 +171,7 @@ const Dashboard = () => {
         .from('notifications')
         .insert({
           user_id: '23510de5-ed66-402d-9511-0c8de9f59ad7', // Admin ID
-          message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')}`,
+          message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')} (${leaveDays} days)`,
           type: 'info'
         });
 
@@ -182,7 +205,8 @@ const Dashboard = () => {
         .from('leave_applied_users')
         .delete()
         .eq('id', applicationId)
-        .eq('user_id', user?.id);
+        .eq('user_id', user?.id)
+        .eq('status', 'pending'); // Only allow deletion of pending applications
 
       if (error) {
         throw error;
@@ -245,8 +269,18 @@ const Dashboard = () => {
             <Shield className="w-4 h-4" />
             <span>Policies</span>
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+            >
+              <Shield className="w-4 h-4" />
+              <span>Admin Panel</span>
+            </button>
+          )}
         </div>
         <div className="flex items-center space-x-4">
+          <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
           <UserButton afterSignOutUrl="/" />
         </div>
@@ -306,15 +340,29 @@ const Dashboard = () => {
   const renderLeavesRemaining = () => (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
-      <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
         <CardContent className="p-6">
           <div className="text-center">
             <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
             <div className="text-lg opacity-90">Days Remaining</div>
             <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
+            {leaveBalance <= 0 && (
+              <div className="mt-3 p-2 bg-white/20 rounded-lg">
+                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
+      
+      {leaveBalance <= 5 && leaveBalance > 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            You have {leaveBalance} leave days remaining. Plan your time off carefully!
+          </AlertDescription>
+        </Alert>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
@@ -388,6 +436,10 @@ const Dashboard = () => {
               <h4 className="font-medium mb-2">Approval Requirements</h4>
               <p className="text-gray-600 text-sm">All leave requests require manager approval and are subject to operational requirements.</p>
             </div>
+            <div>
+              <h4 className="font-medium mb-2">Maximum Days Per Request</h4>
+              <p className="text-gray-600 text-sm">You cannot apply for more than 20 days of leave in a single request.</p>
+            </div>
           </CardContent>
         </Card>
         
@@ -416,6 +468,18 @@ const Dashboard = () => {
 
   const renderDashboard = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Leave Balance Alert */}
+      {leaveBalance <= 0 && (
+        <div className="lg:col-span-3 mb-6">
+          <Alert className="border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">
+              You have exhausted all your annual leave days. Please contact HR if you need additional leave.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Calendar Section */}
       <div className="lg:col-span-2">
         <Card className="hover:shadow-lg transition-shadow duration-300">
@@ -428,7 +492,10 @@ const Dashboard = () => {
               
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
+                  <Button 
+                    className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white"
+                    disabled={leaveBalance <= 0}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
                     Apply for Leave
                   </Button>
@@ -437,68 +504,103 @@ const Dashboard = () => {
                   <DialogHeader>
                     <DialogTitle>Apply for Leave</DialogTitle>
                   </DialogHeader>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <Label htmlFor="start-date">Start Date</Label>
-                      <div className="mt-2 flex justify-center">
-                        <Calendar
-                          mode="single"
-                          selected={selectedDate}
-                          onSelect={(date) => {
-                            setSelectedDate(date);
-                            if (endDate && date && endDate < date) {
-                              setEndDate(undefined);
-                            }
-                          }}
-                          className="rounded-md border"
-                          disabled={(date) => date < new Date()}
-                        />
+                  
+                  {leaveBalance <= 0 ? (
+                    <Alert className="border-red-200 bg-red-50">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-red-800">
+                        You have no remaining leave days. Please contact HR for additional leave requests.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <>
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          Available leave balance: <strong>{leaveBalance} days</strong>
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Maximum 20 days per request
+                        </p>
                       </div>
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="end-date">End Date</Label>
-                      <div className="mt-2 flex justify-center">
-                        <Calendar
-                          mode="single"
-                          selected={endDate}
-                          onSelect={setEndDate}
-                          className="rounded-md border"
-                          disabled={(date) => date < (selectedDate || new Date())}
-                        />
-                      </div>
-                    </div>
-                  </div>
 
-                  {selectedDate && endDate && (
-                    <div className="p-4 bg-blue-50 rounded-lg animate-fade-in">
-                      <p className="text-sm text-blue-800">
-                        Leave Duration: {differenceInDays(endDate, selectedDate) + 1} day(s)
-                      </p>
-                      <p className="text-sm text-blue-600">
-                        From {format(selectedDate, 'MMM dd, yyyy')} to {format(endDate, 'MMM dd, yyyy')}
-                      </p>
-                    </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <Label htmlFor="start-date">Start Date</Label>
+                          <div className="mt-2 flex justify-center">
+                            <Calendar
+                              mode="single"
+                              selected={selectedDate}
+                              onSelect={(date) => {
+                                setSelectedDate(date);
+                                if (endDate && date && endDate < date) {
+                                  setEndDate(undefined);
+                                }
+                              }}
+                              className="rounded-md border"
+                              disabled={(date) => date < new Date()}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="end-date">End Date</Label>
+                          <div className="mt-2 flex justify-center">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={setEndDate}
+                              className="rounded-md border"
+                              disabled={(date) => date < (selectedDate || new Date())}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedDate && endDate && (
+                        <div className="p-4 bg-blue-50 rounded-lg animate-fade-in">
+                          <p className="text-sm text-blue-800">
+                            Leave Duration: {differenceInDays(endDate, selectedDate) + 1} day(s)
+                          </p>
+                          <p className="text-sm text-blue-600">
+                            From {format(selectedDate, 'MMM dd, yyyy')} to {format(endDate, 'MMM dd, yyyy')}
+                          </p>
+                          {differenceInDays(endDate, selectedDate) + 1 > 20 && (
+                            <p className="text-sm text-red-600 mt-2">
+                              ⚠️ Cannot apply for more than 20 days at once
+                            </p>
+                          )}
+                          {differenceInDays(endDate, selectedDate) + 1 > leaveBalance && (
+                            <p className="text-sm text-red-600 mt-2">
+                              ⚠️ Insufficient leave balance
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div>
+                        <Label htmlFor="reason">Reason (Optional)</Label>
+                        <Textarea
+                          id="reason"
+                          placeholder="Enter reason for leave..."
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <Button 
+                        onClick={handleApplyLeave} 
+                        disabled={isApplyingLeave || !selectedDate || !endDate || 
+                          (selectedDate && endDate && 
+                            (differenceInDays(endDate, selectedDate) + 1 > 20 || 
+                             differenceInDays(endDate, selectedDate) + 1 > leaveBalance)
+                          )}
+                        className="w-full"
+                      >
+                        {isApplyingLeave ? 'Submitting...' : 'Submit Application'}
+                      </Button>
+                    </>
                   )}
-
-                  <div>
-                    <Label htmlFor="reason">Reason (Optional)</Label>
-                    <Textarea
-                      id="reason"
-                      placeholder="Enter reason for leave..."
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-
-                  <Button 
-                    onClick={handleApplyLeave} 
-                    disabled={isApplyingLeave || !selectedDate || !endDate}
-                    className="w-full"
-                  >
-                    {isApplyingLeave ? 'Submitting...' : 'Submit Application'}
-                  </Button>
                 </DialogContent>
               </Dialog>
             </div>

@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
 import { UserButton } from '@clerk/clerk-react';
+import NotificationBell from '@/components/NotificationBell';
 
 const AdminDashboard = () => {
   const { user, isLoaded } = useUser();
@@ -29,7 +30,7 @@ const AdminDashboard = () => {
   const { toast } = useToast();
 
   // Check if current user is admin
-  const isAdmin = user?.id === '23510de5-ed66-402d-9511-0c8de9f59ad7';
+  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
 
   useEffect(() => {
     if (isLoaded && isAdmin) {
@@ -255,6 +256,7 @@ const AdminDashboard = () => {
             Admin Dashboard
           </h1>
           <div className="flex items-center space-x-4">
+            <NotificationBell />
             <span className="text-sm text-gray-600">Admin Panel</span>
             <UserButton afterSignOutUrl="/" />
           </div>
@@ -408,7 +410,7 @@ const AdminDashboard = () => {
           {/* Leave Applications Table */}
           <Card className="hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle>Leave Applications</CardTitle>
+              <CardTitle>Leave Applications Management</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
