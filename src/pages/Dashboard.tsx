@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useUser, UserButton } from '@clerk/clerk-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,13 +12,47 @@ import EnhancedCalendar from '@/components/EnhancedCalendar';
 import NotificationCenter from '@/components/NotificationCenter';
 import LeaveApplicationForm from '@/components/LeaveApplicationForm';
 
+interface LeaveType {
+  id: string;
+  label: string;
+  color: string;
+  requires_approval: boolean;
+  leave_policies?: {
+    annual_allowance: number;
+    carry_forward_limit: number;
+  }[];
+}
+
+interface UserLeave {
+  id: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  reason: string;
+  leave_types?: {
+    label: string;
+    color: string;
+  };
+}
+
+const leaveTypeDescriptions: Record<string, string> = {
+  'Paid Leave': '1.5 days/month, carried forward monthly, up to 6 days annually',
+  'Bereavement Leave': '5 days/year for 1st-degree relatives, no carry forward',
+  'Restricted Holiday': '2 days/year for festive leaves, no carry forward',
+  'Short Leave': '4 hours/month for late-ins/early outs, no carry forward',
+  'Work From Home': '2 days/month, carries forward monthly',
+  'Additional Work From Home': 'WFH + AWFH ≤ 24 days/year, no carry forward',
+  'Comp-offs': 'For client meetings beyond work hours, unlimited',
+  'Special Leave': 'Sabbaticals only, requires special approval'
+};
+
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [userLeaves, setUserLeaves] = useState([]);
-  const [leaveTypes, setLeaveTypes] = useState([]);
-  const [userBalances, setUserBalances] = useState({});
+  const [userLeaves, setUserLeaves] = useState<UserLeave[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [userBalances, setUserBalances] = useState<Record<string, { allocated: number; used: number; available: number }>>({});
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [totalUsedDays, setTotalUsedDays] = useState(0);
 
@@ -69,7 +102,12 @@ const Dashboard = () => {
         .eq('user_id', user.id)
         .order('applied_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching user leaves:', error);
+        return;
+      }
+
+      console.log('User leaves data:', data);
       setUserLeaves(data || []);
 
       // Calculate total used days
@@ -98,7 +136,12 @@ const Dashboard = () => {
         `)
         .eq('is_active', true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching leave types:', error);
+        return;
+      }
+
+      console.log('Leave types data:', data);
       setLeaveTypes(data || []);
     } catch (error) {
       console.error('Error fetching leave types:', error);
@@ -109,47 +152,73 @@ const Dashboard = () => {
     if (!user?.id) return;
 
     try {
-      // Initialize balances for all leave types if they don't exist
+      // First check if balances exist for the user
       const { data: existingBalances } = await supabase
         .from('user_leave_balances')
         .select('*')
         .eq('user_id', user.id)
         .eq('year', new Date().getFullYear());
 
-      const balances = {};
-      
-      // Create balances based on leave policies
-      for (const leaveType of leaveTypes) {
-        const existingBalance = existingBalances?.find(b => b.leave_type_id === leaveType.id);
-        const policy = leaveType.leave_policies?.[0];
-        
-        if (!existingBalance && policy) {
-          await supabase
-            .from('user_leave_balances')
-            .insert({
-              user_id: user.id,
-              leave_type_id: leaveType.id,
-              allocated_days: policy.annual_allowance,
-              used_days: 0,
-              carried_forward_days: 0,
-              year: new Date().getFullYear()
-            });
-          
-          balances[leaveType.id] = {
-            allocated: policy.annual_allowance,
-            used: 0,
-            available: policy.annual_allowance
-          };
-        } else if (existingBalance) {
-          balances[leaveType.id] = {
-            allocated: existingBalance.allocated_days,
-            used: existingBalance.used_days,
-            available: existingBalance.allocated_days - existingBalance.used_days + existingBalance.carried_forward_days
-          };
-        }
-      }
+      console.log('Existing balances:', existingBalances);
 
-      setUserBalances(balances);
+      // Initialize balances for all leave types if they don't exist
+      if (!existingBalances || existingBalances.length === 0) {
+        // Get all leave types first
+        const { data: allLeaveTypes } = await supabase
+          .from('leave_types')
+          .select(`
+            *,
+            leave_policies (annual_allowance, carry_forward_limit)
+          `)
+          .eq('is_active', true);
+
+        if (allLeaveTypes) {
+          for (const leaveType of allLeaveTypes) {
+            const policy = leaveType.leave_policies?.[0];
+            if (policy) {
+              await supabase
+                .from('user_leave_balances')
+                .insert({
+                  user_id: user.id,
+                  leave_type_id: leaveType.id,
+                  allocated_days: policy.annual_allowance,
+                  used_days: 0,
+                  carried_forward_days: 0,
+                  year: new Date().getFullYear()
+                });
+            }
+          }
+
+          // Fetch the newly created balances
+          const { data: newBalances } = await supabase
+            .from('user_leave_balances')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('year', new Date().getFullYear());
+
+          const balances: Record<string, { allocated: number; used: number; available: number }> = {};
+          newBalances?.forEach(balance => {
+            balances[balance.leave_type_id || ''] = {
+              allocated: balance.allocated_days || 0,
+              used: balance.used_days || 0,
+              available: (balance.allocated_days || 0) - (balance.used_days || 0) + (balance.carried_forward_days || 0)
+            };
+          });
+
+          setUserBalances(balances);
+        }
+      } else {
+        const balances: Record<string, { allocated: number; used: number; available: number }> = {};
+        existingBalances.forEach(balance => {
+          balances[balance.leave_type_id || ''] = {
+            allocated: balance.allocated_days || 0,
+            used: balance.used_days || 0,
+            available: (balance.allocated_days || 0) - (balance.used_days || 0) + (balance.carried_forward_days || 0)
+          };
+        });
+
+        setUserBalances(balances);
+      }
     } catch (error) {
       console.error('Error fetching user balances:', error);
     }
@@ -359,51 +428,62 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {leaveTypes.map((type) => {
-                    const balance = userBalances[type.id];
-                    const policy = type.leave_policies?.[0];
-                    
-                    return (
-                      <Card key={type.id} className="hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h3 className="font-semibold">{type.label}</h3>
-                            <div 
-                              className="w-4 h-4 rounded-full" 
-                              style={{ backgroundColor: type.color }}
-                            />
-                          </div>
-                          
-                          {balance && (
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span>Available:</span>
-                                <span className="font-medium">
-                                  {policy?.annual_allowance === 999 ? 'Unlimited' : 
-                                   `${balance.available}/${balance.allocated}`}
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                                  style={{ 
-                                    width: policy?.annual_allowance === 999 ? '100%' : 
-                                           `${Math.min(100, (balance.used / balance.allocated) * 100)}%` 
-                                  }}
-                                />
-                              </div>
+                  {leaveTypes.length === 0 ? (
+                    <div className="col-span-full text-center py-8">
+                      <p className="text-gray-500">Loading leave types...</p>
+                    </div>
+                  ) : (
+                    leaveTypes.map((type) => {
+                      const balance = userBalances[type.id];
+                      const policy = type.leave_policies?.[0];
+                      
+                      return (
+                        <Card key={type.id} className="hover:shadow-lg transition-all duration-300">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="font-semibold">{type.label}</h3>
+                              <div 
+                                className="w-4 h-4 rounded-full" 
+                                style={{ backgroundColor: type.color }}
+                              />
                             </div>
-                          )}
-                          
-                          <div className="mt-3 flex items-center justify-between">
-                            <Badge variant={type.requires_approval ? "secondary" : "default"}>
-                              {type.requires_approval ? 'Needs Approval' : 'Auto Approved'}
-                            </Badge>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                            
+                            <p className="text-sm text-gray-600 mb-3">
+                              {leaveTypeDescriptions[type.label]}
+                            </p>
+                            
+                            {balance && policy && (
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                  <span>Available:</span>
+                                  <span className="font-medium">
+                                    {policy.annual_allowance === 999 ? 'Unlimited' : 
+                                     `${balance.available}/${balance.allocated}`}
+                                  </span>
+                                </div>
+                                {policy.annual_allowance !== 999 && (
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                                      style={{ 
+                                        width: `${Math.min(100, (balance.used / balance.allocated) * 100)}%` 
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            <div className="mt-3 flex items-center justify-between">
+                              <Badge variant={type.requires_approval ? "secondary" : "default"}>
+                                {type.requires_approval ? 'Needs Approval' : 'Auto Approved'}
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -416,47 +496,53 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {leaveTypes.map((type) => {
-                    const balance = userBalances[type.id];
-                    const policy = type.leave_policies?.[0];
-                    
-                    if (!balance || !policy) return null;
-                    
-                    return (
-                      <div key={type.id} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center space-x-3">
-                            <div 
-                              className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: type.color }}
-                            />
-                            <span className="font-medium">{type.label}</span>
+                  {leaveTypes.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Loading balances...</p>
+                    </div>
+                  ) : (
+                    leaveTypes.map((type) => {
+                      const balance = userBalances[type.id];
+                      const policy = type.leave_policies?.[0];
+                      
+                      if (!balance || !policy) return null;
+                      
+                      return (
+                        <div key={type.id} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center space-x-3">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: type.color }}
+                              />
+                              <span className="font-medium">{type.label}</span>
+                            </div>
+                            <Badge variant="outline">
+                              {policy.annual_allowance === 999 ? 'Unlimited' : 
+                               `${balance.available} / ${balance.allocated} days`}
+                            </Badge>
                           </div>
-                          <Badge variant="outline">
-                            {policy.annual_allowance === 999 ? 'Unlimited' : 
-                             `${balance.available} / ${balance.allocated} days`}
-                          </Badge>
+                          
+                          {policy.annual_allowance !== 999 && (
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-600">Allocated</p>
+                                <p className="font-semibold">{balance.allocated} days</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Used</p>
+                                <p className="font-semibold">{balance.used} days</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Available</p>
+                                <p className="font-semibold text-green-600">{balance.available} days</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        
-                        {policy.annual_allowance !== 999 && (
-                          <div className="grid grid-cols-3 gap-4 text-sm">
-                            <div>
-                              <p className="text-gray-600">Allocated</p>
-                              <p className="font-semibold">{balance.allocated} days</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Used</p>
-                              <p className="font-semibold">{balance.used} days</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Available</p>
-                              <p className="font-semibold text-green-600">{balance.available} days</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -473,7 +559,7 @@ const Dashboard = () => {
                   <div className="space-y-3">
                     <div className="p-3 bg-blue-50 rounded-lg">
                       <h4 className="font-medium">Paid Leave</h4>
-                      <p className="text-sm text-gray-600">1.5 days per month. Carried forward monthly. Up to 6 days carried forward annually.</p>
+                      <p className="text-sm text-gray-600">1.5 days/month. Carried forward monthly. Up to 6 days carried forward annually.</p>
                     </div>
                     <div className="p-3 bg-red-50 rounded-lg">
                       <h4 className="font-medium">Bereavement Leave</h4>

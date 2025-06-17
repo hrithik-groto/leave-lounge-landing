@@ -21,6 +21,17 @@ interface LeaveApplicationFormProps {
   onSuccess: () => void;
 }
 
+interface LeaveType {
+  id: string;
+  label: string;
+  color: string;
+  requires_approval: boolean;
+  leave_policies?: {
+    annual_allowance: number;
+    carry_forward_limit: number;
+  }[];
+}
+
 const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
   isOpen,
   onClose,
@@ -38,8 +49,8 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [hoursRequested, setHoursRequested] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [leaveTypes, setLeaveTypes] = useState([]);
-  const [userBalances, setUserBalances] = useState({});
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [userBalances, setUserBalances] = useState<Record<string, { allocated: number; used: number; available: number }>>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -68,7 +79,12 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
         `)
         .eq('is_active', true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching leave types:', error);
+        return;
+      }
+
+      console.log('Fetched leave types:', data);
       setLeaveTypes(data || []);
     } catch (error) {
       console.error('Error fetching leave types:', error);
@@ -85,17 +101,21 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
         .eq('user_id', user.id)
         .eq('year', new Date().getFullYear());
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching user balances:', error);
+        return;
+      }
 
-      const balances = {};
+      const balances: Record<string, { allocated: number; used: number; available: number }> = {};
       data?.forEach(balance => {
-        balances[balance.leave_type_id] = {
-          allocated: balance.allocated_days,
-          used: balance.used_days,
-          available: balance.allocated_days - balance.used_days + balance.carried_forward_days
+        balances[balance.leave_type_id || ''] = {
+          allocated: balance.allocated_days || 0,
+          used: balance.used_days || 0,
+          available: (balance.allocated_days || 0) - (balance.used_days || 0) + (balance.carried_forward_days || 0)
         };
       });
 
+      console.log('User balances:', balances);
       setUserBalances(balances);
     } catch (error) {
       console.error('Error fetching user balances:', error);
@@ -120,7 +140,8 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
     const balance = userBalances[selectedLeaveType];
 
     // Validate leave balance for deductible leaves
-    if (selectedType.annual_allowance !== 999 && balance && daysRequested > balance.available) {
+    const policy = selectedType.leave_policies?.[0];
+    if (policy && policy.annual_allowance !== 999 && balance && daysRequested > balance.available) {
       toast({
         title: "Insufficient Leave Balance",
         description: `You only have ${balance.available} days available for ${selectedType.label}`,

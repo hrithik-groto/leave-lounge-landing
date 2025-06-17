@@ -17,13 +17,18 @@ interface Leave {
   end_date: string;
   status: string;
   reason: string;
-  leave_types: {
+  leave_type_id: string;
+  holiday_name?: string;
+  meeting_details?: string;
+  hours_requested?: number;
+  is_half_day?: boolean;
+  leave_types?: {
     label: string;
     color: string;
-  } | null;
-  profiles: {
+  };
+  profiles?: {
     name: string;
-  } | null;
+  };
 }
 
 interface Holiday {
@@ -61,7 +66,12 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({ onRefresh }) => {
         `)
         .order('start_date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching leaves:', error);
+        return;
+      }
+
+      console.log('Fetched leaves data:', data);
       setLeaves(data || []);
     } catch (error) {
       console.error('Error fetching leaves:', error);
@@ -76,7 +86,12 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({ onRefresh }) => {
         .eq('is_active', true)
         .order('date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching holidays:', error);
+        return;
+      }
+
+      console.log('Fetched holidays data:', data);
       setHolidays(data || []);
     } catch (error) {
       console.error('Error fetching holidays:', error);
