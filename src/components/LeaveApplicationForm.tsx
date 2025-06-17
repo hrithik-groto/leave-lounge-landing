@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Clock } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +26,9 @@ interface LeaveType {
   label: string;
   color: string;
   requires_approval: boolean;
+  annual_allowance: number;
+  carry_forward_limit: number;
+  description: string;
   leave_policies?: {
     annual_allowance: number;
     carry_forward_limit: number;
@@ -85,9 +88,70 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
       }
 
       console.log('Fetched leave types:', data);
-      setLeaveTypes(data || []);
+      
+      // Transform the data to include the required fields
+      const transformedLeaveTypes: LeaveType[] = (data || []).map(type => ({
+        ...type,
+        annual_allowance: type.leave_policies?.[0]?.annual_allowance || 0,
+        carry_forward_limit: type.leave_policies?.[0]?.carry_forward_limit || 0,
+        description: getLeaveTypeDescription(type.label)
+      }));
+      
+      setLeaveTypes(transformedLeaveTypes);
+      
+      // Initialize user balances for each leave type if they don't exist
+      if (user?.id && transformedLeaveTypes.length > 0) {
+        await initializeUserBalances(transformedLeaveTypes);
+      }
     } catch (error) {
       console.error('Error fetching leave types:', error);
+    }
+  };
+
+  const getLeaveTypeDescription = (label: string): string => {
+    const descriptions: Record<string, string> = {
+      'Paid Leave': '1.5 days/month, carried forward monthly, up to 6 days annually',
+      'Bereavement Leave': '5 days/year for 1st-degree relatives, no carry forward',
+      'Restricted Holiday': '2 days/year for festive leaves, no carry forward',
+      'Short Leave': '4 hours/month for late-ins/early outs, no carry forward',
+      'Work From Home': '2 days/month, carries forward monthly',
+      'Additional Work From Home': 'WFH + AWFH ≤ 24 days/year, no carry forward',
+      'Comp-offs': 'For client meetings beyond work hours, unlimited',
+      'Special Leave': 'Sabbaticals only, requires special approval'
+    };
+    return descriptions[label] || 'Standard leave policy applies';
+  };
+
+  const initializeUserBalances = async (leaveTypesData: LeaveType[]) => {
+    if (!user?.id) return;
+
+    try {
+      const currentYear = new Date().getFullYear();
+      
+      for (const leaveType of leaveTypesData) {
+        const { data: existingBalance } = await supabase
+          .from('user_leave_balances')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', leaveType.id)
+          .eq('year', currentYear)
+          .single();
+
+        if (!existingBalance) {
+          await supabase
+            .from('user_leave_balances')
+            .insert({
+              user_id: user.id,
+              leave_type_id: leaveType.id,
+              allocated_days: leaveType.annual_allowance,
+              used_days: 0,
+              carried_forward_days: 0,
+              year: currentYear
+            });
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing user balances:', error);
     }
   };
 
@@ -140,8 +204,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({
     const balance = userBalances[selectedLeaveType];
 
     // Validate leave balance for deductible leaves
-    const policy = selectedType.leave_policies?.[0];
-    if (policy && policy.annual_allowance !== 999 && balance && daysRequested > balance.available) {
+    if (selectedType.annual_allowance !== 999 && balance && daysRequested > balance.available) {
       toast({
         title: "Insufficient Leave Balance",
         description: `You only have ${balance.available} days available for ${selectedType.label}`,

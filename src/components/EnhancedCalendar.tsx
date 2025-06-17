@@ -25,10 +25,10 @@ interface Leave {
   leave_types?: {
     label: string;
     color: string;
-  };
+  } | null;
   profiles?: {
     name: string;
-  };
+  } | null;
 }
 
 interface Holiday {
@@ -72,7 +72,15 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({ onRefresh }) => {
       }
 
       console.log('Fetched leaves data:', data);
-      setLeaves(data || []);
+      
+      // Transform the data to ensure proper typing
+      const transformedLeaves: Leave[] = (data || []).map(leave => ({
+        ...leave,
+        leave_types: leave.leave_types || null,
+        profiles: leave.profiles || null
+      }));
+      
+      setLeaves(transformedLeaves);
     } catch (error) {
       console.error('Error fetching leaves:', error);
     }
