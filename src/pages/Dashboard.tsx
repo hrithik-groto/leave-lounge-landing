@@ -1,245 +1,224 @@
 import React, { useState, useEffect } from 'react';
-import { useUser, UserButton } from '@clerk/clerk-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useUser } from '@clerk/clerk-react';
+import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, Users, Clock, FileText, Home, Bell, Sparkles } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
-import EnhancedCalendar from '@/components/EnhancedCalendar';
-import NotificationCenter from '@/components/NotificationCenter';
-import LeaveApplicationForm from '@/components/LeaveApplicationForm';
-
-interface LeaveType {
-  id: string;
-  label: string;
-  color: string;
-  requires_approval: boolean;
-  leave_policies?: {
-    annual_allowance: number;
-    carry_forward_limit: number;
-  }[];
-}
-
-interface UserLeave {
-  id: string;
-  start_date: string;
-  end_date: string;
-  status: string;
-  reason: string;
-  leave_types?: {
-    label: string;
-    color: string;
-  };
-}
-
-const leaveTypeDescriptions: Record<string, string> = {
-  'Paid Leave': '1.5 days/month, carried forward monthly, up to 6 days annually',
-  'Bereavement Leave': '5 days/year for 1st-degree relatives, no carry forward',
-  'Restricted Holiday': '2 days/year for festive leaves, no carry forward',
-  'Short Leave': '4 hours/month for late-ins/early outs, no carry forward',
-  'Work From Home': '2 days/month, carries forward monthly',
-  'Additional Work From Home': 'WFH + AWFH ≤ 24 days/year, no carry forward',
-  'Comp-offs': 'For client meetings beyond work hours, unlimited',
-  'Special Leave': 'Sabbaticals only, requires special approval'
-};
+import { UserButton } from '@clerk/clerk-react';
+import { useNavigate } from 'react-router-dom';
+import NotificationBell from '@/components/NotificationBell';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [reason, setReason] = useState('');
+  const [isApplyingLeave, setIsApplyingLeave] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [leaveApplications, setLeaveApplications] = useState([]);
+  const [leaveBalance, setLeaveBalance] = useState(20);
+  const [currentPage, setCurrentPage] = useState('dashboard');
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [userLeaves, setUserLeaves] = useState<UserLeave[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [userBalances, setUserBalances] = useState<Record<string, { allocated: number; used: number; available: number }>>({});
-  const [showLeaveForm, setShowLeaveForm] = useState(false);
-  const [totalUsedDays, setTotalUsedDays] = useState(0);
+  const navigate = useNavigate();
+
+  // Check if current user is admin
+  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
 
   useEffect(() => {
-    if (isLoaded && user?.id) {
-      createUserProfile();
-      fetchUserLeaves();
-      fetchLeaveTypes();
-      fetchUserBalances();
+    if (user && isLoaded) {
+      createOrUpdateProfile();
+      fetchLeaveApplications();
+      calculateLeaveBalance();
     }
-  }, [isLoaded, user?.id]);
+  }, [user, isLoaded]);
 
-  const createUserProfile = async () => {
-    if (!user?.id) return;
+  const createOrUpdateProfile = async () => {
+    if (!user) return;
 
     try {
-      const { data: existingProfile } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
+        .upsert({
+          id: user.id,
+          email: user.emailAddresses[0]?.emailAddress || '',
+          name: user.fullName || user.firstName || '',
+          updated_at: new Date().toISOString()
+        })
+        .select();
 
-      if (!existingProfile) {
-        await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.emailAddresses[0]?.emailAddress || '',
-            name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User'
-          });
+      if (error) {
+        console.error('Error creating/updating profile:', error);
       }
     } catch (error) {
-      console.error('Error creating user profile:', error);
+      console.error('Error:', error);
     }
   };
 
-  const fetchUserLeaves = async () => {
-    if (!user?.id) return;
+  const fetchLeaveApplications = async () => {
+    if (!user) return;
 
     try {
       const { data, error } = await supabase
         .from('leave_applied_users')
-        .select(`
-          *,
-          leave_types (label, color)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('applied_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching user leaves:', error);
-        return;
+        console.error('Error fetching leave applications:', error);
+      } else {
+        setLeaveApplications(data || []);
       }
-
-      console.log('User leaves data:', data);
-      setUserLeaves(data || []);
-
-      // Calculate total used days
-      const usedDays = data?.reduce((total, leave) => {
-        if (leave.status === 'approved') {
-          return total + differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
-        }
-        return total;
-      }, 0) || 0;
-      setTotalUsedDays(usedDays);
     } catch (error) {
-      console.error('Error fetching user leaves:', error);
+      console.error('Error:', error);
     }
   };
 
-  const fetchLeaveTypes = async () => {
+  const calculateLeaveBalance = async () => {
+    if (!user) return;
+
     try {
       const { data, error } = await supabase
-        .from('leave_types')
-        .select(`
-          *,
-          leave_policies (
-            annual_allowance,
-            carry_forward_limit
-          )
-        `)
-        .eq('is_active', true);
+        .from('leave_applied_users')
+        .select('start_date, end_date, status')
+        .eq('user_id', user.id)
+        .in('status', ['approved', 'pending']);
 
       if (error) {
-        console.error('Error fetching leave types:', error);
+        console.error('Error calculating leave balance:', error);
         return;
       }
 
-      console.log('Leave types data:', data);
-      setLeaveTypes(data || []);
+      let usedLeaves = 0;
+      data?.forEach((leave: any) => {
+        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
+        usedLeaves += days;
+      });
+
+      setLeaveBalance(20 - usedLeaves);
     } catch (error) {
-      console.error('Error fetching leave types:', error);
+      console.error('Error:', error);
     }
   };
 
-  const fetchUserBalances = async () => {
-    if (!user?.id) return;
-
-    try {
-      // First check if balances exist for the user
-      const { data: existingBalances } = await supabase
-        .from('user_leave_balances')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('year', new Date().getFullYear());
-
-      console.log('Existing balances:', existingBalances);
-
-      // Initialize balances for all leave types if they don't exist
-      if (!existingBalances || existingBalances.length === 0) {
-        // Get all leave types first
-        const { data: allLeaveTypes } = await supabase
-          .from('leave_types')
-          .select(`
-            *,
-            leave_policies (annual_allowance, carry_forward_limit)
-          `)
-          .eq('is_active', true);
-
-        if (allLeaveTypes) {
-          for (const leaveType of allLeaveTypes) {
-            const policy = leaveType.leave_policies?.[0];
-            if (policy) {
-              await supabase
-                .from('user_leave_balances')
-                .insert({
-                  user_id: user.id,
-                  leave_type_id: leaveType.id,
-                  allocated_days: policy.annual_allowance,
-                  used_days: 0,
-                  carried_forward_days: 0,
-                  year: new Date().getFullYear()
-                });
-            }
-          }
-
-          // Fetch the newly created balances
-          const { data: newBalances } = await supabase
-            .from('user_leave_balances')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('year', new Date().getFullYear());
-
-          const balances: Record<string, { allocated: number; used: number; available: number }> = {};
-          newBalances?.forEach(balance => {
-            balances[balance.leave_type_id || ''] = {
-              allocated: balance.allocated_days || 0,
-              used: balance.used_days || 0,
-              available: (balance.allocated_days || 0) - (balance.used_days || 0) + (balance.carried_forward_days || 0)
-            };
-          });
-
-          setUserBalances(balances);
-        }
-      } else {
-        const balances: Record<string, { allocated: number; used: number; available: number }> = {};
-        existingBalances.forEach(balance => {
-          balances[balance.leave_type_id || ''] = {
-            allocated: balance.allocated_days || 0,
-            used: balance.used_days || 0,
-            available: (balance.allocated_days || 0) - (balance.used_days || 0) + (balance.carried_forward_days || 0)
-          };
-        });
-
-        setUserBalances(balances);
-      }
-    } catch (error) {
-      console.error('Error fetching user balances:', error);
+  const handleApplyLeave = async () => {
+    if (!user || !selectedDate || !endDate) {
+      toast({
+        title: "Error",
+        description: "Please select both start and end dates",
+        variant: "destructive"
+      });
+      return;
     }
-  };
 
-  const handleCancelLeave = async (leaveId: string) => {
+    const leaveDays = differenceInDays(endDate, selectedDate) + 1;
+    
+    // Check if requested days exceed 20
+    if (leaveDays > 20) {
+      toast({
+        title: "Error",
+        description: "You cannot apply for more than 20 days of leave at once",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (leaveDays > leaveBalance) {
+      toast({
+        title: "Insufficient Leave Balance",
+        description: `You don't have enough leave balance. Available: ${leaveBalance} days, Requested: ${leaveDays} days`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (leaveBalance <= 0) {
+      toast({
+        title: "No Leave Balance",
+        description: "You have used all your annual leave. Please contact HR for additional leave requests.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsApplyingLeave(true);
+
     try {
       const { error } = await supabase
         .from('leave_applied_users')
-        .update({ status: 'cancelled' })
-        .eq('id', leaveId);
+        .insert({
+          user_id: user.id,
+          start_date: format(selectedDate, 'yyyy-MM-dd'),
+          end_date: format(endDate, 'yyyy-MM-dd'),
+          reason: reason || 'No reason provided',
+          status: 'pending'
+        });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
+      // Notify admin about new leave application
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: '23510de5-ed66-402d-9511-0c8de9f59ad7', // Admin ID
+          message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')} (${leaveDays} days)`,
+          type: 'info'
+        });
+
+      toast({
+        title: "Success",
+        description: "Leave application submitted successfully!"
+      });
+
+      setSelectedDate(undefined);
+      setEndDate(undefined);
+      setReason('');
+      setIsDialogOpen(false);
+      fetchLeaveApplications();
+      calculateLeaveBalance();
+
+    } catch (error) {
+      console.error('Error applying for leave:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit leave application",
+        variant: "destructive"
+      });
+    } finally {
+      setIsApplyingLeave(false);
+    }
+  };
+
+  const handleRevertLeave = async (applicationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('leave_applied_users')
+        .delete()
+        .eq('id', applicationId)
+        .eq('user_id', user?.id)
+        .eq('status', 'pending'); // Only allow deletion of pending applications
+
+      if (error) {
+        throw error;
+      }
 
       toast({
         title: "Success",
         description: "Leave application cancelled successfully!"
       });
 
-      fetchUserLeaves();
-      fetchUserBalances();
+      fetchLeaveApplications();
+      calculateLeaveBalance();
     } catch (error) {
       console.error('Error cancelling leave:', error);
       toast({
@@ -250,355 +229,478 @@ const Dashboard = () => {
     }
   };
 
+  const renderNavbar = () => (
+    <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
+      <div className="max-w-7xl mx-auto flex justify-between items-center">
+        <div className="flex space-x-6">
+          <button
+            onClick={() => setCurrentPage('dashboard')}
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              currentPage === 'dashboard' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>Dashboard</span>
+          </button>
+          <button
+            onClick={() => setCurrentPage('leave-types')}
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              currentPage === 'leave-types' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Leave Types</span>
+          </button>
+          <button
+            onClick={() => setCurrentPage('leaves-remaining')}
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              currentPage === 'leaves-remaining' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span>Leaves Remaining</span>
+          </button>
+          <button
+            onClick={() => setCurrentPage('policies')}
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              currentPage === 'policies' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            <span>Policies</span>
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+            >
+              <Shield className="w-4 h-4" />
+              <span>Admin Panel</span>
+            </button>
+          )}
+        </div>
+        <div className="flex items-center space-x-4">
+          <NotificationBell />
+          <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
+          <UserButton afterSignOutUrl="/" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderLeaveTypes = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Leave Types</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <span>Annual Leave</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 text-sm mb-2">Regular vacation time for rest and relaxation.</p>
+            <p className="text-xs text-gray-500">• 20 days per year</p>
+            <p className="text-xs text-gray-500">• Can be carried forward</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              <span>Sick Leave</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 text-sm mb-2">Time off for medical appointments and illness.</p>
+            <p className="text-xs text-gray-500">• As needed basis</p>
+            <p className="text-xs text-gray-500">• Medical certificate required</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <span>Personal Leave</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 text-sm mb-2">Emergency or personal matters requiring time off.</p>
+            <p className="text-xs text-gray-500">• Subject to approval</p>
+            <p className="text-xs text-gray-500">• Advance notice preferred</p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  const renderLeavesRemaining = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
+      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
+        <CardContent className="p-6">
+          <div className="text-center">
+            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
+            <div className="text-lg opacity-90">Days Remaining</div>
+            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
+            {leaveBalance <= 0 && (
+              <div className="mt-3 p-2 bg-white/20 rounded-lg">
+                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      
+      {leaveBalance <= 5 && leaveBalance > 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            You have {leaveBalance} leave days remaining. Plan your time off carefully!
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Leave History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {leaveApplications.slice(0, 5).map((app: any) => (
+                <div key={app.id} className="flex justify-between items-center py-2 border-b">
+                  <div>
+                    <p className="font-medium">{format(new Date(app.start_date), 'MMM dd')} - {format(new Date(app.end_date), 'MMM dd')}</p>
+                    <p className="text-sm text-gray-500">{app.status}</p>
+                  </div>
+                  <span className="text-sm font-medium">
+                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Stats</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>Used this year:</span>
+                <span className="font-medium">{20 - leaveBalance} days</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Pending approval:</span>
+                <span className="font-medium">
+                  {leaveApplications.filter((app: any) => app.status === 'pending').length} applications
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Approved leaves:</span>
+                <span className="font-medium">
+                  {leaveApplications.filter((app: any) => app.status === 'approved').length} applications
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  const renderPolicies = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900">Leave Policies</h2>
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>General Leave Policy</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h4 className="font-medium mb-2">Annual Leave Entitlement</h4>
+              <p className="text-gray-600 text-sm">All employees are entitled to 20 days of annual leave per calendar year.</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Application Process</h4>
+              <p className="text-gray-600 text-sm">Leave applications must be submitted at least 2 weeks in advance for approval.</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Approval Requirements</h4>
+              <p className="text-gray-600 text-sm">All leave requests require manager approval and are subject to operational requirements.</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Maximum Days Per Request</h4>
+              <p className="text-gray-600 text-sm">You cannot apply for more than 20 days of leave in a single request.</p>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Leave Guidelines</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h4 className="font-medium mb-2">Maximum Consecutive Days</h4>
+              <p className="text-gray-600 text-sm">Employees may take a maximum of 10 consecutive days without special approval.</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Cancellation Policy</h4>
+              <p className="text-gray-600 text-sm">Leave can be cancelled before approval without penalty. Approved leave cancellation requires manager consent.</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Emergency Leave</h4>
+              <p className="text-gray-600 text-sm">In case of emergencies, employees should contact their manager immediately.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  const renderDashboard = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Leave Balance Alert */}
+      {leaveBalance <= 0 && (
+        <div className="lg:col-span-3 mb-6">
+          <Alert className="border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">
+              You have exhausted all your annual leave days. Please contact HR if you need additional leave.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* Calendar Section */}
+      <div className="lg:col-span-2">
+        <Card className="hover:shadow-lg transition-shadow duration-300">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center">
+                <CalendarDays className="w-5 h-5 mr-2" />
+                Calendar View
+              </CardTitle>
+              
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white"
+                    disabled={leaveBalance <= 0}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Apply for Leave
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Apply for Leave</DialogTitle>
+                  </DialogHeader>
+                  
+                  {leaveBalance <= 0 ? (
+                    <Alert className="border-red-200 bg-red-50">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-red-800">
+                        You have no remaining leave days. Please contact HR for additional leave requests.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <>
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          Available leave balance: <strong>{leaveBalance} days</strong>
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Maximum 20 days per request
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <Label htmlFor="start-date">Start Date</Label>
+                          <div className="mt-2 flex justify-center">
+                            <Calendar
+                              mode="single"
+                              selected={selectedDate}
+                              onSelect={(date) => {
+                                setSelectedDate(date);
+                                if (endDate && date && endDate < date) {
+                                  setEndDate(undefined);
+                                }
+                              }}
+                              className="rounded-md border"
+                              disabled={(date) => date < new Date()}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="end-date">End Date</Label>
+                          <div className="mt-2 flex justify-center">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={setEndDate}
+                              className="rounded-md border"
+                              disabled={(date) => date < (selectedDate || new Date())}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedDate && endDate && (
+                        <div className="p-4 bg-blue-50 rounded-lg animate-fade-in">
+                          <p className="text-sm text-blue-800">
+                            Leave Duration: {differenceInDays(endDate, selectedDate) + 1} day(s)
+                          </p>
+                          <p className="text-sm text-blue-600">
+                            From {format(selectedDate, 'MMM dd, yyyy')} to {format(endDate, 'MMM dd, yyyy')}
+                          </p>
+                          {differenceInDays(endDate, selectedDate) + 1 > 20 && (
+                            <p className="text-sm text-red-600 mt-2">
+                              ⚠️ Cannot apply for more than 20 days at once
+                            </p>
+                          )}
+                          {differenceInDays(endDate, selectedDate) + 1 > leaveBalance && (
+                            <p className="text-sm text-red-600 mt-2">
+                              ⚠️ Insufficient leave balance
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div>
+                        <Label htmlFor="reason">Reason (Optional)</Label>
+                        <Textarea
+                          id="reason"
+                          placeholder="Enter reason for leave..."
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <Button 
+                        onClick={handleApplyLeave} 
+                        disabled={isApplyingLeave || !selectedDate || !endDate || 
+                          (selectedDate && endDate && 
+                            (differenceInDays(endDate, selectedDate) + 1 > 20 || 
+                             differenceInDays(endDate, selectedDate) + 1 > leaveBalance)
+                          )}
+                        className="w-full"
+                      >
+                        {isApplyingLeave ? 'Submitting...' : 'Submit Application'}
+                      </Button>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              className="rounded-md border w-full"
+              classNames={{
+                months: "flex w-full flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 flex-1",
+                month: "space-y-4 w-full flex flex-col",
+                table: "w-full h-full border-collapse space-y-1",
+                head_row: "flex w-full",
+                head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1",
+                row: "flex w-full mt-2",
+                cell: "h-14 w-full text-center text-sm p-0 relative flex-1",
+                day: "h-14 w-full p-0 font-normal hover:bg-accent hover:text-accent-foreground flex items-center justify-center"
+              }}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Leave Applications Section */}
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Leave Applications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {leaveApplications.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No leave applications yet</p>
+              ) : (
+                leaveApplications.map((application: any) => (
+                  <div key={application.id} className="border rounded-lg p-4 space-y-2 hover:shadow-md transition-shadow duration-200">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">
+                          {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
+                        </p>
+                        <p className="text-sm text-gray-600">{application.reason}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          application.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          application.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {application.status}
+                        </span>
+                        {application.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRevertLeave(application.id)}
+                            className="p-1 h-6 w-6 hover:bg-red-50 hover:border-red-300"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Applied: {format(new Date(application.applied_at), 'MMM dd, yyyy')}
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      Duration: {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
   if (!isLoaded) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
   if (!user) {
-    return <div className="flex items-center justify-center min-h-screen">Please sign in to access your dashboard.</div>;
+    return <div className="flex items-center justify-center min-h-screen">Please sign in to access the dashboard.</div>;
   }
 
-  const getWelcomeMessage = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Top Navigation */}
-      <div className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-gray-200/50 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-8">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
-                Timeloo
-              </h1>
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
-                <TabsList className="grid w-full grid-cols-4 bg-gray-100/50">
-                  <TabsTrigger value="dashboard" className="flex items-center space-x-2">
-                    <Home className="w-4 h-4" />
-                    <span>Dashboard</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="leave-types" className="flex items-center space-x-2">
-                    <FileText className="w-4 h-4" />
-                    <span>Leave Types</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="balances" className="flex items-center space-x-2">
-                    <Clock className="w-4 h-4" />
-                    <span>Balances</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="policies" className="flex items-center space-x-2">
-                    <Users className="w-4 h-4" />
-                    <span>Policies</span>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="p-1 bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 rounded-full">
-                <UserButton 
-                  afterSignOutUrl="/" 
-                  appearance={{
-                    elements: {
-                      avatarBox: "w-10 h-10 rounded-full border-2 border-white shadow-lg"
-                    }
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      {renderNavbar()}
+      <div className="pt-6 px-4">
+        <div className="max-w-7xl mx-auto">
+          {currentPage === 'dashboard' && renderDashboard()}
+          {currentPage === 'leave-types' && renderLeaveTypes()}
+          {currentPage === 'leaves-remaining' && renderLeavesRemaining()}
+          {currentPage === 'policies' && renderPolicies()}
         </div>
       </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsContent value="dashboard" className="space-y-6">
-            {/* Welcome Section */}
-            <div className="text-center py-8">
-              <div className="inline-flex items-center space-x-2 mb-4">
-                <Sparkles className="w-6 h-6 text-yellow-500 animate-pulse" />
-                <h2 className="text-3xl font-bold text-gray-900">
-                  {getWelcomeMessage()}, {user.firstName || 'there'}!
-                </h2>
-                <Sparkles className="w-6 h-6 text-yellow-500 animate-pulse" />
-              </div>
-              <p className="text-gray-600">Ready to manage your time efficiently?</p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Quick Stats */}
-              <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-green-500">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Total Applications</p>
-                        <p className="text-2xl font-bold text-green-600">{userLeaves.length}</p>
-                      </div>
-                      <Calendar className="w-8 h-8 text-green-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Pending Approvals</p>
-                        <p className="text-2xl font-bold text-blue-600">
-                          {userLeaves.filter(leave => leave.status === 'pending').length}
-                        </p>
-                      </div>
-                      <Clock className="w-8 h-8 text-blue-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-purple-500">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Days Used</p>
-                        <p className="text-2xl font-bold text-purple-600">{totalUsedDays}</p>
-                      </div>
-                      <Users className="w-8 h-8 text-purple-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Notification Center */}
-              <div className="lg:col-span-1">
-                <NotificationCenter />
-              </div>
-            </div>
-
-            {/* Enhanced Calendar */}
-            <EnhancedCalendar onRefresh={fetchUserLeaves} />
-
-            {/* Recent Leave Applications */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Leave Applications</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {userLeaves.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No leave applications yet</p>
-                  ) : (
-                    userLeaves.slice(0, 5).map((leave) => (
-                      <div key={leave.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <span className="font-medium">{leave.leave_types?.label}</span>
-                            <Badge 
-                              variant={leave.status === 'approved' ? 'default' : 
-                                      leave.status === 'rejected' ? 'destructive' : 'secondary'}
-                            >
-                              {leave.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            {format(new Date(leave.start_date), 'MMM dd')} - {format(new Date(leave.end_date), 'MMM dd, yyyy')}
-                          </p>
-                        </div>
-                        {leave.status === 'pending' && (
-                          <Button
-                            onClick={() => handleCancelLeave(leave.id)}
-                            variant="destructive"
-                            size="sm"
-                          >
-                            Cancel
-                          </Button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="leave-types" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Available Leave Types</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {leaveTypes.length === 0 ? (
-                    <div className="col-span-full text-center py-8">
-                      <p className="text-gray-500">Loading leave types...</p>
-                    </div>
-                  ) : (
-                    leaveTypes.map((type) => {
-                      const balance = userBalances[type.id];
-                      const policy = type.leave_policies?.[0];
-                      
-                      return (
-                        <Card key={type.id} className="hover:shadow-lg transition-all duration-300">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="font-semibold">{type.label}</h3>
-                              <div 
-                                className="w-4 h-4 rounded-full" 
-                                style={{ backgroundColor: type.color }}
-                              />
-                            </div>
-                            
-                            <p className="text-sm text-gray-600 mb-3">
-                              {leaveTypeDescriptions[type.label]}
-                            </p>
-                            
-                            {balance && policy && (
-                              <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                  <span>Available:</span>
-                                  <span className="font-medium">
-                                    {policy.annual_allowance === 999 ? 'Unlimited' : 
-                                     `${balance.available}/${balance.allocated}`}
-                                  </span>
-                                </div>
-                                {policy.annual_allowance !== 999 && (
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                                      style={{ 
-                                        width: `${Math.min(100, (balance.used / balance.allocated) * 100)}%` 
-                                      }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            
-                            <div className="mt-3 flex items-center justify-between">
-                              <Badge variant={type.requires_approval ? "secondary" : "default"}>
-                                {type.requires_approval ? 'Needs Approval' : 'Auto Approved'}
-                              </Badge>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="balances" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Leave Balances Overview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {leaveTypes.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500">Loading balances...</p>
-                    </div>
-                  ) : (
-                    leaveTypes.map((type) => {
-                      const balance = userBalances[type.id];
-                      const policy = type.leave_policies?.[0];
-                      
-                      if (!balance || !policy) return null;
-                      
-                      return (
-                        <div key={type.id} className="p-4 border rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-3">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: type.color }}
-                              />
-                              <span className="font-medium">{type.label}</span>
-                            </div>
-                            <Badge variant="outline">
-                              {policy.annual_allowance === 999 ? 'Unlimited' : 
-                               `${balance.available} / ${balance.allocated} days`}
-                            </Badge>
-                          </div>
-                          
-                          {policy.annual_allowance !== 999 && (
-                            <div className="grid grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <p className="text-gray-600">Allocated</p>
-                                <p className="font-semibold">{balance.allocated} days</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600">Used</p>
-                                <p className="font-semibold">{balance.used} days</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600">Available</p>
-                                <p className="font-semibold text-green-600">{balance.available} days</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="policies" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Leave Policies & Guidelines</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Deductible Leaves</h3>
-                  <div className="space-y-3">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <h4 className="font-medium">Paid Leave</h4>
-                      <p className="text-sm text-gray-600">1.5 days/month. Carried forward monthly. Up to 6 days carried forward annually.</p>
-                    </div>
-                    <div className="p-3 bg-red-50 rounded-lg">
-                      <h4 className="font-medium">Bereavement Leave</h4>
-                      <p className="text-sm text-gray-600">5 days per year for 1st-degree relatives. Does not carry forward.</p>
-                    </div>
-                    <div className="p-3 bg-yellow-50 rounded-lg">
-                      <h4 className="font-medium">Restricted Holiday</h4>
-                      <p className="text-sm text-gray-600">2 days per year for festive leaves not on company calendar. Does not carry forward.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Non-Deductible Leaves</h3>
-                  <div className="space-y-3">
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <h4 className="font-medium">Additional Work from Home</h4>
-                      <p className="text-sm text-gray-600">WFH + AWFH should not exceed 24 days per year. Use efficiently.</p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <h4 className="font-medium">Comp-offs</h4>
-                      <p className="text-sm text-gray-600">Awarded for client meetings beyond work hours. Limited approval.</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      <LeaveApplicationForm
-        isOpen={showLeaveForm}
-        onClose={() => setShowLeaveForm(false)}
-        onSuccess={() => {
-          fetchUserLeaves();
-          fetchUserBalances();
-        }}
-      />
     </div>
   );
 };
