@@ -12,6 +12,7 @@ import LeaveApplicationForm from './LeaveApplicationForm';
 
 interface Leave {
   id: string;
+  user_id: string;
   start_date: string;
   end_date: string;
   status: string;
@@ -19,10 +20,10 @@ interface Leave {
   leave_types: {
     label: string;
     color: string;
-  };
+  } | null;
   profiles: {
     name: string;
-  };
+  } | null;
 }
 
 interface Holiday {
@@ -111,7 +112,7 @@ const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({ onRefresh }) => {
       if (date >= startDate && date <= endDate) {
         events.push({
           type: 'leave',
-          title: `${leave.profiles?.name || 'Unknown'} - ${leave.leave_types?.label}`,
+          title: `${leave.profiles?.name || 'Unknown'} - ${leave.leave_types?.label || 'Leave'}`,
           color: leave.leave_types?.color || '#3B82F6',
           status: leave.status,
           reason: leave.reason,
