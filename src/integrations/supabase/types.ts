@@ -54,6 +54,33 @@ export type Database = {
           },
         ]
       }
+      company_holidays: {
+        Row: {
+          created_at: string | null
+          date: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+        }
+        Relationships: []
+      }
       employees: {
         Row: {
           created_at: string
@@ -134,7 +161,12 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           end_date: string
+          holiday_name: string | null
+          hours_requested: number | null
           id: string
+          is_half_day: boolean | null
+          leave_type_id: string | null
+          meeting_details: string | null
           reason: string | null
           start_date: string
           status: string | null
@@ -145,7 +177,12 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           end_date: string
+          holiday_name?: string | null
+          hours_requested?: number | null
           id?: string
+          is_half_day?: boolean | null
+          leave_type_id?: string | null
+          meeting_details?: string | null
           reason?: string | null
           start_date: string
           status?: string | null
@@ -156,7 +193,12 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           end_date?: string
+          holiday_name?: string | null
+          hours_requested?: number | null
           id?: string
+          is_half_day?: boolean | null
+          leave_type_id?: string | null
+          meeting_details?: string | null
           reason?: string | null
           start_date?: string
           status?: string | null
@@ -168,6 +210,13 @@ export type Database = {
             columns: ["approved_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_applied_users_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
             referencedColumns: ["id"]
           },
           {
@@ -485,12 +534,59 @@ export type Database = {
         }
         Relationships: []
       }
+      user_leave_balances: {
+        Row: {
+          allocated_days: number | null
+          carried_forward_days: number | null
+          created_at: string | null
+          id: string
+          leave_type_id: string | null
+          updated_at: string | null
+          used_days: number | null
+          user_id: string
+          year: number | null
+        }
+        Insert: {
+          allocated_days?: number | null
+          carried_forward_days?: number | null
+          created_at?: string | null
+          id?: string
+          leave_type_id?: string | null
+          updated_at?: string | null
+          used_days?: number | null
+          user_id: string
+          year?: number | null
+        }
+        Update: {
+          allocated_days?: number | null
+          carried_forward_days?: number | null
+          created_at?: string | null
+          id?: string
+          leave_type_id?: string | null
+          updated_at?: string | null
+          used_days?: number | null
+          user_id?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_leave_balances_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      initialize_user_leave_balances: {
+        Args: { user_uuid: string }
+        Returns: undefined
+      }
     }
     Enums: {
       accrual_rule: "annual" | "monthly" | "pro_rata" | "fixed"

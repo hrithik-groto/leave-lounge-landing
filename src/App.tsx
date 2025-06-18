@@ -8,6 +8,8 @@ import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/cle
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import LeaveTypes from "./pages/LeaveTypes";
+import LeaveBalances from "./pages/LeaveBalances";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,32 @@ const App = () => (
               <>
                 <SignedIn>
                   <AdminDashboard />
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            } 
+          />
+          <Route 
+            path="/leave-types" 
+            element={
+              <>
+                <SignedIn>
+                  <LeaveTypes />
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            } 
+          />
+          <Route 
+            path="/leave-balances" 
+            element={
+              <>
+                <SignedIn>
+                  <LeaveBalances />
                 </SignedIn>
                 <SignedOut>
                   <RedirectToSignIn />

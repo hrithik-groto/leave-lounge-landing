@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, Calendar, CheckCircle, XCircle, Plus } from 'lucide-react';
+import { Users, Calendar, CheckCircle, XCircle, Plus, Eye, BarChart } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -27,6 +27,8 @@ const AdminDashboard = () => {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [additionalLeaves, setAdditionalLeaves] = useState('');
   const [isAddingLeaves, setIsAddingLeaves] = useState(false);
+  const [allUserBalances, setAllUserBalances] = useState([]);
+  const [selectedUserForBalances, setSelectedUserForBalances] = useState('');
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -36,6 +38,7 @@ const AdminDashboard = () => {
     if (isLoaded && isAdmin) {
       fetchAllLeaveApplications();
       fetchUserProfiles();
+      fetchAllUserBalances();
     }
   }, [isLoaded, isAdmin]);
 
@@ -56,6 +59,35 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchAllUserBalances = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const { data, error } = await supabase
+        .from('user_leave_balances')
+        .select(`
+          *,
+          leave_types (
+            label,
+            color
+          ),
+          profiles:user_id (
+            name,
+            email
+          )
+        `)
+        .eq('year', currentYear)
+        .order('user_id');
+
+      if (error) {
+        console.error('Error fetching user balances:', error);
+      } else {
+        setAllUserBalances(data || []);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
   const fetchAllLeaveApplications = async () => {
     try {
       const { data, error } = await supabase
@@ -65,6 +97,10 @@ const AdminDashboard = () => {
           profiles:user_id (
             name,
             email
+          ),
+          leave_types (
+            label,
+            color
           )
         `)
         .order('applied_at', { ascending: false });
@@ -228,6 +264,10 @@ const AdminDashboard = () => {
     }
   };
 
+  const getUserBalances = (userId: string) => {
+    return allUserBalances.filter((balance: any) => balance.user_id === userId);
+  };
+
   if (!isLoaded) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -350,6 +390,64 @@ const AdminDashboard = () => {
             </Card>
           </div>
 
+          {/* User Balances Overview */}
+          <Card className="mb-8 hover:shadow-lg transition-shadow duration-300">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <BarChart className="w-5 h-5" />
+                <span>User Leave Balances Overview</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="user-select-balances">Select User to View Balances</Label>
+                  <select
+                    id="user-select-balances"
+                    value={selectedUserForBalances}
+                    onChange={(e) => setSelectedUserForBalances(e.target.value)}
+                    className="w-full p-2 border rounded-md mt-1"
+                  >
+                    <option value="">Select a user...</option>
+                    {userProfiles.map((profile: any) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name} ({profile.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedUserForBalances && (
+                  <div className="mt-4">
+                    <h4 className="font-medium mb-3">Leave Balances for {userProfiles.find((p: any) => p.id === selectedUserForBalances)?.name}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {getUserBalances(selectedUserForBalances).map((balance: any) => (
+                        <div key={balance.id} className="p-4 border rounded-lg bg-gray-50">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: balance.leave_types?.color }}
+                            />
+                            <span className="font-medium">{balance.leave_types?.label}</span>
+                          </div>
+                          <div className="text-2xl font-bold text-gray-800">
+                            {(balance.allocated_days + balance.carried_forward_days) - balance.used_days}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Available / {balance.allocated_days + balance.carried_forward_days} Total
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Used: {balance.used_days} | Carried: {balance.carried_forward_days}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Add Leaves Section */}
           <Card className="mb-8 hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
@@ -418,9 +516,10 @@ const AdminDashboard = () => {
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Leave Type</TableHead>
                     <TableHead>Leave Dates</TableHead>
                     <TableHead>Duration</TableHead>
-                    <TableHead>Reason</TableHead>
+                    <TableHead>Reason/Holiday</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Applied Date</TableHead>
                     <TableHead>Actions</TableHead>
@@ -434,12 +533,26 @@ const AdminDashboard = () => {
                       </TableCell>
                       <TableCell>{application.profiles?.email || 'No email'}</TableCell>
                       <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: application.leave_types?.color }}
+                          />
+                          <span>{application.leave_types?.label}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
                       </TableCell>
                       <TableCell>
-                        {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
+                        {application.hours_requested ? 
+                          `${application.hours_requested} hours` : 
+                          `${differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)`
+                        }
                       </TableCell>
-                      <TableCell className="max-w-xs truncate">{application.reason || 'No reason provided'}</TableCell>
+                      <TableCell className="max-w-xs truncate">
+                        {application.holiday_name || application.reason || 'No reason provided'}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={
                           application.status === 'approved' ? 'default' :
