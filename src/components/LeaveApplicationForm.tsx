@@ -43,6 +43,7 @@ const LeaveApplicationForm = () => {
 
   const fetchLeaveTypes = async () => {
     try {
+      console.log('Fetching leave types...');
       const { data, error } = await supabase
         .from('leave_types')
         .select(`
@@ -54,17 +55,28 @@ const LeaveApplicationForm = () => {
         `)
         .eq('is_active', true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching leave types:', error);
+        throw error;
+      }
+
+      console.log('Raw leave types data:', data);
 
       const formattedData = data?.map((type: any) => ({
         ...type,
-        annual_allowance: type.leave_policies[0]?.annual_allowance || 0,
-        carry_forward_limit: type.leave_policies[0]?.carry_forward_limit || 0,
+        annual_allowance: type.leave_policies?.[0]?.annual_allowance || 0,
+        carry_forward_limit: type.leave_policies?.[0]?.carry_forward_limit || 0,
       })) || [];
 
+      console.log('Formatted leave types:', formattedData);
       setLeaveTypes(formattedData);
     } catch (error) {
       console.error('Error fetching leave types:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load leave types",
+        variant: "destructive"
+      });
     }
   };
 
@@ -154,6 +166,16 @@ const LeaveApplicationForm = () => {
       return;
     }
 
+    // Always require reason for all leave types now
+    if (!reason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a reason for your leave application",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -227,21 +249,25 @@ const LeaveApplicationForm = () => {
               <SelectTrigger className="mt-1">
                 <SelectValue placeholder="Select leave type..." />
               </SelectTrigger>
-              <SelectContent>
-                {leaveTypes.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    <div className="flex items-center space-x-2">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: type.color }}
-                      />
-                      <span>{type.label}</span>
-                      <span className="text-gray-500">
-                        ({type.annual_allowance} {type.label === 'Short Leave' ? 'hours' : 'days'})
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
+              <SelectContent className="bg-white border shadow-lg z-50">
+                {leaveTypes.length === 0 ? (
+                  <div className="p-2 text-sm text-gray-500">Loading leave types...</div>
+                ) : (
+                  leaveTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>
+                      <div className="flex items-center space-x-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: type.color }}
+                        />
+                        <span>{type.label}</span>
+                        <span className="text-gray-500">
+                          ({type.annual_allowance} {type.label === 'Short Leave' ? 'hours' : 'days'})
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
             {selectedTypeData && (
@@ -282,6 +308,19 @@ const LeaveApplicationForm = () => {
             </div>
           </div>
 
+          <div>
+            <Label htmlFor="reason">Reason *</Label>
+            <Textarea
+              id="reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Enter detailed reason for leave application"
+              className="mt-1"
+              rows={3}
+              required
+            />
+          </div>
+
           {selectedTypeData?.label === 'Short Leave' && (
             <div>
               <Label htmlFor="hours">Hours Requested *</Label>
@@ -310,24 +349,6 @@ const LeaveApplicationForm = () => {
                 onChange={(e) => setHolidayName(e.target.value)}
                 placeholder="Enter the name of the holiday"
                 className="mt-1"
-              />
-            </div>
-          )}
-
-          {(selectedTypeData?.label === 'Paid Leave' || 
-            selectedTypeData?.label === 'Work From Home' ||
-            selectedTypeData?.label === 'Bereavement Leave') && (
-            <div>
-              <Label htmlFor="reason">
-                Reason {(selectedTypeData?.label === 'Paid Leave' || selectedTypeData?.label === 'Work From Home') ? '*' : ''}
-              </Label>
-              <Textarea
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Enter detailed reason for leave application"
-                className="mt-1"
-                rows={3}
               />
             </div>
           )}
