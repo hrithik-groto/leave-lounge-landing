@@ -206,6 +206,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_leave_applied_users_leave_type"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_leave_applied_users_user"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "leave_applied_users_approved_by_fkey"
             columns: ["approved_by"]
             isOneToOne: false
