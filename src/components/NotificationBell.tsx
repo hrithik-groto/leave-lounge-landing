@@ -58,7 +58,7 @@ const NotificationBell = () => {
                   return {
                     title: "⚠️ Update",
                     description: newNotification.message,
-                    variant: "destructive",
+                    variant: "destructive" as const,
                     className: "bg-gradient-to-r from-red-50 to-pink-50 border-red-200"
                   };
                 default:

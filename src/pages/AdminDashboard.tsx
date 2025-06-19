@@ -37,11 +37,38 @@ const AdminDashboard = () => {
     if (isLoaded && isAdmin) {
       fetchAllLeaveApplications();
       fetchUserProfiles();
+      setupRealtimeSubscriptions();
     }
   }, [isLoaded, isAdmin]);
 
+  const setupRealtimeSubscriptions = () => {
+    console.log('Setting up real-time subscriptions...');
+    
+    // Subscribe to leave applications changes
+    const leaveApplicationsChannel = supabase
+      .channel('leave_applications_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leave_applied_users'
+        },
+        (payload) => {
+          console.log('Leave application change received:', payload);
+          fetchAllLeaveApplications(); // Refresh the list
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(leaveApplicationsChannel);
+    };
+  };
+
   const fetchUserProfiles = async () => {
     try {
+      console.log('Fetching user profiles...');
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -50,6 +77,7 @@ const AdminDashboard = () => {
       if (error) {
         console.error('Error fetching user profiles:', error);
       } else {
+        console.log('User profiles fetched:', data);
         setUserProfiles(data || []);
       }
     } catch (error) {
@@ -59,6 +87,9 @@ const AdminDashboard = () => {
 
   const fetchAllLeaveApplications = async () => {
     try {
+      console.log('Fetching all leave applications...');
+      
+      // First, try to get applications with profile information
       const { data, error } = await supabase
         .from('leave_applied_users')
         .select(`
@@ -66,25 +97,55 @@ const AdminDashboard = () => {
           profiles:user_id (
             name,
             email
+          ),
+          leave_types:leave_type_id (
+            label,
+            color
           )
         `)
         .order('applied_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching leave applications:', error);
+        
+        // Fallback: fetch without joins if there are relationship issues
+        const { data: simpleData, error: simpleError } = await supabase
+          .from('leave_applied_users')
+          .select('*')
+          .order('applied_at', { ascending: false });
+
+        if (simpleError) {
+          console.error('Simple fetch also failed:', simpleError);
+          toast({
+            title: "Error",
+            description: "Failed to fetch leave applications",
+            variant: "destructive"
+          });
+        } else {
+          console.log('Leave applications (simple):', simpleData);
+          setLeaveApplications(simpleData || []);
+        }
       } else {
+        console.log('Leave applications with joins:', data);
         setLeaveApplications(data || []);
       }
     } catch (error) {
       console.error('Error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch leave applications",
+        variant: "destructive"
+      });
     }
   };
 
   const handleApproveLeave = async (applicationId, userId) => {
+    console.log('Approving leave application:', applicationId, 'for user:', userId);
     setProcessingApplications(prev => new Set(prev).add(applicationId));
     
     try {
-      const { error } = await supabase
+      // Update the leave application status
+      const { error: updateError } = await supabase
         .from('leave_applied_users')
         .update({
           status: 'approved',
@@ -93,10 +154,13 @@ const AdminDashboard = () => {
         })
         .eq('id', applicationId);
 
-      if (error) throw error;
+      if (updateError) {
+        console.error('Error updating leave application:', updateError);
+        throw updateError;
+      }
 
-      // Create notification for the user with enhanced message
-      await supabase
+      // Create notification for the user
+      const { error: notificationError } = await supabase
         .from('notifications')
         .insert({
           user_id: userId,
@@ -104,13 +168,19 @@ const AdminDashboard = () => {
           type: 'success'
         });
 
-      // Show success toast with amazing styling
+      if (notificationError) {
+        console.error('Error creating notification:', notificationError);
+        // Don't throw here as the main action succeeded
+      }
+
+      // Show success toast
       toast({
         title: "🎊 Leave Approved Successfully!",
         description: "The employee has been notified with an exciting approval message!",
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-green-100 shadow-lg"
       });
 
+      // Refresh the applications list
       fetchAllLeaveApplications();
     } catch (error) {
       console.error('Error approving leave:', error);
@@ -129,10 +199,12 @@ const AdminDashboard = () => {
   };
 
   const handleRejectLeave = async (applicationId, userId) => {
+    console.log('Rejecting leave application:', applicationId, 'for user:', userId);
     setProcessingApplications(prev => new Set(prev).add(applicationId));
     
     try {
-      const { error } = await supabase
+      // Update the leave application status
+      const { error: updateError } = await supabase
         .from('leave_applied_users')
         .update({
           status: 'rejected',
@@ -141,16 +213,24 @@ const AdminDashboard = () => {
         })
         .eq('id', applicationId);
 
-      if (error) throw error;
+      if (updateError) {
+        console.error('Error updating leave application:', updateError);
+        throw updateError;
+      }
 
-      // Create notification for the user with empathetic message
-      await supabase
+      // Create notification for the user
+      const { error: notificationError } = await supabase
         .from('notifications')
         .insert({
           user_id: userId,
           message: '⚠️ Your leave application has been reviewed. Please reach out to discuss alternative dates or options.',
           type: 'error'
         });
+
+      if (notificationError) {
+        console.error('Error creating notification:', notificationError);
+        // Don't throw here as the main action succeeded
+      }
 
       // Show rejection toast
       toast({
@@ -159,6 +239,7 @@ const AdminDashboard = () => {
         className: "bg-gradient-to-r from-orange-50 to-red-50 border-orange-200"
       });
 
+      // Refresh the applications list
       fetchAllLeaveApplications();
     } catch (error) {
       console.error('Error rejecting leave:', error);
@@ -222,13 +303,18 @@ const AdminDashboard = () => {
     setIsAddingLeaves(true);
     try {
       // Create notification for the user about additional leaves
-      await supabase
+      const { error } = await supabase
         .from('notifications')
         .insert({
           user_id: selectedUserId,
           message: `🎁 Amazing news! Admin has granted you ${additionalLeaves} additional leave days! Your leave balance has been boosted!`,
           type: 'success'
         });
+
+      if (error) {
+        console.error('Error creating notification:', error);
+        throw error;
+      }
 
       toast({
         title: "🎉 Leaves Added Successfully!",
@@ -506,7 +592,7 @@ const AdminDashboard = () => {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleRejectLeave(application.id,application.user_id)}
+                              onClick={() => handleRejectLeave(application.id, application.user_id)}
                               disabled={processingApplications.has(application.id)}
                               className="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 transition-all duration-300 shadow-md hover:shadow-lg"
                             >
