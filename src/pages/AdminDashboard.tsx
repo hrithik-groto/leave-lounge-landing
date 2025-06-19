@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, Calendar, CheckCircle, XCircle, Plus } from 'lucide-react';
+import { Users, Calendar, CheckCircle, XCircle, Plus, Sparkles, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -27,6 +27,7 @@ const AdminDashboard = () => {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [additionalLeaves, setAdditionalLeaves] = useState('');
   const [isAddingLeaves, setIsAddingLeaves] = useState(false);
+  const [processingApplications, setProcessingApplications] = useState(new Set());
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -79,7 +80,9 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleApproveLeave = async (applicationId: string, userId: string) => {
+  const handleApproveLeave = async (applicationId, userId) => {
+    setProcessingApplications(prev => new Set(prev).add(applicationId));
+    
     try {
       const { error } = await supabase
         .from('leave_applied_users')
@@ -92,18 +95,20 @@ const AdminDashboard = () => {
 
       if (error) throw error;
 
-      // Create notification for the user
+      // Create notification for the user with enhanced message
       await supabase
         .from('notifications')
         .insert({
           user_id: userId,
-          message: 'Your leave application has been approved! 🎉',
+          message: '🎉 Fantastic! Your leave application has been approved! Time to plan your time off!',
           type: 'success'
         });
 
+      // Show success toast with amazing styling
       toast({
-        title: "Success! ✅",
-        description: "Leave application approved successfully!"
+        title: "🎊 Leave Approved Successfully!",
+        description: "The employee has been notified with an exciting approval message!",
+        className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-green-100 shadow-lg"
       });
 
       fetchAllLeaveApplications();
@@ -114,10 +119,18 @@ const AdminDashboard = () => {
         description: "Failed to approve leave application",
         variant: "destructive"
       });
+    } finally {
+      setProcessingApplications(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(applicationId);
+        return newSet;
+      });
     }
   };
 
-  const handleRejectLeave = async (applicationId: string, userId: string) => {
+  const handleRejectLeave = async (applicationId, userId) => {
+    setProcessingApplications(prev => new Set(prev).add(applicationId));
+    
     try {
       const { error } = await supabase
         .from('leave_applied_users')
@@ -130,18 +143,20 @@ const AdminDashboard = () => {
 
       if (error) throw error;
 
-      // Create notification for the user
+      // Create notification for the user with empathetic message
       await supabase
         .from('notifications')
         .insert({
           user_id: userId,
-          message: 'Your leave application has been rejected.',
+          message: '⚠️ Your leave application has been reviewed. Please reach out to discuss alternative dates or options.',
           type: 'error'
         });
 
+      // Show rejection toast
       toast({
-        title: "Success",
-        description: "Leave application rejected successfully!"
+        title: "Leave Application Processed",
+        description: "The employee has been notified about the decision.",
+        className: "bg-gradient-to-r from-orange-50 to-red-50 border-orange-200"
       });
 
       fetchAllLeaveApplications();
@@ -151,6 +166,12 @@ const AdminDashboard = () => {
         title: "Error",
         description: "Failed to reject leave application",
         variant: "destructive"
+      });
+    } finally {
+      setProcessingApplications(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(applicationId);
+        return newSet;
       });
     }
   };
@@ -205,13 +226,14 @@ const AdminDashboard = () => {
         .from('notifications')
         .insert({
           user_id: selectedUserId,
-          message: `Admin has added ${additionalLeaves} additional leave days to your account. 🎁`,
+          message: `🎁 Amazing news! Admin has granted you ${additionalLeaves} additional leave days! Your leave balance has been boosted!`,
           type: 'success'
         });
 
       toast({
-        title: "Success",
-        description: `Added ${additionalLeaves} leave days to user's account!`
+        title: "🎉 Leaves Added Successfully!",
+        description: `Added ${additionalLeaves} leave days to user's account!`,
+        className: "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200"
       });
 
       setSelectedUserId('');
@@ -248,7 +270,7 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {/* Top Navigation */}
       <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -274,7 +296,7 @@ const AdminDashboard = () => {
             <div className="flex space-x-4">
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white">
+                  <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-300">
                     <Plus className="w-4 h-4 mr-2" />
                     Create Organization
                   </Button>
@@ -309,40 +331,40 @@ const AdminDashboard = () => {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card className="hover:shadow-lg transition-shadow duration-300">
+            <Card className="hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
               <CardContent className="p-6">
                 <div className="flex items-center">
                   <Users className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total Applications</p>
-                    <p className="text-2xl font-bold text-gray-900">{leaveApplications.length}</p>
+                    <p className="text-sm font-medium text-blue-700">Total Applications</p>
+                    <p className="text-2xl font-bold text-blue-900">{leaveApplications.length}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className="hover:shadow-lg transition-shadow duration-300">
+            <Card className="hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
               <CardContent className="p-6">
                 <div className="flex items-center">
                   <Calendar className="h-8 w-8 text-yellow-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Pending</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {leaveApplications.filter((app: any) => app.status === 'pending').length}
+                    <p className="text-sm font-medium text-yellow-700">Pending</p>
+                    <p className="text-2xl font-bold text-yellow-900">
+                      {leaveApplications.filter((app) => app.status === 'pending').length}
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className="hover:shadow-lg transition-shadow duration-300">
+            <Card className="hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
               <CardContent className="p-6">
                 <div className="flex items-center">
                   <CheckCircle className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Approved</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {leaveApplications.filter((app: any) => app.status === 'approved').length}
+                    <p className="text-sm font-medium text-green-700">Approved</p>
+                    <p className="text-2xl font-bold text-green-900">
+                      {leaveApplications.filter((app) => app.status === 'approved').length}
                     </p>
                   </div>
                 </div>
@@ -351,9 +373,12 @@ const AdminDashboard = () => {
           </div>
 
           {/* Add Leaves Section */}
-          <Card className="mb-8 hover:shadow-lg transition-shadow duration-300">
+          <Card className="mb-8 hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
             <CardHeader>
-              <CardTitle>Add Additional Leaves</CardTitle>
+              <CardTitle className="flex items-center text-purple-700">
+                <Sparkles className="w-5 h-5 mr-2" />
+                Add Additional Leaves
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex space-x-4 items-end">
@@ -363,10 +388,10 @@ const AdminDashboard = () => {
                     id="user-select"
                     value={selectedUserId}
                     onChange={(e) => setSelectedUserId(e.target.value)}
-                    className="w-full p-2 border rounded-md mt-1"
+                    className="w-full p-2 border rounded-md mt-1 focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">Select a user...</option>
-                    {userProfiles.map((profile: any) => (
+                    {userProfiles.map((profile) => (
                       <option key={profile.id} value={profile.id}>
                         {profile.name} ({profile.email})
                       </option>
@@ -381,15 +406,25 @@ const AdminDashboard = () => {
                     placeholder="Enter number of leaves"
                     value={additionalLeaves}
                     onChange={(e) => setAdditionalLeaves(e.target.value)}
-                    className="mt-1"
+                    className="mt-1 focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
                 <Button 
                   onClick={handleAddLeaves}
                   disabled={isAddingLeaves}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg"
                 >
-                  {isAddingLeaves ? 'Adding...' : 'Add Leaves'}
+                  {isAddingLeaves ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 mr-2" />
+                      Add Leaves
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -408,7 +443,7 @@ const AdminDashboard = () => {
           )}
 
           {/* Leave Applications Table */}
-          <Card className="hover:shadow-lg transition-shadow duration-300">
+          <Card className="hover:shadow-xl transition-all duration-300 bg-white">
             <CardHeader>
               <CardTitle>Leave Applications Management</CardTitle>
             </CardHeader>
@@ -427,8 +462,8 @@ const AdminDashboard = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaveApplications.map((application: any) => (
-                    <TableRow key={application.id} className="hover:bg-gray-50">
+                  {leaveApplications.map((application) => (
+                    <TableRow key={application.id} className="hover:bg-gray-50 transition-colors duration-200">
                       <TableCell className="font-medium">
                         {application.profiles?.name || 'Unknown User'}
                       </TableCell>
@@ -456,19 +491,33 @@ const AdminDashboard = () => {
                             <Button
                               size="sm"
                               onClick={() => handleApproveLeave(application.id, application.user_id)}
-                              className="bg-green-600 hover:bg-green-700 transition-colors duration-200"
+                              disabled={processingApplications.has(application.id)}
+                              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-md hover:shadow-lg"
                             >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Approve
+                              {processingApplications.has(application.id) ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Approve
+                                </>
+                              )}
                             </Button>
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleRejectLeave(application.id, application.user_id)}
-                              className="hover:bg-red-700 transition-colors duration-200"
+                              onClick={() => handleRejectLeave(application.id,application.user_id)}
+                              disabled={processingApplications.has(application.id)}
+                              className="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 transition-all duration-300 shadow-md hover:shadow-lg"
                             >
-                              <XCircle className="w-4 h-4 mr-1" />
-                              Reject
+                              {processingApplications.has(application.id) ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              ) : (
+                                <>
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Reject
+                                </>
+                              )}
                             </Button>
                           </div>
                         )}
