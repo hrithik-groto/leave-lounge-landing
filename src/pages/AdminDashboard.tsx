@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
 import { UserButton } from '@clerk/clerk-react';
 import NotificationBell from '@/components/NotificationBell';
+import SlackIntegration from '@/components/SlackIntegration';
 
 const AdminDashboard = () => {
   const { user, isLoaded } = useUser();
@@ -470,6 +471,11 @@ const AdminDashboard = () => {
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Slack Integration Section */}
+          <div className="mb-8">
+            <SlackIntegration />
           </div>
 
           {/* Add Leaves Section */}

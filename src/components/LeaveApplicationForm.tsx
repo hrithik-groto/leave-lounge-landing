@@ -1,205 +1,49 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, Send, AlertCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { Calendar } from "@/components/ui/calendar"
+import { CalendarIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 import { format } from 'date-fns';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/integrations/supabase/client';
 
-const LeaveApplicationForm = () => {
+interface LeaveApplicationFormProps {
+  onSuccess?: () => void;
+}
+
+const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
   const { user } = useUser();
-  const { toast } = useToast();
-  const [leaveTypes, setLeaveTypes] = useState([]);
-  const [formData, setFormData] = useState({
-    leave_type_id: '',
-    start_date: '',
-    end_date: '',
-    reason: '',
-    is_half_day: false
-  });
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [reason, setReason] = useState('');
+	const [selectedLeaveType, setSelectedLeaveType] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    if (user) {
-      initializeComponent();
-    }
-  }, [user]);
-
-  const initializeComponent = async () => {
-    try {
-      await ensureUserProfile();
-      await fetchLeaveTypes();
-    } catch (error) {
-      console.error('Initialization error:', error);
-      toast({
-        title: "Initialization Error",
-        description: "Failed to load component data. Please refresh the page.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const ensureUserProfile = async () => {
-    if (!user) return;
-
-    try {
-      console.log('Ensuring user profile exists for:', user.id);
-      
-      // Check if profile exists
-      const { data: existingProfile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('Error checking profile:', fetchError);
-        throw fetchError;
-      }
-
-      if (!existingProfile) {
-        console.log('Creating new profile for user:', user.id);
-        
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.emailAddresses[0]?.emailAddress || '',
-            name: user.fullName || user.firstName || 'Unknown User'
-          });
-
-        if (insertError) {
-          console.error('Error creating profile:', insertError);
-          throw insertError;
-        }
-
-        console.log('Profile created successfully');
-      } else {
-        console.log('Profile already exists');
-      }
-    } catch (error) {
-      console.error('Profile creation error:', error);
-      throw error;
-    }
-  };
-
-  const fetchLeaveTypes = async () => {
-    try {
-      console.log('Fetching leave types...');
-      
-      const { data, error } = await supabase
-        .from('leave_types')
-        .select('*')
-        .eq('is_active', true)
-        .order('label');
-
-      if (error) {
-        console.error('Error fetching leave types:', error);
-        throw error;
-      }
-
-      console.log('Leave types fetched:', data);
-      setLeaveTypes(data || []);
-
-      if (!data || data.length === 0) {
-        toast({
-          title: "No Leave Types",
-          description: "No leave types are available. Please contact your administrator.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error('Fetch leave types error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load leave types. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const validateForm = () => {
-    if (!formData.leave_type_id) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a leave type.",
-        variant: "destructive"
-      });
-      return false;
-    }
-
-    if (!formData.start_date) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a start date.",
-        variant: "destructive"
-      });
-      return false;
-    }
-
-    if (!formData.end_date) {
-      toast({
-        title: "Validation Error",
-        description: "Please select an end date.",
-        variant: "destructive"
-      });
-      return false;
-    }
-
-    if (new Date(formData.start_date) > new Date(formData.end_date)) {
-      toast({
-        title: "Validation Error",
-        description: "End date must be after or equal to start date.",
-        variant: "destructive"
-      });
-      return false;
-    }
-
-    // MANDATORY REASON VALIDATION
-    if (!formData.reason || !formData.reason.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Leave reason is mandatory. Please provide a reason for your leave application.",
-        variant: "destructive"
-      });
-      return false;
-    }
-
-    if (formData.reason.trim().length < 10) {
-      toast({
-        title: "Validation Error",
-        description: "Please provide a more detailed reason (at least 10 characters).",
-        variant: "destructive"
-      });
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!user) {
       toast({
-        title: "Authentication Error",
-        description: "You must be logged in to apply for leave.",
+        title: "Authentication Required",
+        description: "Please sign in to apply for leave",
         variant: "destructive"
       });
       return;
     }
 
-    if (!validateForm()) {
+    if (!reason.trim()) {
+      toast({
+        title: "Reason Required",
+        description: "Please provide a reason for your leave application",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -207,68 +51,74 @@ const LeaveApplicationForm = () => {
 
     try {
       console.log('Submitting leave application...');
-      console.log('Form data:', formData);
-      console.log('User ID:', user.id);
-
-      // Double-check that user profile exists before submitting
-      await ensureUserProfile();
-
-      const leaveApplication = {
+      
+      const leaveData = {
         user_id: user.id,
-        leave_type_id: formData.leave_type_id,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        reason: formData.reason.trim(), // Ensure reason is trimmed and included
-        is_half_day: formData.is_half_day,
-        status: 'pending',
-        applied_at: new Date().toISOString()
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        reason: reason.trim(),
+        leave_type_id: selectedLeaveType,
+        applied_at: new Date().toISOString(),
+        status: 'pending'
       };
 
-      console.log('Submitting leave application:', leaveApplication);
-
-      const { data, error } = await supabase
+      // Submit leave application
+      const { data: newLeaveApplication, error } = await supabase
         .from('leave_applied_users')
-        .insert([leaveApplication])
-        .select();
+        .insert([leaveData])
+        .select()
+        .single();
 
       if (error) {
         console.error('Error submitting leave application:', error);
         throw error;
       }
 
-      console.log('Leave application submitted successfully:', data);
+      console.log('Leave application submitted successfully:', newLeaveApplication);
 
+      // Send Slack notification
+      try {
+        console.log('Sending Slack notification...');
+        const { error: slackError } = await supabase.functions.invoke('slack-notify', {
+          body: {
+            leaveApplication: newLeaveApplication
+          }
+        });
+
+        if (slackError) {
+          console.error('Slack notification error:', slackError);
+          // Don't fail the whole operation if Slack fails
+        } else {
+          console.log('Slack notification sent successfully');
+        }
+      } catch (slackError) {
+        console.error('Failed to send Slack notification:', slackError);
+        // Continue with success flow even if Slack fails
+      }
+
+      // Show success message
       toast({
-        title: "Success! ✅",
-        description: "Your leave application has been submitted successfully and is pending approval.",
+        title: "🎉 Leave Application Submitted!",
+        description: "Your application has been submitted successfully and admin has been notified!",
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
       });
 
       // Reset form
-      setFormData({
-        leave_type_id: '',
-        start_date: '',
-        end_date: '',
-        reason: '',
-        is_half_day: false
-      });
+      setStartDate(new Date());
+      setEndDate(new Date());
+      setReason('');
+      setSelectedLeaveType('');
+
+      // Call success callback
+      if (onSuccess) {
+        onSuccess();
+      }
 
     } catch (error) {
       console.error('Error submitting leave application:', error);
-      
-      let errorMessage = "Failed to submit leave application. Please try again.";
-      
-      if (error.message?.includes('violates foreign key constraint')) {
-        errorMessage = "There was an issue with your user profile. Please contact support.";
-      } else if (error.message?.includes('violates row-level security')) {
-        errorMessage = "You don't have permission to submit leave applications. Please contact your administrator.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
       toast({
-        title: "Submission Error",
-        description: errorMessage,
+        title: "Submission Failed",
+        description: error.message || "Failed to submit leave application. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -276,181 +126,101 @@ const LeaveApplicationForm = () => {
     }
   };
 
-  const handleChange = (field, value) => {
-    console.log(`Updating ${field} to:`, value);
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  if (isLoading) {
-    return (
-      <Card className="hover:shadow-lg transition-shadow duration-300">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-2 text-gray-600">Loading...</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Card className="hover:shadow-lg transition-shadow duration-300">
-        <CardContent className="p-6">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Please sign in to apply for leave.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (leaveTypes.length === 0) {
-    return (
-      <Card className="hover:shadow-lg transition-shadow duration-300">
-        <CardContent className="p-6">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              No leave types are available. Please contact your administrator.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card className="hover:shadow-lg transition-shadow duration-300">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <Calendar className="w-5 h-5 mr-2 text-blue-600" />
-          Apply for Leave
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="leave-type">Leave Type *</Label>
-              <Select 
-                value={formData.leave_type_id} 
-                onValueChange={(value) => handleChange('leave_type_id', value)}
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      {/* Date Range Picker */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="start-date">Start Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-[280px] justify-start text-left font-normal",
+                  !startDate && "text-muted-foreground"
+                )}
               >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select leave type..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {leaveTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      <div className="flex items-center">
-                        <div 
-                          className="w-3 h-3 rounded-full mr-2" 
-                          style={{ backgroundColor: type.color }}
-                        ></div>
-                        {type.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={setStartDate}
+                disabled={(date) =>
+                  date < new Date()
+                }
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
 
-            <div>
-              <Label htmlFor="is-half-day">Leave Duration</Label>
-              <Select 
-                value={formData.is_half_day.toString()} 
-                onValueChange={(value) => handleChange('is_half_day', value === 'true')}
+        <div className="grid gap-2">
+          <Label htmlFor="end-date">End Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-[280px] justify-start text-left font-normal",
+                  !endDate && "text-muted-foreground"
+                )}
               >
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="false">Full Day</SelectItem>
-                  <SelectItem value="true">Half Day</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="start-date">Start Date *</Label>
-              <Input
-                id="start-date"
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => handleChange('start_date', e.target.value)}
-                className="mt-1"
-                min={format(new Date(), 'yyyy-MM-dd')}
-                required
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={endDate}
+                onSelect={setEndDate}
+                disabled={(date) =>
+                  date < new Date() || (startDate && date < startDate)
+                }
+                initialFocus
               />
-            </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
 
-            <div>
-              <Label htmlFor="end-date">End Date *</Label>
-              <Input
-                id="end-date"
-                type="date"
-                value={formData.end_date}
-                onChange={(e) => handleChange('end_date', e.target.value)}
-                className="mt-1"
-                min={formData.start_date || format(new Date(), 'yyyy-MM-dd')}
-                required
-              />
-            </div>
-          </div>
+			{/* Leave Type Select */}
+			<div className="grid gap-2">
+				<Label htmlFor="leave-type">Type of Leave</Label>
+				<Select onValueChange={setSelectedLeaveType}>
+					<SelectTrigger className="w-full">
+						<SelectValue placeholder="Select a leave type" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="vacation">Vacation</SelectItem>
+						<SelectItem value="sick">Sick Leave</SelectItem>
+						<SelectItem value="personal">Personal Time</SelectItem>
+						<SelectItem value="bereavement">Bereavement</SelectItem>
+					</SelectContent>
+				</Select>
+			</div>
 
-          <div>
-            <Label htmlFor="reason">Reason for Leave * (Mandatory)</Label>
-            <Textarea
-              id="reason"
-              placeholder="Please provide a detailed reason for your leave application (minimum 10 characters). This field is mandatory."
-              value={formData.reason}
-              onChange={(e) => handleChange('reason', e.target.value)}
-              className="mt-1 min-h-[100px] border-red-300 focus:border-red-500"
-              required
-              minLength={10}
-            />
-            <div className="text-xs text-gray-500 mt-1">
-              <span className={formData.reason.length < 10 ? 'text-red-500 font-semibold' : 'text-green-600'}>
-                {formData.reason.length}/10 minimum characters (MANDATORY)
-              </span>
-            </div>
-            {formData.reason.length === 0 && (
-              <div className="text-xs text-red-600 mt-1 font-semibold">
-                ⚠️ Leave reason is mandatory and cannot be empty
-              </div>
-            )}
-          </div>
+      {/* Reason Textarea */}
+      <div className="grid gap-2">
+        <Label htmlFor="reason">Reason for Leave</Label>
+        <Textarea
+          id="reason"
+          placeholder="Explain why you need time off..."
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </div>
 
-          <Button 
-            type="submit" 
-            disabled={isSubmitting || leaveTypes.length === 0 || !formData.reason.trim() || formData.reason.trim().length < 10}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Submitting Application...
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4 mr-2" />
-                Submit Leave Application
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      {/* Submit Button */}
+      <Button disabled={isSubmitting} className="bg-blue-500 text-white font-semibold py-3 rounded-md hover:bg-blue-700 transition-colors duration-300">
+        {isSubmitting ? 'Submitting...' : 'Submit Application'}
+      </Button>
+    </form>
   );
 };
 
