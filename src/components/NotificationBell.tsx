@@ -20,11 +20,12 @@ const NotificationBell = () => {
 
   useEffect(() => {
     if (user) {
+      console.log('Setting up notifications for user:', user.id);
       fetchNotifications();
       
       // Set up real-time subscription for notifications
       const subscription = supabase
-        .channel('notifications')
+        .channel('user_notifications')
         .on(
           'postgres_changes',
           {
@@ -74,9 +75,12 @@ const NotificationBell = () => {
             toast(toastConfig);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('Notification subscription status:', status);
+        });
 
       return () => {
+        console.log('Cleaning up notification subscription');
         supabase.removeChannel(subscription);
       };
     }
@@ -86,6 +90,8 @@ const NotificationBell = () => {
     if (!user) return;
 
     try {
+      console.log('Fetching notifications for user:', user.id);
+      
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -95,10 +101,17 @@ const NotificationBell = () => {
 
       if (error) {
         console.error('Error fetching notifications:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load notifications",
+          variant: "destructive"
+        });
       } else {
+        console.log('Notifications fetched:', data);
         setNotifications(data || []);
         const unread = data?.filter(n => !n.is_read).length || 0;
         setUnreadCount(unread);
+        console.log('Unread count:', unread);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -107,6 +120,8 @@ const NotificationBell = () => {
 
   const markAsRead = async (notificationId) => {
     try {
+      console.log('Marking notification as read:', notificationId);
+      
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
@@ -127,6 +142,8 @@ const NotificationBell = () => {
 
   const markAllAsRead = async () => {
     try {
+      console.log('Marking all notifications as read for user:', user?.id);
+      
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
@@ -180,6 +197,10 @@ const NotificationBell = () => {
 
     return baseStyles;
   };
+
+  if (!user) {
+    return null; // Don't render if user is not logged in
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>

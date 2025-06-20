@@ -165,10 +165,11 @@ const LeaveApplicationForm = () => {
       return false;
     }
 
-    if (!formData.reason.trim()) {
+    // MANDATORY REASON VALIDATION
+    if (!formData.reason || !formData.reason.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please provide a reason for your leave application.",
+        description: "Leave reason is mandatory. Please provide a reason for your leave application.",
         variant: "destructive"
       });
       return false;
@@ -217,7 +218,7 @@ const LeaveApplicationForm = () => {
         leave_type_id: formData.leave_type_id,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        reason: formData.reason.trim(),
+        reason: formData.reason.trim(), // Ensure reason is trimmed and included
         is_half_day: formData.is_half_day,
         status: 'pending',
         applied_at: new Date().toISOString()
@@ -239,7 +240,8 @@ const LeaveApplicationForm = () => {
 
       toast({
         title: "Success! ✅",
-        description: "Your leave application has been submitted successfully and is pending approval."
+        description: "Your leave application has been submitted successfully and is pending approval.",
+        className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
       });
 
       // Reset form
@@ -407,24 +409,31 @@ const LeaveApplicationForm = () => {
           </div>
 
           <div>
-            <Label htmlFor="reason">Reason for Leave *</Label>
+            <Label htmlFor="reason">Reason for Leave * (Mandatory)</Label>
             <Textarea
               id="reason"
-              placeholder="Please provide a detailed reason for your leave application (minimum 10 characters)..."
+              placeholder="Please provide a detailed reason for your leave application (minimum 10 characters). This field is mandatory."
               value={formData.reason}
               onChange={(e) => handleChange('reason', e.target.value)}
-              className="mt-1 min-h-[100px]"
+              className="mt-1 min-h-[100px] border-red-300 focus:border-red-500"
               required
               minLength={10}
             />
             <div className="text-xs text-gray-500 mt-1">
-              {formData.reason.length}/10 minimum characters
+              <span className={formData.reason.length < 10 ? 'text-red-500 font-semibold' : 'text-green-600'}>
+                {formData.reason.length}/10 minimum characters (MANDATORY)
+              </span>
             </div>
+            {formData.reason.length === 0 && (
+              <div className="text-xs text-red-600 mt-1 font-semibold">
+                ⚠️ Leave reason is mandatory and cannot be empty
+              </div>
+            )}
           </div>
 
           <Button 
             type="submit" 
-            disabled={isSubmitting || leaveTypes.length === 0}
+            disabled={isSubmitting || leaveTypes.length === 0 || !formData.reason.trim() || formData.reason.trim().length < 10}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
           >
             {isSubmitting ? (

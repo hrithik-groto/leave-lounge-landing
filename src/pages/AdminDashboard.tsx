@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useUser, useOrganizationList, useOrganization } from '@clerk/clerk-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,16 +88,16 @@ const AdminDashboard = () => {
     try {
       console.log('Fetching all leave applications...');
       
-      // First, try to get applications with profile information
+      // Fetch applications with profile information using the proper join
       const { data, error } = await supabase
         .from('leave_applied_users')
         .select(`
           *,
-          profiles:user_id (
+          profiles!fk_leave_applied_users_user_id (
             name,
             email
           ),
-          leave_types:leave_type_id (
+          leave_types (
             label,
             color
           )
@@ -107,26 +106,41 @@ const AdminDashboard = () => {
 
       if (error) {
         console.error('Error fetching leave applications:', error);
-        
-        // Fallback: fetch without joins if there are relationship issues
-        const { data: simpleData, error: simpleError } = await supabase
+        // Fallback: try a simpler query
+        const { data: fallbackData, error: fallbackError } = await supabase
           .from('leave_applied_users')
           .select('*')
           .order('applied_at', { ascending: false });
 
-        if (simpleError) {
-          console.error('Simple fetch also failed:', simpleError);
+        if (fallbackError) {
+          console.error('Fallback query also failed:', fallbackError);
           toast({
             title: "Error",
             description: "Failed to fetch leave applications",
             variant: "destructive"
           });
-        } else {
-          console.log('Leave applications (simple):', simpleData);
-          setLeaveApplications(simpleData || []);
+          return;
         }
+
+        // For fallback data, we need to fetch profile data separately
+        const enrichedData = await Promise.all(
+          (fallbackData || []).map(async (application) => {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('name, email')
+              .eq('id', application.user_id)
+              .single();
+            
+            return {
+              ...application,
+              profiles: profile
+            };
+          })
+        );
+
+        setLeaveApplications(enrichedData);
       } else {
-        console.log('Leave applications with joins:', data);
+        console.log('Leave applications with profile data:', data);
         setLeaveApplications(data || []);
       }
     } catch (error) {
