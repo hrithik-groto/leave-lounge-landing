@@ -20,7 +20,7 @@ serve(async (req) => {
     );
 
     const requestBody = await req.json();
-    const { leaveApplication, isTest, checkConfig } = requestBody;
+    const { leaveApplication, isTest, checkConfig, isApprovalUpdate } = requestBody;
 
     // Handle configuration check
     if (checkConfig) {
@@ -77,14 +77,30 @@ serve(async (req) => {
     };
 
     // Create rich Slack message
+    const isApproved = leaveApplication.status === 'approved';
+    const isRejected = leaveApplication.status === 'rejected';
+    
+    let headerText = "🏖️ New Leave Application";
+    let messageText = `🏖️ New Leave Application Submitted`;
+    
+    if (isApprovalUpdate) {
+      if (isApproved) {
+        headerText = "✅ Leave Application Approved";
+        messageText = `✅ Leave Application Approved`;
+      } else if (isRejected) {
+        headerText = "❌ Leave Application Rejected";
+        messageText = `❌ Leave Application Rejected`;
+      }
+    }
+    
     const slackMessage = {
-      text: `🏖️ New Leave Application Submitted`,
+      text: messageText,
       blocks: [
         {
           type: "header",
           text: {
             type: "plain_text",
-            text: "🏖️ New Leave Application"
+            text: headerText
           }
         },
         {
@@ -136,13 +152,24 @@ serve(async (req) => {
     }
 
     // Add status and timestamp
+    let statusText = `*Status:* 🟡 Pending Approval`;
+    if (isApproved) {
+      statusText = `*Status:* ✅ Approved`;
+    } else if (isRejected) {
+      statusText = `*Status:* ❌ Rejected`;
+    }
+    
+    const timestampText = isApprovalUpdate && leaveApplication.approved_at 
+      ? `*Decision Made:* ${new Date(leaveApplication.approved_at).toLocaleString()}`
+      : `*Applied:* ${new Date(leaveApplication.applied_at).toLocaleString()}`;
+    
     slackMessage.blocks.push(
       {
         type: "context",
         elements: [
           {
             type: "mrkdwn",
-            text: `*Status:* 🟡 Pending Approval | *Applied:* ${new Date(leaveApplication.applied_at).toLocaleString()}`
+            text: `${statusText} | ${timestampText}`
           }
         ]
       },

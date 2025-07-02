@@ -188,6 +188,33 @@ const AdminDashboard = () => {
         // Don't throw here as the main action succeeded
       }
 
+      // Send Slack notification for approval
+      try {
+        const application = leaveApplications.find(app => app.id === applicationId);
+        if (application) {
+          console.log('Sending Slack notification for approval:', application);
+          const { error: slackError } = await supabase.functions.invoke('slack-notify', {
+            body: {
+              leaveApplication: {
+                ...application,
+                status: 'approved',
+                approved_by: user?.id,
+                approved_at: new Date().toISOString()
+              },
+              isApprovalUpdate: true
+            }
+          });
+
+          if (slackError) {
+            console.error('Error sending Slack approval notification:', slackError);
+          } else {
+            console.log('Slack approval notification sent successfully');
+          }
+        }
+      } catch (slackError) {
+        console.error('Failed to send Slack approval notification:', slackError);
+      }
+
       // Show success toast
       toast({
         title: "🎊 Leave Approved Successfully!",
@@ -245,6 +272,33 @@ const AdminDashboard = () => {
       if (notificationError) {
         console.error('Error creating notification:', notificationError);
         // Don't throw here as the main action succeeded
+      }
+
+      // Send Slack notification for rejection
+      try {
+        const application = leaveApplications.find(app => app.id === applicationId);
+        if (application) {
+          console.log('Sending Slack notification for rejection:', application);
+          const { error: slackError } = await supabase.functions.invoke('slack-notify', {
+            body: {
+              leaveApplication: {
+                ...application,
+                status: 'rejected',
+                approved_by: user?.id,
+                approved_at: new Date().toISOString()
+              },
+              isApprovalUpdate: true
+            }
+          });
+
+          if (slackError) {
+            console.error('Error sending Slack rejection notification:', slackError);
+          } else {
+            console.log('Slack rejection notification sent successfully');
+          }
+        }
+      } catch (slackError) {
+        console.error('Failed to send Slack rejection notification:', slackError);
       }
 
       // Show rejection toast
