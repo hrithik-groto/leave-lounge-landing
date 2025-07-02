@@ -105,27 +105,33 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
         status: 'pending'
       };
 
-      // First ensure user profile exists
-      const { data: existingProfile } = await supabase
+      // First ensure user profile exists and get profile data
+      let { data: profile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, name, email')
         .eq('id', user.id)
         .single();
 
-      if (!existingProfile) {
+      if (!profile) {
         // Create profile if it doesn't exist
-        const { error: profileError } = await supabase
+        const newProfileData = {
+          id: user.id,
+          email: user.emailAddresses?.[0]?.emailAddress || '',
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim()
+        };
+
+        const { error: profileError, data: newProfile } = await supabase
           .from('profiles')
-          .insert([{
-            id: user.id,
-            email: user.emailAddresses?.[0]?.emailAddress || '',
-            name: `${user.firstName || ''} ${user.lastName || ''}`.trim()
-          }]);
+          .insert([newProfileData])
+          .select()
+          .single();
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
           throw new Error('Failed to create user profile');
         }
+        
+        profile = newProfile;
       }
 
       // Submit leave application
@@ -160,6 +166,27 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
       } catch (slackError) {
         console.error('Failed to send Slack notification:', slackError);
         // Continue with success flow even if Slack fails
+      }
+
+      // Create in-app notification for admin
+      try {
+        console.log('Creating in-app notification...');
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert([{
+            user_id: 'user_2xwywE2Bl76vs7l68dhj6nIcCPV', // Admin user ID
+            message: `New leave application from ${profile?.name || 'Unknown User'} for ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`,
+            type: 'info'
+          }]);
+
+        if (notificationError) {
+          console.error('Error creating in-app notification:', notificationError);
+        } else {
+          console.log('In-app notification created successfully');
+        }
+      } catch (notificationError) {
+        console.error('Failed to create in-app notification:', notificationError);
+        // Continue with success flow even if notification fails
       }
 
       // Show success message
