@@ -19,7 +19,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
-    const { leaveApplication } = await req.json();
+    const requestBody = await req.json();
+    const { leaveApplication, isTest, checkConfig } = requestBody;
+
+    // Handle configuration check
+    if (checkConfig) {
+      const slackWebhookUrl = Deno.env.get('SLACK_WEBHOOK_URL');
+      if (!slackWebhookUrl) {
+        return new Response(
+          JSON.stringify({ error: 'SLACK_WEBHOOK_URL not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+      return new Response(
+        JSON.stringify({ success: true, message: 'Slack webhook configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
     console.log('Processing Slack notification for leave application:', leaveApplication);
 
     // Get user profile information

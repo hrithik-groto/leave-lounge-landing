@@ -21,12 +21,19 @@ const SlackIntegration = () => {
     checkSlackConnection();
   }, []);
 
-  const checkSlackConnection = () => {
-    // Check if webhook URL is stored (you might want to store this in a settings table)
-    const storedWebhook = localStorage.getItem('slack_webhook_url');
-    if (storedWebhook) {
-      setWebhookUrl(storedWebhook);
-      setIsConnected(true);
+  const checkSlackConnection = async () => {
+    // Check if webhook URL is stored in Supabase secrets by testing edge function
+    try {
+      const { data, error } = await supabase.functions.invoke('slack-notify', {
+        body: { isTest: true, checkConfig: true }
+      });
+      
+      if (!error && data && !data.error) {
+        setIsConnected(true);
+      }
+    } catch (error) {
+      console.log('Slack not configured:', error);
+      setIsConnected(false);
     }
   };
 
@@ -49,14 +56,10 @@ const SlackIntegration = () => {
       return;
     }
 
-    // Store webhook URL (in production, this should be stored securely on the server)
-    localStorage.setItem('slack_webhook_url', webhookUrl);
-    setIsConnected(true);
-    
     toast({
-      title: "🎉 Slack Connected!",
-      description: "Your Slack workspace has been successfully connected!",
-      className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+      title: "⚠️ Manual Setup Required",
+      description: "Please add this webhook URL as SLACK_WEBHOOK_URL in your Supabase secrets, then refresh this page.",
+      variant: "destructive"
     });
   };
 
@@ -152,7 +155,9 @@ const SlackIntegration = () => {
                     <li>Go to your Slack workspace</li>
                     <li>Create or select a channel (e.g., #timeloo-leaves)</li>
                     <li>Add a "Webhook" app to your channel</li>
-                    <li>Copy the webhook URL and paste it below</li>
+                    <li>Copy the webhook URL</li>
+                    <li><strong>Add it as SLACK_WEBHOOK_URL secret in Supabase</strong></li>
+                    <li>Refresh this page to verify connection</li>
                   </ol>
                 </div>
               </div>
