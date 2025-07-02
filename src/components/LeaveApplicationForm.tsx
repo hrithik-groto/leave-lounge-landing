@@ -150,8 +150,8 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
       // Send Slack notification
       try {
-        console.log('Sending Slack notification...');
-        const { error: slackError } = await supabase.functions.invoke('slack-notify', {
+        console.log('Sending Slack notification with data:', newLeaveApplication);
+        const { data: slackResponse, error: slackError } = await supabase.functions.invoke('slack-notify', {
           body: {
             leaveApplication: newLeaveApplication
           }
@@ -161,20 +161,46 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
           console.error('Slack notification error:', slackError);
           // Don't fail the whole operation if Slack fails
         } else {
-          console.log('Slack notification sent successfully');
+          console.log('Slack notification sent successfully:', slackResponse);
         }
       } catch (slackError) {
         console.error('Failed to send Slack notification:', slackError);
         // Continue with success flow even if Slack fails
       }
 
-      // Create in-app notification for admin
+      // Create in-app notification for admin - first ensure admin profile exists
       try {
         console.log('Creating in-app notification...');
+        
+        // Check if admin profile exists, if not create it
+        const adminUserId = 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', adminUserId)
+          .single();
+
+        if (!adminProfile) {
+          console.log('Admin profile not found, creating...');
+          const { error: adminProfileError } = await supabase
+            .from('profiles')
+            .insert([{
+              id: adminUserId,
+              email: 'admin@timeloo.app',
+              name: 'Admin User'
+            }]);
+
+          if (adminProfileError) {
+            console.error('Error creating admin profile:', adminProfileError);
+            throw adminProfileError;
+          }
+        }
+
+        // Now create the notification
         const { error: notificationError } = await supabase
           .from('notifications')
           .insert([{
-            user_id: 'user_2xwywE2Bl76vs7l68dhj6nIcCPV', // Admin user ID
+            user_id: adminUserId,
             message: `New leave application from ${profile?.name || 'Unknown User'} for ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`,
             type: 'info'
           }]);
