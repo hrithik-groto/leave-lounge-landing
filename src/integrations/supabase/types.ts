@@ -635,18 +635,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      http_post: {
-        Args: { url: string; headers: Json; body: Json }
-        Returns: Json
-      }
-      http_post_json: {
-        Args: { url: string; headers: string; body: string }
-        Returns: Json
-      }
-      http_request: {
-        Args: { method: string; url: string; headers: Json; body: string }
-        Returns: Json
-      }
       initialize_user_leave_balances: {
         Args: { user_uuid: string }
         Returns: undefined
