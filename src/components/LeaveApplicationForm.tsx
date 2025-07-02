@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar"
 import { CalendarIcon } from "lucide-react"
@@ -24,7 +24,32 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
   const [reason, setReason] = useState('');
 	const [selectedLeaveType, setSelectedLeaveType] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [leaveTypes, setLeaveTypes] = useState<Array<{id: string, label: string, color: string}>>([]);
   const { toast } = useToast();
+
+  // Fetch leave types from database
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      try {
+        const { data: types, error } = await supabase
+          .from('leave_types')
+          .select('id, label, color')
+          .eq('is_active', true)
+          .order('label');
+        
+        if (error) {
+          console.error('Error fetching leave types:', error);
+          return;
+        }
+        
+        setLeaveTypes(types || []);
+      } catch (error) {
+        console.error('Error fetching leave types:', error);
+      }
+    };
+
+    fetchLeaveTypes();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +72,24 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
       return;
     }
 
+    if (!selectedLeaveType) {
+      toast({
+        title: "Leave Type Required",
+        description: "Please select a leave type",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!startDate || !endDate) {
+      toast({
+        title: "Dates Required",
+        description: "Please select start and end dates",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -61,6 +104,29 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
         applied_at: new Date().toISOString(),
         status: 'pending'
       };
+
+      // First ensure user profile exists
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+
+      if (!existingProfile) {
+        // Create profile if it doesn't exist
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([{
+            id: user.id,
+            email: user.emailAddresses?.[0]?.emailAddress || '',
+            name: `${user.firstName || ''} ${user.lastName || ''}`.trim()
+          }]);
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          throw new Error('Failed to create user profile');
+        }
+      }
 
       // Submit leave application
       const { data: newLeaveApplication, error } = await supabase
@@ -197,10 +263,17 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 						<SelectValue placeholder="Select a leave type" />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value="vacation">Vacation</SelectItem>
-						<SelectItem value="sick">Sick Leave</SelectItem>
-						<SelectItem value="personal">Personal Time</SelectItem>
-						<SelectItem value="bereavement">Bereavement</SelectItem>
+						{leaveTypes.map((type) => (
+							<SelectItem key={type.id} value={type.id}>
+								<div className="flex items-center gap-2">
+									<div 
+										className="w-3 h-3 rounded-full" 
+										style={{ backgroundColor: type.color }}
+									></div>
+									{type.label}
+								</div>
+							</SelectItem>
+						))}
 					</SelectContent>
 				</Select>
 			</div>

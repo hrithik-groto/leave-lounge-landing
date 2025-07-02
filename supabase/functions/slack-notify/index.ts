@@ -31,7 +31,7 @@ serve(async (req) => {
 
     if (profileError) {
       console.error('Error fetching user profile:', profileError);
-      throw new Error('Failed to fetch user profile');
+      // Continue with minimal user info if profile not found
     }
 
     // Get leave type information
@@ -76,11 +76,11 @@ serve(async (req) => {
           fields: [
             {
               type: "mrkdwn",
-              text: `*Employee:*\n${profile.name || 'Unknown'}`
+              text: `*Employee:*\n${profile?.name || 'Unknown User'}`
             },
             {
               type: "mrkdwn",
-              text: `*Email:*\n${profile.email}`
+              text: `*Email:*\n${profile?.email || 'Unknown Email'}`
             },
             {
               type: "mrkdwn",
