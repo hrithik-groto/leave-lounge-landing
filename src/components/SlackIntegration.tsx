@@ -64,7 +64,7 @@ const SlackIntegration = () => {
   };
 
   const handleTestNotification = async () => {
-    if (!isConnected || !webhookUrl) {
+    if (!isConnected) {
       toast({
         title: "Error",
         description: "Please connect Slack first",
@@ -119,13 +119,12 @@ const SlackIntegration = () => {
   };
 
   const handleDisconnect = () => {
-    localStorage.removeItem('slack_webhook_url');
     setWebhookUrl('');
     setIsConnected(false);
     
     toast({
       title: "Slack Disconnected",
-      description: "Your Slack integration has been removed.",
+      description: "To fully disconnect, please remove the SLACK_WEBHOOK_URL secret from Supabase.",
     });
   };
 
