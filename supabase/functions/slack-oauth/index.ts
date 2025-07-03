@@ -48,6 +48,8 @@ serve(async (req) => {
       return new Response('Slack app credentials not configured', { status: 500 });
     }
 
+    const redirectUri = `https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth`;
+    
     // Exchange code for access token
     const tokenResponse = await fetch('https://slack.com/api/oauth.v2.access', {
       method: 'POST',
@@ -58,6 +60,7 @@ serve(async (req) => {
         client_id: clientId,
         client_secret: clientSecret,
         code: code,
+        redirect_uri: redirectUri,
       }),
     });
 
