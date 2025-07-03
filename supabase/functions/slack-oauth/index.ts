@@ -13,9 +13,10 @@ serve(async (req) => {
   }
 
   try {
+    // Use service role key to bypass RLS for system operations
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const url = new URL(req.url);
@@ -66,10 +67,24 @@ serve(async (req) => {
 
     const tokenData = await tokenResponse.json();
     
+    console.log('Slack OAuth response:', { ok: tokenData.ok, team: tokenData.team?.id, user: tokenData.authed_user?.id });
+    
     if (!tokenData.ok) {
       console.error('Slack OAuth error:', tokenData);
-      return new Response('Failed to exchange code for token', { status: 400 });
+      return new Response(`Failed to exchange code for token: ${tokenData.error}`, { status: 400 });
     }
+
+    // Validate required data
+    if (!tokenData.authed_user?.id || !tokenData.team?.id || !tokenData.access_token) {
+      console.error('Missing required data from Slack:', { 
+        hasUser: !!tokenData.authed_user?.id, 
+        hasTeam: !!tokenData.team?.id, 
+        hasToken: !!tokenData.access_token 
+      });
+      return new Response('Invalid response from Slack', { status: 400 });
+    }
+
+    console.log('Attempting to save integration for user:', state);
 
     // Store the integration in the database
     const { error } = await supabaseClient
@@ -83,8 +98,10 @@ serve(async (req) => {
 
     if (error) {
       console.error('Database error:', error);
-      return new Response('Failed to save integration', { status: 500 });
+      return new Response(`Failed to save integration: ${error.message}`, { status: 500 });
     }
+
+    console.log('Successfully saved Slack integration for user:', state);
 
     // Redirect to success page
     const redirectUrl = `${Deno.env.get('PROJECT_URL')}/dashboard?slack_connected=true`;
