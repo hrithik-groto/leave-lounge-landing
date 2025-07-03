@@ -7,13 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
+import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
 import { UserButton } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import NotificationBell from '@/components/NotificationBell';
+import SlackOAuthButton from '@/components/SlackOAuthButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Dashboard = () => {
@@ -174,6 +175,27 @@ const Dashboard = () => {
           message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')} (${leaveDays} days)`,
           type: 'info'
         });
+
+      // Send Slack notification to channel and individual user
+      try {
+        await supabase.functions.invoke('slack-notify', {
+          body: {
+            leaveApplication: {
+              user_id: user.id,
+              start_date: format(selectedDate, 'yyyy-MM-dd'),
+              end_date: format(endDate, 'yyyy-MM-dd'),
+              reason: reason || 'No reason provided',
+              status: 'pending',
+              applied_at: new Date().toISOString()
+            },
+            isTest: false,
+            sendToUser: true
+          }
+        });
+      } catch (slackError) {
+        console.error('Error sending Slack notification:', slackError);
+        // Don't fail the leave application if Slack fails
+      }
 
       toast({
         title: "Success",
@@ -468,6 +490,31 @@ const Dashboard = () => {
 
   const renderDashboard = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Slack Integration CTA */}
+      <div className="lg:col-span-3 mb-6">
+        <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-purple-900">Connect with Slack</h3>
+                  <p className="text-purple-700 text-sm">
+                    Apply for leaves directly from Slack using <code className="bg-purple-100 px-1 rounded">/leaves</code> command.
+                    Get notifications when your leave is approved/rejected.
+                  </p>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <SlackOAuthButton />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Leave Balance Alert */}
       {leaveBalance <= 0 && (
         <div className="lg:col-span-3 mb-6">

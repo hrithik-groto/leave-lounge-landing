@@ -1,10 +1,39 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useUser } from '@clerk/clerk-react';
-import { Slack } from 'lucide-react';
+import { Slack, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const SlackOAuthButton = () => {
   const { user } = useUser();
+  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      checkSlackConnection();
+    }
+  }, [user]);
+
+  const checkSlackConnection = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('user_slack_integrations')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      
+      setIsConnected(!!data && !error);
+    } catch (error) {
+      console.error('Error checking Slack connection:', error);
+      setIsConnected(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSlackOAuth = async () => {
     if (!user) return;
@@ -24,6 +53,34 @@ const SlackOAuthButton = () => {
       console.error('Error starting OAuth flow:', error);
     }
   };
+
+  if (isLoading) {
+    return (
+      <Button disabled className="bg-gray-200">
+        <Slack className="w-4 h-4 mr-2" />
+        Checking Connection...
+      </Button>
+    );
+  }
+
+  if (isConnected) {
+    return (
+      <div className="flex items-center space-x-2">
+        <Badge className="bg-green-100 text-green-800 border-green-200 flex items-center space-x-1">
+          <CheckCircle className="w-3 h-3" />
+          <span>Slack Connected</span>
+        </Badge>
+        <Button 
+          onClick={handleSlackOAuth}
+          variant="outline"
+          size="sm"
+        >
+          <Slack className="w-4 h-4 mr-2" />
+          Reconnect
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <Button 
