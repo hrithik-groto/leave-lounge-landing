@@ -106,7 +106,7 @@ serve(async (req) => {
     console.log('Successfully saved Slack integration for user:', state);
 
     // Redirect to success page
-    const redirectUrl = `${Deno.env.get('PROJECT_URL')}/dashboard?slack_connected=true`;
+    const redirectUrl = `https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/dashboard?slack_connected=true`;
     
     return new Response(null, {
       status: 302,
