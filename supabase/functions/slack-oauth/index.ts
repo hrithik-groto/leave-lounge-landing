@@ -86,7 +86,7 @@ serve(async (req) => {
 
     console.log('Attempting to save integration for user:', state);
 
-    // Store the integration in the database
+    // Store the integration in the database using upsert with proper conflict resolution
     const { error } = await supabaseClient
       .from('user_slack_integrations')
       .upsert({
@@ -94,6 +94,8 @@ serve(async (req) => {
         slack_user_id: tokenData.authed_user.id,
         slack_team_id: tokenData.team.id,
         access_token: tokenData.access_token,
+      }, {
+        onConflict: 'user_id,slack_team_id'
       });
 
     if (error) {
