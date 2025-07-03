@@ -61,7 +61,20 @@ serve(async (req) => {
       console.error('Error fetching leave types:', leaveTypesError);
     }
 
-    // Create the modal for leave application
+    // Create and send the modal to Slack
+    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    if (!botToken) {
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: '❌ Slack bot token not configured. Please contact your administrator.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const modal = {
       type: 'modal',
       callback_id: 'leave_application_modal',
@@ -162,32 +175,35 @@ serve(async (req) => {
       ],
     };
 
-    // Return the modal response
-    return new Response(
-      JSON.stringify({
-        response_type: 'ephemeral',
-        text: '',
-        attachments: [
-          {
-            text: '',
-            callback_id: 'leave_application_modal',
-            actions: [
-              {
-                name: 'open_modal',
-                text: '🏖️ Apply for Leave',
-                type: 'button',
-                value: 'open_modal',
-              },
-            ],
-          },
-        ],
+    // Open the modal using Slack API
+    const modalResponse = await fetch('https://slack.com/api/views.open', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         trigger_id: formData.get('trigger_id'),
         view: modal,
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    });
+
+    if (!modalResponse.ok) {
+      const modalError = await modalResponse.text();
+      console.error('Error opening modal:', modalError);
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: '❌ Failed to open leave application form. Please try again.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Return empty response since modal was opened
+    return new Response('', { status: 200 });
 
   } catch (error) {
     console.error('Error in slack-commands function:', error);

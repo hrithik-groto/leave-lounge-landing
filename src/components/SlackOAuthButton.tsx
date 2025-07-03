@@ -6,16 +6,23 @@ import { Slack } from 'lucide-react';
 const SlackOAuthButton = () => {
   const { user } = useUser();
 
-  const handleSlackOAuth = () => {
+  const handleSlackOAuth = async () => {
     if (!user) return;
 
-    const clientId = 'YOUR_SLACK_CLIENT_ID'; // This should be set in Supabase secrets
-    const redirectUri = `${window.location.origin}/api/slack/oauth`;
-    const state = user.id; // Pass user ID as state
-    
-    const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=chat:write,users:read&redirect_uri=${redirectUri}&state=${state}`;
-    
-    window.location.href = oauthUrl;
+    try {
+      // Get the client ID from Supabase secrets via edge function
+      const response = await fetch(`https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth?get_client_id=true`);
+      const { clientId } = await response.json();
+      
+      const redirectUri = `https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth`;
+      const state = user.id;
+      
+      const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=chat:write,users:read&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+      
+      window.location.href = oauthUrl;
+    } catch (error) {
+      console.error('Error starting OAuth flow:', error);
+    }
   };
 
   return (

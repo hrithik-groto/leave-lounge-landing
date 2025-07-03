@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Slack, CheckCircle, XCircle, Settings, Bell, Users } from 'lucide-react';
+import SlackOAuthButton from './SlackOAuthButton';
 
 const SlackIntegration = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -231,6 +232,19 @@ const SlackIntegration = () => {
                   <span>Real-time status updates</span>
                 </div>
               </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <h4 className="font-semibold flex items-center text-gray-900">
+                <Users className="w-4 h-4 mr-2" />
+                Individual Notifications
+              </h4>
+              <p className="text-sm text-gray-600">
+                Connect your personal Slack account to receive direct messages for your leave updates.
+              </p>
+              <SlackOAuthButton />
             </div>
 
             <Separator />

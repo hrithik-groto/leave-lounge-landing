@@ -21,6 +21,21 @@ serve(async (req) => {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state'); // This should contain the user_id
+    const getClientId = url.searchParams.get('get_client_id');
+    
+    // Handle client ID request
+    if (getClientId === 'true') {
+      const clientId = Deno.env.get('SLACK_CLIENT_ID');
+      if (!clientId) {
+        return new Response(JSON.stringify({ error: 'Client ID not configured' }), { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify({ clientId }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     
     if (!code) {
       return new Response('Missing authorization code', { status: 400 });
