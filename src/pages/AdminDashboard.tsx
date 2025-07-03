@@ -201,7 +201,8 @@ const AdminDashboard = () => {
                 approved_by: user?.id,
                 approved_at: new Date().toISOString()
               },
-              isApprovalUpdate: true
+              isApprovalUpdate: true,
+              sendToUser: true
             }
           });
 
@@ -287,7 +288,8 @@ const AdminDashboard = () => {
                 approved_by: user?.id,
                 approved_at: new Date().toISOString()
               },
-              isApprovalUpdate: true
+              isApprovalUpdate: true,
+              sendToUser: true
             }
           });
 

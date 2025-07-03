@@ -630,6 +630,36 @@ export type Database = {
           },
         ]
       }
+      user_slack_integrations: {
+        Row: {
+          access_token: string | null
+          created_at: string
+          id: string
+          slack_team_id: string
+          slack_user_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          created_at?: string
+          id?: string
+          slack_team_id: string
+          slack_user_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          created_at?: string
+          id?: string
+          slack_team_id?: string
+          slack_user_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

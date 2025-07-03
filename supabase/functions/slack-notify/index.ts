@@ -20,7 +20,7 @@ serve(async (req) => {
     );
 
     const requestBody = await req.json();
-    const { leaveApplication, isTest, checkConfig, isApprovalUpdate } = requestBody;
+    const { leaveApplication, isTest, checkConfig, isApprovalUpdate, sendToUser } = requestBody;
 
     // Handle configuration check
     if (checkConfig) {
@@ -186,7 +186,7 @@ serve(async (req) => {
 
     console.log('Sending message to Slack...');
 
-    // Send to Slack
+    // Send to Slack channel (webhook)
     const slackResponse = await fetch(slackWebhookUrl, {
       method: 'POST',
       headers: {
@@ -201,7 +201,46 @@ serve(async (req) => {
       throw new Error(`Slack API error: ${slackResponse.status} - ${errorText}`);
     }
 
-    console.log('Successfully sent Slack notification');
+    console.log('Successfully sent Slack channel notification');
+
+    // Send individual DM if requested and user has Slack integration
+    if (sendToUser) {
+      try {
+        const { data: slackIntegration } = await supabaseClient
+          .from('user_slack_integrations')
+          .select('slack_user_id, access_token')
+          .eq('user_id', leaveApplication.user_id)
+          .single();
+
+        if (slackIntegration?.access_token) {
+          const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+          if (botToken) {
+            // Send DM to user
+            const dmResponse = await fetch('https://slack.com/api/chat.postMessage', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${botToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                channel: slackIntegration.slack_user_id,
+                ...slackMessage,
+              }),
+            });
+
+            if (dmResponse.ok) {
+              console.log('Successfully sent individual Slack DM');
+            } else {
+              const dmError = await dmResponse.text();
+              console.error('Failed to send individual DM:', dmError);
+            }
+          }
+        }
+      } catch (dmError) {
+        console.error('Error sending individual DM:', dmError);
+        // Don't fail the main request if DM fails
+      }
+    }
 
     return new Response(
       JSON.stringify({ 

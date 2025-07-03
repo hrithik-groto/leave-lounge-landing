@@ -92,12 +92,23 @@ const NotificationBell = () => {
     try {
       console.log('Fetching notifications for user:', user.id);
       
+      // First, let's check all notifications to debug
+      const { data: allNotifications, error: allError } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      console.log('All notifications in database:', allNotifications);
+      
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
+      
+      console.log('Filtered notifications for user:', data);
 
       if (error) {
         console.error('Error fetching notifications:', error);

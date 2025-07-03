@@ -48,3 +48,12 @@ enable_confirmations = false
 
 [functions.slack-notify]
 verify_jwt = false
+
+[functions.slack-commands]
+verify_jwt = false
+
+[functions.slack-interactions]
+verify_jwt = false
+
+[functions.slack-oauth]
+verify_jwt = false
