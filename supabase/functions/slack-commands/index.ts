@@ -18,6 +18,21 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Test endpoint - return simple response for GET requests
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ 
+        status: 'ok', 
+        message: 'Slack Commands endpoint is working',
+        timestamp: new Date().toISOString()
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200 
+      }
+    );
+  }
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
