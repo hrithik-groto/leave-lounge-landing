@@ -57,6 +57,30 @@ serve(async (req) => {
         case 'talk_to_us':
           return await handleTalkToUs(supabaseClient, payload, userId);
         
+        case 'admin_review_requests':
+          return await handleAdminReviewRequests(supabaseClient, payload, userId);
+        
+        case 'admin_team_overview':
+          return await handleAdminTeamOverview(supabaseClient, payload, userId);
+          
+        case 'approve_leave':
+          return await handleApproveLeave(supabaseClient, payload, userId);
+          
+        case 'reject_leave':
+          return await handleRejectLeave(supabaseClient, payload, userId);
+        
+        case 'admin_action_overflow':
+          // Handle overflow menu actions for admin approvals/rejections
+          const selectedValue = action.selected_option?.value;
+          if (selectedValue?.startsWith('approve_')) {
+            const leaveId = selectedValue.replace('approve_', '');
+            return await handleApproveLeave(supabaseClient, payload, leaveId);
+          } else if (selectedValue?.startsWith('reject_')) {
+            const leaveId = selectedValue.replace('reject_', '');
+            return await handleRejectLeave(supabaseClient, payload, leaveId);
+          }
+          return new Response('Unknown admin action', { status: 400 });
+        
         default:
           return new Response('Unknown action', { status: 400 });
       }
@@ -68,18 +92,49 @@ serve(async (req) => {
       const userId = payload.view.private_metadata;
       
       const leaveTypeId = values.leave_type.leave_type_select.selected_option?.value;
-      const startDate = values.start_date.start_date_picker.selected_date;
-      const endDate = values.end_date.end_date_picker.selected_date;
+      
+      // Get date values from the actions section
+      const startDate = values.start_date?.start_date_picker?.selected_date || 
+                       (payload.view.state.values.start_date_actions?.start_date_picker?.selected_date);
+      const endDate = values.end_date?.end_date_picker?.selected_date || 
+                     (payload.view.state.values.end_date_actions?.end_date_picker?.selected_date);
+                     
+      // Try alternative paths for the date pickers
+      let actualStartDate = startDate;
+      let actualEndDate = endDate;
+      
+      // Check if dates are in actions elements
+      if (!actualStartDate || !actualEndDate) {
+        const stateValues = payload.view.state.values;
+        for (const blockKey in stateValues) {
+          const block = stateValues[blockKey];
+          if (block.start_date_picker) {
+            actualStartDate = block.start_date_picker.selected_date;
+          }
+          if (block.end_date_picker) {
+            actualEndDate = block.end_date_picker.selected_date;
+          }
+        }
+      }
+      
       const reason = values.reason?.reason_input?.value || '';
 
-      if (!leaveTypeId || !startDate || !endDate) {
+      console.log('Form submission data:', {
+        leaveTypeId,
+        actualStartDate,
+        actualEndDate,
+        reason,
+        fullValues: JSON.stringify(values)
+      });
+
+      if (!leaveTypeId || !actualStartDate || !actualEndDate) {
         return new Response(
           JSON.stringify({
             response_action: 'errors',
             errors: {
               leave_type: !leaveTypeId ? 'Please select a leave type' : undefined,
-              start_date: !startDate ? 'Please select a start date' : undefined,
-              end_date: !endDate ? 'Please select an end date' : undefined,
+              start_date: !actualStartDate ? 'Please select a start date' : undefined,
+              end_date: !actualEndDate ? 'Please select an end date' : undefined,
             },
           }),
           {
@@ -89,8 +144,8 @@ serve(async (req) => {
       }
 
       // Validate dates
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+      const start = new Date(actualStartDate);
+      const end = new Date(actualEndDate);
       
       if (end < start) {
         return new Response(
@@ -112,8 +167,8 @@ serve(async (req) => {
         .insert({
           user_id: userId,
           leave_type_id: leaveTypeId,
-          start_date: startDate,
-          end_date: endDate,
+          start_date: actualStartDate,
+          end_date: actualEndDate,
           reason: reason,
           applied_at: new Date().toISOString(),
           status: 'pending',
@@ -140,11 +195,12 @@ serve(async (req) => {
           .from('leave_applied_users')
           .select(`
             *,
-            leave_types (label, color)
+            leave_types (label, color),
+            profiles (name, email)
           `)
           .eq('user_id', userId)
-          .eq('start_date', startDate)
-          .eq('end_date', endDate)
+          .eq('start_date', actualStartDate)
+          .eq('end_date', actualEndDate)
           .single();
 
         if (leaveApplication) {
@@ -154,6 +210,15 @@ serve(async (req) => {
               isTest: false
             }
           });
+          
+          // Create notification for admin in webapp
+          await supabaseClient
+            .from('notifications')
+            .insert({
+              user_id: 'user_2xwywE2Bl76vs7l68dhj6nIcCPV', // Admin user ID
+              message: `New leave request from ${leaveApplication.profiles?.name || 'Unknown'} for ${leaveApplication.leave_types?.label || 'leave'} from ${actualStartDate} to ${actualEndDate}`,
+              type: 'leave_request'
+            });
         }
       } catch (notificationError) {
         console.error('Error sending notification:', notificationError);
@@ -161,8 +226,7 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({
-          response_action: 'clear',
-          text: '✅ Your leave application has been submitted successfully! You will be notified when it\'s reviewed.',
+          response_action: 'clear'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -201,7 +265,7 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
     },
     submit: {
       type: 'plain_text',
-      text: 'Submit',
+      text: 'Submit Application',
     },
     close: {
       type: 'plain_text',
@@ -213,8 +277,11 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '✨ *Apply for your leave directly from Slack!*',
+          text: '✨ *Submit your leave request instantly!*\nFill out the details below and we\'ll notify your manager.',
         },
+      },
+      {
+        type: 'divider'
       },
       {
         type: 'input',
@@ -224,52 +291,52 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           action_id: 'leave_type_select',
           placeholder: {
             type: 'plain_text',
-            text: 'Select leave type',
+            text: 'Choose leave type...',
           },
           options: (leaveTypes || []).map((type: any) => ({
             text: {
               type: 'plain_text',
-              text: type.label,
+              text: `${type.label}`,
+              emoji: true,
             },
             value: type.id,
           })),
         },
         label: {
           type: 'plain_text',
-          text: 'Leave Type',
+          text: '📋 Leave Type',
+          emoji: true,
         },
       },
       {
-        type: 'input',
-        block_id: 'start_date',
-        element: {
-          type: 'datepicker',
-          action_id: 'start_date_picker',
-          placeholder: {
-            type: 'plain_text',
-            text: 'Select start date',
-          },
-        },
-        label: {
-          type: 'plain_text',
-          text: 'Start Date',
-        },
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*📅 Select your leave dates*'
+        }
       },
       {
-        type: 'input',
-        block_id: 'end_date',
-        element: {
-          type: 'datepicker',
-          action_id: 'end_date_picker',
-          placeholder: {
-            type: 'plain_text',
-            text: 'Select end date',
+        type: 'actions',
+        elements: [
+          {
+            type: 'datepicker',
+            action_id: 'start_date_picker',
+            placeholder: {
+              type: 'plain_text',
+              text: 'Start date',
+            },
+            initial_date: new Date().toISOString().split('T')[0]
           },
-        },
-        label: {
-          type: 'plain_text',
-          text: 'End Date',
-        },
+          {
+            type: 'datepicker', 
+            action_id: 'end_date_picker',
+            placeholder: {
+              type: 'plain_text',
+              text: 'End date',
+            },
+            initial_date: new Date().toISOString().split('T')[0]
+          }
+        ]
       },
       {
         type: 'input',
@@ -278,33 +345,55 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           type: 'plain_text_input',
           action_id: 'reason_input',
           multiline: true,
+          max_length: 500,
           placeholder: {
             type: 'plain_text',
-            text: 'Enter reason for leave (optional)',
+            text: 'e.g., Family vacation, medical appointment, personal matter...',
           },
         },
         label: {
           type: 'plain_text',
-          text: 'Reason',
+          text: '📝 Reason for Leave',
+          emoji: true,
         },
         optional: true,
       },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: '💡 *Tip:* Your manager will be notified immediately and you\'ll get updates right here in Slack!'
+          }
+        ]
+      }
     ],
   };
 
   // Open modal using Slack API
   const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-  const modalResponse = await fetch('https://slack.com/api/views.open', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${botToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      trigger_id: payload.trigger_id,
-      view: modal,
-    }),
-  });
+  try {
+    const modalResponse = await fetch('https://slack.com/api/views.open', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        trigger_id: payload.trigger_id,
+        view: modal,
+      }),
+    });
+
+    const responseData = await modalResponse.json();
+    console.log('Modal response:', responseData);
+    
+    if (!responseData.ok) {
+      console.error('Error opening modal:', responseData.error);
+    }
+  } catch (error) {
+    console.error('Error opening modal:', error);
+  }
 
   return new Response('', { status: 200 });
 }
@@ -545,6 +634,337 @@ We're here to make leave management easier for you! 🎯`;
     JSON.stringify({
       response_type: 'ephemeral',
       text: supportText,
+    }),
+    {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+// Admin handler functions
+async function handleAdminReviewRequests(supabaseClient: any, payload: any, userId: string) {
+  // Get all pending leave requests
+  const { data: pendingRequests } = await supabaseClient
+    .from('leave_applied_users')
+    .select(`
+      *,
+      profiles (name, email),
+      leave_types (label, color)
+    `)
+    .eq('status', 'pending')
+    .order('applied_at', { ascending: false })
+    .limit(10);
+
+  if (!pendingRequests || pendingRequests.length === 0) {
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '✅ *No pending leave requests!*\n\nAll caught up! 🎉',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // Create blocks for each pending request
+  let blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `👑 *Admin Review Center*\n\n📋 *${pendingRequests.length} Pending Request${pendingRequests.length > 1 ? 's' : ''}*`
+      }
+    },
+    {
+      type: 'divider'
+    }
+  ];
+
+  pendingRequests.forEach((request: any, index: number) => {
+    const days = Math.ceil((new Date(request.end_date).getTime() - new Date(request.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${request.profiles?.name || 'Unknown User'}*\n📅 ${request.start_date} to ${request.end_date} (${days} day${days > 1 ? 's' : ''})\n🏷️ ${request.leave_types?.label || 'Unknown Type'}${request.reason ? `\n📝 _${request.reason}_` : ''}`
+      },
+      accessory: {
+        type: 'overflow',
+        options: [
+          {
+            text: {
+              type: 'plain_text',
+              text: '✅ Approve',
+            },
+            value: `approve_${request.id}`
+          },
+          {
+            text: {
+              type: 'plain_text',
+              text: '❌ Reject',
+            },
+            value: `reject_${request.id}`
+          }
+        ],
+        action_id: 'admin_action_overflow'
+      }
+    });
+
+    if (index < pendingRequests.length - 1) {
+      blocks.push({
+        type: 'divider'
+      });
+    }
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: '💡 Use the menu (⋯) to approve or reject requests'
+      }
+    ]
+  });
+
+  return new Response(
+    JSON.stringify({
+      response_type: 'ephemeral',
+      blocks: blocks,
+    }),
+    {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+async function handleAdminTeamOverview(supabaseClient: any, payload: any, userId: string) {
+  const today = new Date().toISOString().split('T')[0];
+  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  // Get current and upcoming leaves
+  const { data: currentLeaves } = await supabaseClient
+    .from('leave_applied_users')
+    .select(`
+      *,
+      profiles (name),
+      leave_types (label, color)
+    `)
+    .eq('status', 'approved')
+    .lte('start_date', today)
+    .gte('end_date', today);
+
+  const { data: upcomingLeaves } = await supabaseClient
+    .from('leave_applied_users')
+    .select(`
+      *,
+      profiles (name),
+      leave_types (label, color)
+    `)
+    .eq('status', 'approved')
+    .gt('start_date', today)
+    .lte('start_date', nextWeek)
+    .order('start_date', { ascending: true });
+
+  let overviewText = '*👥 Team Leave Overview*\n\n';
+  
+  // Current leaves
+  overviewText += '*🏖️ Currently on Leave:*\n';
+  if (currentLeaves && currentLeaves.length > 0) {
+    currentLeaves.forEach((leave: any) => {
+      overviewText += `• *${leave.profiles?.name || 'Unknown'}* - ${leave.leave_types?.label} (until ${leave.end_date})\n`;
+    });
+  } else {
+    overviewText += '• No one is currently on leave\n';
+  }
+
+  overviewText += '\n*📅 Upcoming This Week:*\n';
+  if (upcomingLeaves && upcomingLeaves.length > 0) {
+    upcomingLeaves.forEach((leave: any) => {
+      overviewText += `• *${leave.profiles?.name || 'Unknown'}* - ${leave.leave_types?.label} (${leave.start_date} to ${leave.end_date})\n`;
+    });
+  } else {
+    overviewText += '• No upcoming leaves this week\n';
+  }
+
+  return new Response(
+    JSON.stringify({
+      response_type: 'ephemeral',
+      text: overviewText,
+    }),
+    {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+async function handleApproveLeave(supabaseClient: any, payload: any, leaveRequestId: string) {
+  const adminUserId = payload.user.id;
+  
+  // Update leave status to approved
+  const { error: updateError } = await supabaseClient
+    .from('leave_applied_users')
+    .update({
+      status: 'approved',
+      approved_by: 'user_2xwywE2Bl76vs7l68dhj6nIcCPV',
+      approved_at: new Date().toISOString()
+    })
+    .eq('id', leaveRequestId);
+
+  if (updateError) {
+    console.error('Error approving leave:', updateError);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to approve leave request. Please try again.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // Get the updated leave request for notifications
+  const { data: leaveRequest } = await supabaseClient
+    .from('leave_applied_users')
+    .select(`
+      *,
+      profiles (name, email),
+      leave_types (label, color)
+    `)
+    .eq('id', leaveRequestId)
+    .single();
+
+  if (leaveRequest) {
+    // Send notification to the user
+    await supabaseClient
+      .from('notifications')
+      .insert({
+        user_id: leaveRequest.user_id,
+        message: `Your ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been approved! 🎉`,
+        type: 'leave_approved'
+      });
+
+    // Send Slack notification if user has Slack integration
+    try {
+      const { data: slackIntegration } = await supabaseClient
+        .from('user_slack_integrations')
+        .select('*')
+        .eq('user_id', leaveRequest.user_id)
+        .single();
+
+      if (slackIntegration) {
+        // Send direct message to user
+        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+        await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: slackIntegration.slack_user_id,
+            text: `🎉 *Leave Request Approved!*\n\nYour ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been approved by your manager!\n\nEnjoy your time off! 🏖️`,
+          }),
+        });
+      }
+    } catch (error) {
+      console.error('Error sending Slack notification:', error);
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      response_type: 'ephemeral',
+      text: `✅ *Leave Request Approved!*\n\nSuccessfully approved ${leaveRequest?.profiles?.name || 'user'}'s leave request. They will be notified immediately.`,
+      replace_original: true
+    }),
+    {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequestId: string) {
+  // Update leave status to rejected
+  const { error: updateError } = await supabaseClient
+    .from('leave_applied_users')
+    .update({
+      status: 'rejected',
+      approved_by: 'user_2xwywE2Bl76vs7l68dhj6nIcCPV',
+      approved_at: new Date().toISOString()
+    })
+    .eq('id', leaveRequestId);
+
+  if (updateError) {
+    console.error('Error rejecting leave:', updateError);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to reject leave request. Please try again.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // Get the updated leave request for notifications
+  const { data: leaveRequest } = await supabaseClient
+    .from('leave_applied_users')
+    .select(`
+      *,
+      profiles (name, email),
+      leave_types (label, color)
+    `)
+    .eq('id', leaveRequestId)
+    .single();
+
+  if (leaveRequest) {
+    // Send notification to the user
+    await supabaseClient
+      .from('notifications')
+      .insert({
+        user_id: leaveRequest.user_id,
+        message: `Your ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been rejected.`,
+        type: 'leave_rejected'
+      });
+
+    // Send Slack notification if user has Slack integration
+    try {
+      const { data: slackIntegration } = await supabaseClient
+        .from('user_slack_integrations')
+        .select('*')
+        .eq('user_id', leaveRequest.user_id)
+        .single();
+
+      if (slackIntegration) {
+        // Send direct message to user
+        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+        await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: slackIntegration.slack_user_id,
+            text: `❌ *Leave Request Update*\n\nYour ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been rejected.\n\nPlease contact your manager for more details.`,
+          }),
+        });
+      }
+    } catch (error) {
+      console.error('Error sending Slack notification:', error);
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      response_type: 'ephemeral',
+      text: `❌ *Leave Request Rejected*\n\nSuccessfully rejected ${leaveRequest?.profiles?.name || 'user'}'s leave request. They will be notified.`,
+      replace_original: true
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

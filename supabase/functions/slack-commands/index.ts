@@ -51,7 +51,7 @@ serve(async (req) => {
       );
     }
 
-    // Get user profile for personalized greeting
+    // Get user profile for personalized greeting and check if admin
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('name')
@@ -59,137 +59,193 @@ serve(async (req) => {
       .single();
 
     const userName = profile?.name || 'there';
+    const isAdmin = slackIntegration.user_id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
 
-    // Create interactive message with buttons like the reference image
-    const interactiveMessage = {
-      response_type: 'ephemeral',
-      blocks: [
+    // Create different message blocks based on user role
+    let messageBlocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `Hi ${userName}! ${isAdmin ? '👑 *Admin Dashboard* -' : 'Would you like to-'}`
+        }
+      }
+    ];
+
+    if (isAdmin) {
+      // Admin-specific options
+      messageBlocks = messageBlocks.concat([
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📋 Review Leave Requests',
+                emoji: true
+              },
+              action_id: 'admin_review_requests',
+              value: slackIntegration.user_id,
+              style: 'primary'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '👥 Team Leave Overview',
+                emoji: true
+              },
+              action_id: 'admin_team_overview',
+              value: slackIntegration.user_id
+            }
+          ]
+        },
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `Hi ${userName}! Would you like to-`
+            text: '*Personal Actions*'
           }
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '🏖️ Apply leave'
-              },
-              action_id: 'apply_leave',
-              value: slackIntegration.user_id
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📊 Check leave balance'
-              },
-              action_id: 'check_balance',
-              value: slackIntegration.user_id
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '👥 See teammates on leave'
-              },
-              action_id: 'teammates_leave',
-              value: slackIntegration.user_id
-            }
-          ]
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*You can also*'
-          }
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📋 View/Cancel upcoming leaves'
-              },
-              action_id: 'view_upcoming',
-              value: slackIntegration.user_id
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '🎉 See upcoming holidays'
-              },
-              action_id: 'view_holidays',
-              value: slackIntegration.user_id
-            }
-          ]
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📖 See leave policy'
-              },
-              action_id: 'leave_policy',
-              value: slackIntegration.user_id
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '✅ Clear pending requests'
-              },
-              action_id: 'clear_pending',
-              value: slackIntegration.user_id
-            }
-          ]
-        },
-        {
-          type: 'divider'
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '🤔 *Wondering what more you can do with Timeloo?*'
-          },
-          accessory: {
+        }
+      ]);
+    }
+
+    // Common user options
+    messageBlocks = messageBlocks.concat([
+      {
+        type: 'actions',
+        elements: [
+          {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '⭐ View more'
+              text: '🏖️ Apply leave',
+              emoji: true
             },
-            action_id: 'view_more',
+            action_id: 'apply_leave',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📊 Check leave balance',
+              emoji: true
+            },
+            action_id: 'check_balance',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '👥 See teammates on leave',
+              emoji: true
+            },
+            action_id: 'teammates_leave',
             value: slackIntegration.user_id
           }
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '💬 Talk to us'
-              },
-              action_id: 'talk_to_us',
-              value: slackIntegration.user_id
-            }
-          ]
+        ]
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*You can also*'
         }
-      ]
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📋 View/Cancel upcoming leaves',
+              emoji: true
+            },
+            action_id: 'view_upcoming',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🎉 See upcoming holidays',
+              emoji: true
+            },
+            action_id: 'view_holidays',
+            value: slackIntegration.user_id
+          }
+        ]
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📖 See leave policy',
+              emoji: true
+            },
+            action_id: 'leave_policy',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '✅ Clear pending requests',
+              emoji: true
+            },
+            action_id: 'clear_pending',
+            value: slackIntegration.user_id
+          }
+        ]
+      },
+      {
+        type: 'divider'
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '🤔 *Wondering what more you can do with Timeloo?*'
+        },
+        accessory: {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '⭐ View more',
+            emoji: true
+          },
+          action_id: 'view_more',
+          value: slackIntegration.user_id
+        }
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '💬 Talk to us',
+              emoji: true
+            },
+            action_id: 'talk_to_us',
+            value: slackIntegration.user_id
+          }
+        ]
+      }
+    ]);
+
+    // Create interactive message with buttons
+    const interactiveMessage = {
+      response_type: 'ephemeral',
+      blocks: messageBlocks
     };
 
     return new Response(
