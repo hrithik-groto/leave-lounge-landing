@@ -307,6 +307,8 @@ serve(async (req) => {
       blocks: messageBlocks
     };
 
+    console.log('🚀 Sending interactive message with blocks:', JSON.stringify(messageBlocks, null, 2));
+
     return new Response(
       JSON.stringify(interactiveMessage),
       {
