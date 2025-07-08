@@ -43,6 +43,29 @@ serve(async (req) => {
   }
 
   try {
+    // First check if this is a URL verification challenge
+    const contentType = req.headers.get('content-type') || '';
+    console.log('Content-Type:', contentType);
+    
+    if (contentType.includes('application/json')) {
+      // Handle JSON payload (URL verification)
+      const body = await req.text();
+      console.log('Raw JSON body:', body);
+      
+      try {
+        const jsonData = JSON.parse(body);
+        if (jsonData.type === 'url_verification') {
+          console.log('URL verification challenge:', jsonData.challenge);
+          return new Response(jsonData.challenge, {
+            headers: { 'Content-Type': 'text/plain' },
+            status: 200
+          });
+        }
+      } catch (e) {
+        console.log('Not JSON verification challenge');
+      }
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
