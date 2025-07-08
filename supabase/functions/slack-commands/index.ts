@@ -8,6 +8,12 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Add detailed logging
+  console.log('=== SLACK COMMAND REQUEST START ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Headers:', Object.fromEntries(req.headers.entries()));
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -26,8 +32,10 @@ serve(async (req) => {
     const text = formData.get('text');
     
     console.log('Received Slack command:', { command, userId, teamId, text });
+    console.log('FormData entries:', Array.from(formData.entries()));
 
     if (command !== '/leaves') {
+      console.log('Unknown command received:', command);
       return new Response('Unknown command', { status: 400 });
     }
 

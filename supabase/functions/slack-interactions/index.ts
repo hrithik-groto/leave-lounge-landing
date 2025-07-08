@@ -8,6 +8,12 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Add detailed logging
+  console.log('=== SLACK INTERACTION REQUEST START ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Headers:', Object.fromEntries(req.headers.entries()));
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -20,7 +26,10 @@ serve(async (req) => {
 
     // Parse the form data from Slack
     const formData = await req.formData();
+    console.log('FormData entries:', Array.from(formData.entries()));
+    
     const payload = JSON.parse(formData.get('payload') as string);
+    console.log('Parsed payload:', JSON.stringify(payload, null, 2));
     
     console.log('Received Slack interaction:', payload.type, payload.type === 'block_actions' ? payload.actions?.[0]?.action_id : '');
 
