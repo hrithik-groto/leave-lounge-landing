@@ -51,159 +51,153 @@ serve(async (req) => {
       );
     }
 
-    // Get leave types for the modal
-    const { data: leaveTypes, error: leaveTypesError } = await supabaseClient
-      .from('leave_types')
-      .select('id, label, color')
-      .eq('is_active', true);
+    // Get user profile for personalized greeting
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('name')
+      .eq('id', slackIntegration.user_id)
+      .single();
 
-    if (leaveTypesError) {
-      console.error('Error fetching leave types:', leaveTypesError);
-    }
+    const userName = profile?.name || 'there';
 
-    // Create and send the modal to Slack
-    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-    if (!botToken) {
-      return new Response(
-        JSON.stringify({
-          response_type: 'ephemeral',
-          text: '❌ Slack bot token not configured. Please contact your administrator.',
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    const modal = {
-      type: 'modal',
-      callback_id: 'leave_application_modal',
-      title: {
-        type: 'plain_text',
-        text: '🏖️ Apply for Leave',
-      },
-      submit: {
-        type: 'plain_text',
-        text: 'Submit',
-      },
-      close: {
-        type: 'plain_text',
-        text: 'Cancel',
-      },
-      private_metadata: slackIntegration.user_id, // Store user_id for later use
+    // Create interactive message with buttons like the reference image
+    const interactiveMessage = {
+      response_type: 'ephemeral',
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: '✨ *Apply for your leave directly from Slack!*',
-          },
+            text: `Hi ${userName}! Would you like to-`
+          }
         },
         {
-          type: 'input',
-          block_id: 'leave_type',
-          element: {
-            type: 'static_select',
-            action_id: 'leave_type_select',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select leave type',
-            },
-            options: (leaveTypes || []).map(type => ({
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
               text: {
                 type: 'plain_text',
-                text: type.label,
+                text: '🏖️ Apply leave'
               },
-              value: type.id,
-            })),
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Leave Type',
-          },
+              action_id: 'apply_leave',
+              value: slackIntegration.user_id
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📊 Check leave balance'
+              },
+              action_id: 'check_balance',
+              value: slackIntegration.user_id
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '👥 See teammates on leave'
+              },
+              action_id: 'teammates_leave',
+              value: slackIntegration.user_id
+            }
+          ]
         },
         {
-          type: 'input',
-          block_id: 'start_date',
-          element: {
-            type: 'datepicker',
-            action_id: 'start_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select start date',
-            },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Start Date',
-          },
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*You can also*'
+          }
         },
         {
-          type: 'input',
-          block_id: 'end_date',
-          element: {
-            type: 'datepicker',
-            action_id: 'end_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select end date',
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📋 View/Cancel upcoming leaves'
+              },
+              action_id: 'view_upcoming',
+              value: slackIntegration.user_id
             },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'End Date',
-          },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '🎉 See upcoming holidays'
+              },
+              action_id: 'view_holidays',
+              value: slackIntegration.user_id
+            }
+          ]
         },
         {
-          type: 'input',
-          block_id: 'reason',
-          element: {
-            type: 'plain_text_input',
-            action_id: 'reason_input',
-            multiline: true,
-            placeholder: {
-              type: 'plain_text',
-              text: 'Enter reason for leave (optional)',
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📖 See leave policy'
+              },
+              action_id: 'leave_policy',
+              value: slackIntegration.user_id
             },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Reason',
-          },
-          optional: true,
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '✅ Clear pending requests'
+              },
+              action_id: 'clear_pending',
+              value: slackIntegration.user_id
+            }
+          ]
         },
-      ],
+        {
+          type: 'divider'
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '🤔 *Wondering what more you can do with Timeloo?*'
+          },
+          accessory: {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '⭐ View more'
+            },
+            action_id: 'view_more',
+            value: slackIntegration.user_id
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '💬 Talk to us'
+              },
+              action_id: 'talk_to_us',
+              value: slackIntegration.user_id
+            }
+          ]
+        }
+      ]
     };
 
-    // Open the modal using Slack API
-    const modalResponse = await fetch('https://slack.com/api/views.open', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        trigger_id: formData.get('trigger_id'),
-        view: modal,
-      }),
-    });
-
-    if (!modalResponse.ok) {
-      const modalError = await modalResponse.text();
-      console.error('Error opening modal:', modalError);
-      return new Response(
-        JSON.stringify({
-          response_type: 'ephemeral',
-          text: '❌ Failed to open leave application form. Please try again.',
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Return empty response since modal was opened
-    return new Response('', { status: 200 });
+    return new Response(
+      JSON.stringify(interactiveMessage),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
 
   } catch (error) {
     console.error('Error in slack-commands function:', error);
