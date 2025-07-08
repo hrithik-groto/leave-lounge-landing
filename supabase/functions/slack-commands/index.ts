@@ -126,10 +126,12 @@ serve(async (req) => {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `Hi ${userName}! ${isAdmin ? '👑 *Admin Dashboard* -' : 'Would you like to-'}`
+          text: `Hi ${userName}! ${isAdmin ? '👑 *Admin Dashboard* -' : 'Would you like to:'}`
         }
       }
     ];
+
+    console.log('🔧 DEBUG: Creating buttons for user:', userId, 'isAdmin:', isAdmin);
 
     if (isAdmin) {
       // Admin-specific options
@@ -175,16 +177,17 @@ serve(async (req) => {
       {
         type: 'actions',
         elements: [
-          {
-            type: 'button',
-            text: {
-              type: 'plain_text',
-              text: '🏖️ Apply leave',
-              emoji: true
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '🏖️ Apply leave',
+                emoji: true
+              },
+              action_id: 'apply_leave',
+              value: slackIntegration.user_id,
+              style: 'primary'
             },
-            action_id: 'apply_leave',
-            value: slackIntegration.user_id
-          },
           {
             type: 'button',
             text: {
@@ -308,11 +311,13 @@ serve(async (req) => {
     };
 
     console.log('🚀 Sending interactive message with blocks:', JSON.stringify(messageBlocks, null, 2));
+    console.log('🔧 DEBUG: Full interactive message:', JSON.stringify(interactiveMessage, null, 2));
 
     return new Response(
       JSON.stringify(interactiveMessage),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
 
