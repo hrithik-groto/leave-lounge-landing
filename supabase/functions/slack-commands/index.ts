@@ -33,6 +33,15 @@ serve(async (req) => {
     );
   }
 
+  // Only handle POST requests from here
+  if (req.method !== 'POST') {
+    console.log('Non-POST request received:', req.method);
+    return new Response('Method not allowed', { 
+      status: 405,
+      headers: corsHeaders 
+    });
+  }
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,18 +49,45 @@ serve(async (req) => {
     );
 
     // Parse the form data from Slack
-    const formData = await req.formData();
+    let formData;
+    try {
+      formData = await req.formData();
+      console.log('✅ Successfully parsed FormData');
+    } catch (parseError) {
+      console.error('❌ Failed to parse FormData:', parseError);
+      return new Response('Invalid form data', { 
+        status: 400,
+        headers: corsHeaders 
+      });
+    }
+
     const command = formData.get('command');
     const userId = formData.get('user_id');
     const teamId = formData.get('team_id');
     const text = formData.get('text');
+    const token = formData.get('token');
     
-    console.log('Received Slack command:', { command, userId, teamId, text });
-    console.log('FormData entries:', Array.from(formData.entries()));
+    console.log('📝 Received Slack command data:', { 
+      command, 
+      userId, 
+      teamId, 
+      text,
+      token: token ? 'present' : 'missing'
+    });
+    console.log('📋 All FormData entries:', Array.from(formData.entries()));
 
     if (command !== '/leaves') {
-      console.log('Unknown command received:', command);
-      return new Response('Unknown command', { status: 400 });
+      console.log('❌ Unknown command received:', command);
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: `❌ Unknown command: ${command}. Expected: /leaves`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      );
     }
 
     // Find the user in our database based on Slack user ID

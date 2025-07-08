@@ -33,6 +33,15 @@ serve(async (req) => {
     );
   }
 
+  // Only handle POST requests from here
+  if (req.method !== 'POST') {
+    console.log('Non-POST request received:', req.method);
+    return new Response('Method not allowed', { 
+      status: 405,
+      headers: corsHeaders 
+    });
+  }
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,11 +49,42 @@ serve(async (req) => {
     );
 
     // Parse the form data from Slack
-    const formData = await req.formData();
-    console.log('FormData entries:', Array.from(formData.entries()));
+    let formData;
+    try {
+      formData = await req.formData();
+      console.log('✅ Successfully parsed FormData for interactions');
+    } catch (parseError) {
+      console.error('❌ Failed to parse FormData:', parseError);
+      return new Response('Invalid form data', { 
+        status: 400,
+        headers: corsHeaders 
+      });
+    }
     
-    const payload = JSON.parse(formData.get('payload') as string);
-    console.log('Parsed payload:', JSON.stringify(payload, null, 2));
+    console.log('📋 All FormData entries:', Array.from(formData.entries()));
+    
+    const payloadString = formData.get('payload') as string;
+    if (!payloadString) {
+      console.error('❌ No payload found in FormData');
+      return new Response('No payload found', { 
+        status: 400,
+        headers: corsHeaders 
+      });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(payloadString);
+      console.log('✅ Successfully parsed payload');
+      console.log('📝 Payload type:', payload.type);
+      console.log('📝 Payload data:', JSON.stringify(payload, null, 2));
+    } catch (parseError) {
+      console.error('❌ Failed to parse payload JSON:', parseError);
+      return new Response('Invalid JSON payload', { 
+        status: 400,
+        headers: corsHeaders 
+      });
+    }
     
     console.log('Received Slack interaction:', payload.type, payload.type === 'block_actions' ? payload.actions?.[0]?.action_id : '');
 
