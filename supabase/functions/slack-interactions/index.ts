@@ -29,6 +29,8 @@ serve(async (req) => {
       const action = payload.actions[0];
       const userId = action.value;
       
+      console.log('Processing action:', action.action_id, 'for user:', userId);
+      
       switch (action.action_id) {
         case 'apply_leave':
           return await handleApplyLeave(supabaseClient, payload, userId);
@@ -82,7 +84,17 @@ serve(async (req) => {
           return new Response('Unknown admin action', { status: 400 });
         
         default:
-          return new Response('Unknown action', { status: 400 });
+          console.log('Unknown action received:', action.action_id);
+          return new Response(
+            JSON.stringify({
+              response_type: 'ephemeral',
+              text: `❌ Unknown action: ${action.action_id}. Please try again or contact support.`,
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200,
+            }
+          );
       }
     }
 
@@ -408,26 +420,143 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
     .eq('user_id', userId)
     .eq('year', new Date().getFullYear());
 
-  let balanceText = '*📊 Your Leave Balance*\n\n';
-  
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('name')
+    .eq('id', userId)
+    .single();
+
+  let totalDays = 0;
+  let balanceBlocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `You have *${totalDays} days* remaining in this cycle 🌴`
+      }
+    },
+    {
+      type: 'divider'
+    }
+  ];
+
   if (balances && balances.length > 0) {
+    // Calculate total remaining days
     balances.forEach((balance: any) => {
       const available = (balance.allocated_days || 0) - (balance.used_days || 0);
-      balanceText += `• *${balance.leave_types.label}*: ${available}/${balance.allocated_days || 0} days available\n`;
+      totalDays += available;
     });
+
+    // Update the total in the first block
+    balanceBlocks[0].text.text = `You have *${totalDays.toFixed(2)} days* remaining in this cycle 🌴`;
+
+    // Add detailed breakdown
+    balanceBlocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: "Here's a breakdown of your leaves this cycle:"
+      }
+    });
+
+    // Group by deductible and non-deductible
+    const deductibleLeaves: any[] = [];
+    const nonDeductibleLeaves: any[] = [];
+
+    balances.forEach((balance: any) => {
+      const applied = balance.used_days || 0;
+      const remaining = (balance.allocated_days || 0) - applied;
+      const leaveInfo = {
+        label: balance.leave_types.label,
+        applied: applied,
+        remaining: remaining,
+        icon: getLeaveTypeIcon(balance.leave_types.label)
+      };
+
+      // Simple classification - you can enhance this based on your leave types
+      if (balance.leave_types.label.toLowerCase().includes('additional') || 
+          balance.leave_types.label.toLowerCase().includes('comp') ||
+          balance.leave_types.label.toLowerCase().includes('special')) {
+        nonDeductibleLeaves.push(leaveInfo);
+      } else {
+        deductibleLeaves.push(leaveInfo);
+      }
+    });
+
+    // Add deductible leaves section
+    if (deductibleLeaves.length > 0) {
+      balanceBlocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Deductible leave-types:*'
+        }
+      });
+
+      deductibleLeaves.forEach(leave => {
+        balanceBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${leave.icon} *${leave.label}*: ${leave.applied.toFixed(2)} applied, ${leave.remaining.toFixed(2)} remaining`
+          }
+        });
+      });
+    }
+
+    // Add non-deductible leaves section
+    if (nonDeductibleLeaves.length > 0) {
+      balanceBlocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Non-deductible leave-types:*'
+        }
+      });
+
+      nonDeductibleLeaves.forEach(leave => {
+        balanceBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${leave.icon} *${leave.label}*: ${leave.applied.toFixed(2)} applied`
+          }
+        });
+      });
+    }
   } else {
-    balanceText += 'No leave balance information available.';
+    balanceBlocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: 'No leave balance information available. Please contact HR to set up your leave balances.'
+      }
+    });
   }
 
   return new Response(
     JSON.stringify({
       response_type: 'ephemeral',
-      text: balanceText,
+      blocks: balanceBlocks,
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     }
   );
+}
+
+function getLeaveTypeIcon(leaveType: string): string {
+  const type = leaveType.toLowerCase();
+  if (type.includes('paid') || type.includes('annual')) return '🌴';
+  if (type.includes('sick') || type.includes('medical')) return '🏥';
+  if (type.includes('bereavement')) return '🌸';
+  if (type.includes('restricted') || type.includes('holiday')) return '🔔';
+  if (type.includes('short')) return '⏰';
+  if (type.includes('work from home') || type.includes('wfh')) return '🏠';
+  if (type.includes('additional')) return '➕';
+  if (type.includes('comp')) return '⚪';
+  if (type.includes('special')) return '🔴';
+  return '📅';
 }
 
 async function handleTeammatesLeave(supabaseClient: any, payload: any, userId: string) {
