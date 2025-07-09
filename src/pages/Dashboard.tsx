@@ -48,6 +48,33 @@ const Dashboard = () => {
     }
   }, [user, isLoaded]);
 
+  // Real-time subscription for leave applications updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('leave-balance-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leave_applied_users'
+        },
+        (payload) => {
+          console.log('Leave application change detected:', payload);
+          // Refresh leave applications and balance when any change occurs
+          fetchLeaveApplications();
+          calculateLeaveBalance();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const createOrUpdateProfile = async () => {
     if (!user) return;
 
