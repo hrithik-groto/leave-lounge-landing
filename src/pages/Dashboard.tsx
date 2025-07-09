@@ -14,6 +14,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import LeaveApplicationsList from '@/components/LeaveApplicationsList';
+import SlackOAuthButton from '@/components/SlackOAuthButton';
+import TimelooMascot from '@/components/TimelooMascot';
 import confetti from 'canvas-confetti';
 
 const Dashboard = () => {
@@ -22,8 +24,10 @@ const Dashboard = () => {
   const [leaveBalance, setLeaveBalance] = useState(20);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
+  const [shouldMascotWave, setShouldMascotWave] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
 
   // Check if current user is admin
   const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
@@ -125,8 +129,13 @@ const Dashboard = () => {
 
   const handleLeaveSuccess = () => {
     triggerConfetti();
+    setShouldMascotWave(true);
     fetchLeaveApplications();
     calculateLeaveBalance();
+  };
+
+  const handleApplyLeaveClick = () => {
+    calendarRef.current?.openApplyDialog();
   };
 
 
@@ -211,6 +220,7 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center space-x-4">
+          <SlackOAuthButton />
           <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
           <UserButton afterSignOutUrl="/" />
@@ -443,29 +453,13 @@ const Dashboard = () => {
               <h3 className="text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
               <p className="text-purple-100">Apply for leave with just a few clicks</p>
             </div>
-            <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Apply Leave
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-semibold text-purple-700">
-                    Apply for Leave
-                  </DialogTitle>
-                </DialogHeader>
-                <EnhancedLeaveApplicationForm 
-                  onSuccess={() => {
-                    setIsApplyDialogOpen(false);
-                    handleLeaveSuccess();
-                  }} 
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              onClick={handleApplyLeaveClick}
+              className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Apply Leave
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -482,7 +476,7 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}
-        <EnhancedCalendar onRefresh={handleLeaveSuccess} />
+        <EnhancedCalendar ref={calendarRef} onRefresh={handleLeaveSuccess} />
 
         {/* Leave Applications Section with Pagination */}
         <LeaveApplicationsList
@@ -491,6 +485,12 @@ const Dashboard = () => {
           title="Your Leave Applications"
         />
       </div>
+
+      {/* Timeloo Mascot */}
+      <TimelooMascot 
+        shouldWave={shouldMascotWave} 
+        onWaveComplete={() => setShouldMascotWave(false)}
+      />
     </div>
   );
 
