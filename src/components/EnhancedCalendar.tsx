@@ -28,13 +28,14 @@ interface LeaveApplication {
 
 interface EnhancedCalendarProps {
   onRefresh?: () => void;
+  isLeaveExhausted?: boolean;
 }
 
 interface EnhancedCalendarRef {
   openApplyDialog: () => void;
 }
 
-const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(({ onRefresh }, ref) => {
+const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(({ onRefresh, isLeaveExhausted = false }, ref) => {
   const { user } = useUser();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -44,8 +45,10 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
 
   useImperativeHandle(ref, () => ({
     openApplyDialog: () => {
-      setSelectedDate(new Date());
-      setIsApplyDialogOpen(true);
+      if (!isLeaveExhausted) {
+        setSelectedDate(new Date());
+        setIsApplyDialogOpen(true);
+      }
     }
   }));
 
@@ -98,8 +101,10 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
   };
 
   const handleDateClick = (date: Date) => {
-    setSelectedDate(date);
-    setIsApplyDialogOpen(true);
+    if (!isLeaveExhausted) {
+      setSelectedDate(date);
+      setIsApplyDialogOpen(true);
+    }
   };
 
   const handlePrevMonth = () => {
@@ -178,8 +183,11 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
           <TooltipTrigger asChild>
             <button
               onClick={() => handleDateClick(date)}
+              disabled={isLeaveExhausted}
               className={cn(
-                'h-28 p-2 text-left border border-gray-200 hover:bg-purple-50 transition-all duration-300 relative group hover:shadow-md hover:scale-105',
+                'h-28 p-2 text-left border border-gray-200 transition-all duration-300 relative group',
+                !isLeaveExhausted && 'hover:bg-purple-50 hover:shadow-md hover:scale-105 cursor-pointer',
+                isLeaveExhausted && 'cursor-not-allowed opacity-60',
                 isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
                 isCurrentDay && 'ring-2 ring-purple-500 bg-gradient-to-br from-purple-100 to-pink-100 shadow-lg',
                 leaveCount > 0 && 'border-purple-300 bg-gradient-to-br from-purple-25 to-purple-50'
@@ -227,11 +235,13 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
                 </div>
                 
                 {/* Hover effect for adding leave */}
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center rounded-lg">
-                  <div className="bg-white/90 rounded-full p-2 shadow-lg">
-                    <Plus className="h-4 w-4 text-purple-600" />
+                {!isLeaveExhausted && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center rounded-lg">
+                    <div className="bg-white/90 rounded-full p-2 shadow-lg">
+                      <Plus className="h-4 w-4 text-purple-600" />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </button>
           </TooltipTrigger>

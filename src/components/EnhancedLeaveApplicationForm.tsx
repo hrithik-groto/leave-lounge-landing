@@ -85,6 +85,8 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
   useEffect(() => {
     if (selectedLeaveType && user) {
       fetchLeaveBalance();
+    } else if (!selectedLeaveType) {
+      setLeaveBalance(null);
     }
   }, [selectedLeaveType, user]);
 
@@ -193,7 +195,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
     if (leaveBalance && leaveBalance.remaining_this_month <= 0) {
       toast({
         title: "Insufficient Balance",
-        description: `You have exhausted your ${selectedLeaveTypeData?.label} balance. Please request additional leave from admin.`,
+        description: `You have exhausted your ${selectedLeaveTypeData?.label} balance. Please contact HR for additional leave.`,
         variant: "destructive"
       });
       return;

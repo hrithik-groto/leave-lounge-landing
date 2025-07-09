@@ -146,7 +146,11 @@ const Dashboard = () => {
   };
 
   const handleApplyLeaveClick = () => {
-    calendarRef.current?.openApplyDialog();
+    // Check if all leave types are exhausted
+    const allExhausted = leaveBalances.length > 0 && leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0);
+    if (!allExhausted) {
+      calendarRef.current?.openApplyDialog();
+    }
   };
 
 
@@ -510,7 +514,11 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}
-        <EnhancedCalendar ref={calendarRef} onRefresh={handleLeaveSuccess} />
+        <EnhancedCalendar 
+          ref={calendarRef} 
+          onRefresh={handleLeaveSuccess}
+          isLeaveExhausted={leaveBalances.length > 0 && leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0)}
+        />
 
         {/* Leave Applications Section with Pagination */}
         <LeaveApplicationsList

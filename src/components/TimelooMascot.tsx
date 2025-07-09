@@ -11,6 +11,7 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
   const [isWalking, setIsWalking] = useState(false);
   const [isWhistling, setIsWhistling] = useState(false);
   const [showMusicNotes, setShowMusicNotes] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     if (shouldWave) {
@@ -58,6 +59,25 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
     }
   }, [isWaving]);
 
+  // Update time every second (IST timezone)
+  useEffect(() => {
+    const timeInterval = setInterval(() => {
+      const now = new Date();
+      setCurrentTime(now);
+    }, 1000);
+    return () => clearInterval(timeInterval);
+  }, []);
+
+  const formatTimeIST = (date: Date) => {
+    return date.toLocaleTimeString('en-IN', { 
+      timeZone: 'Asia/Kolkata',
+      hour12: true,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+
   return (
     <div className="fixed bottom-4 left-4 z-10 pointer-events-none">
       {/* Mascot Container */}
@@ -65,6 +85,14 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
         isWaving ? 'animate-bounce' : ''
       }`}>
         
+        {/* Digital Clock */}
+        <div className="absolute -top-16 left-0 bg-black/90 text-green-400 rounded-md px-2 py-1 shadow-lg border border-gray-600 font-mono text-xs">
+          <div className="text-center">
+            <div className="font-bold">{formatTimeIST(currentTime)}</div>
+            <div className="text-xs text-green-300">IST</div>
+          </div>
+        </div>
+
         {/* Speech bubble when waving */}
         {isWaving && (
           <div className="absolute -top-12 left-8 bg-white rounded-lg p-2 shadow-lg border border-gray-200 animate-fade-in">
