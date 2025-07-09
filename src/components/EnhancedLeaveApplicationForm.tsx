@@ -209,7 +209,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
         if (totalRemaining - requestedInDays <= 0) {
           toast({
             title: "⚠️ Last Leave Request",
-            description: "This will exhaust all your monthly leaves. You won't be able to apply for more leaves this month.",
+            description: "This will use all your remaining 7.5 days for this month. You won't be able to apply for more leaves this month.",
             className: "bg-gradient-to-r from-orange-50 to-red-50 border-orange-200"
           });
         }
@@ -362,7 +362,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
             <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">All Leaves Exhausted</h3>
             <p className="text-gray-600 mb-4">
-              You have used all your monthly leave allowance (7.5 days). Contact HR for additional leave requests.
+              You have used all your monthly leave allowance of 7.5 days. Contact HR for additional leave requests.
             </p>
             <Button variant="outline" onClick={() => window.open('mailto:hr@company.com', '_blank')}>
               Contact HR
@@ -408,8 +408,10 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
             {leaveBalance && (
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  <strong>This Month:</strong> {leaveBalance.remaining_this_month} {leaveBalance.duration_type} remaining 
-                  (Used: {leaveBalance.used_this_month}/{leaveBalance.monthly_allowance})
+                  <strong>Monthly Balance:</strong> {leaveBalance.remaining_this_month} days remaining out of {leaveBalance.monthly_allowance} days total
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Total used this month: {(leaveBalance as any).total_used_all_types || 0} days (across all leave types)
                 </p>
               </div>
             )}

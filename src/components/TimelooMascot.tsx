@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
 
 interface TimelooMascotProps {
   shouldWave?: boolean;
@@ -10,8 +8,6 @@ interface TimelooMascotProps {
 const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWaveComplete }) => {
   const [isWaving, setIsWaving] = useState(false);
   const [eyesBlink, setEyesBlink] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
-
   useEffect(() => {
     if (shouldWave) {
       setIsWaving(true);
@@ -22,14 +18,6 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
       return () => clearTimeout(timer);
     }
   }, [shouldWave, onWaveComplete]);
-
-  // Time update effect
-  useEffect(() => {
-    const timeInterval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timeInterval);
-  }, []);
 
   // Blinking animation when not waving
   useEffect(() => {
@@ -42,10 +30,6 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
     }
   }, [isWaving]);
 
-  const getISTTime = () => {
-    const istTime = toZonedTime(currentTime, 'Asia/Kolkata');
-    return format(istTime, 'HH:mm');
-  };
 
   return (
     <div className="fixed bottom-6 left-6 z-50 pointer-events-none">
@@ -86,15 +70,6 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
             <div className={`absolute top-9 -left-2.5 w-5 h-2.5 bg-purple-500 rounded-full transform transition-all duration-300 shadow-md ${isWaving ? 'rotate-45 animate-pulse scale-110' : 'rotate-12'}`}></div>
             <div className={`absolute top-9 -right-2.5 w-5 h-2.5 bg-purple-500 rounded-full transform transition-all duration-300 shadow-md ${isWaving ? '-rotate-45 animate-pulse scale-110' : '-rotate-12'}`}></div>
 
-            {/* Digital Clock on chest */}
-            <div className="absolute top-14 left-1/2 transform -translate-x-1/2 bg-gray-900 rounded-md px-2 py-1 shadow-lg border border-gray-700">
-              <div className="text-green-400 font-mono text-xs font-bold tracking-wider">
-                {getISTTime()}
-              </div>
-              <div className="text-green-300 font-mono text-xs opacity-70 text-center">
-                IST
-              </div>
-            </div>
 
             {/* Legs */}
             <div className="absolute -bottom-2 left-4 w-3.5 h-5 bg-purple-600 rounded-full shadow-md"></div>

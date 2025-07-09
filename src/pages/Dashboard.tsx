@@ -146,41 +146,50 @@ const Dashboard = () => {
         return;
       }
 
+      // Use the new unified 7.5 days system
+      const { data: totalBalance, error: totalError } = await supabase.rpc('get_total_remaining_leaves', {
+        p_user_id: user.id
+      });
+
+      if (totalError) {
+        console.error('Error fetching total balance:', totalError);
+        return;
+      }
+
       const balances: any = {};
-      let totalRemainingDays = 0;
+      if (totalBalance && typeof totalBalance === 'object') {
+        const totalRemaining = (totalBalance as any).total_remaining_days || 0;
+        const totalUsed = (totalBalance as any).total_used_days || 0;
+        const totalAllowance = (totalBalance as any).total_allowance || 7.5;
+        
+        balances.total_remaining_days = totalRemaining;
+        balances.all_exhausted = totalRemaining <= 0;
+        
+        // For display purposes, we'll show individual type data but note they're part of the unified system
+        for (const leaveType of leaveTypes || []) {
+          const { data: balance, error: balanceError } = await supabase.rpc('get_monthly_leave_balance', {
+            p_user_id: user.id,
+            p_leave_type_id: leaveType.id
+          });
 
-      // Get balance for each leave type
-      for (const leaveType of leaveTypes || []) {
-        const { data: balance, error: balanceError } = await supabase.rpc('get_monthly_leave_balance', {
-          p_user_id: user.id,
-          p_leave_type_id: leaveType.id
-        });
+          if (balanceError) {
+            console.error('Error fetching balance for', leaveType.label, balanceError);
+            continue;
+          }
 
-        if (balanceError) {
-          console.error('Error fetching balance for', leaveType.label, balanceError);
-          continue;
-        }
+          if (balance && typeof balance === 'object') {
+            const used = (balance as any).used_this_month || 0;
 
-        if (balance && typeof balance === 'object') {
-          const remaining = (balance as any).remaining_this_month || 0;
-          const total = (balance as any).monthly_allowance || 0;
-          const used = (balance as any).used_this_month || 0;
-
-          if (leaveType.label === 'Paid Leave') {
-            balances.paid_leave = { remaining, total, used };
-            totalRemainingDays += remaining;
-          } else if (leaveType.label === 'Work From Home') {
-            balances.work_from_home = { remaining, total, used };
-            totalRemainingDays += remaining;
-          } else if (leaveType.label === 'Short Leave') {
-            balances.short_leave = { remaining, total, used };
-            totalRemainingDays += remaining / 8; // Convert hours to days
+            if (leaveType.label === 'Paid Leave') {
+              balances.paid_leave = { remaining: totalRemaining, total: totalAllowance, used: used };
+            } else if (leaveType.label === 'Work From Home') {
+              balances.work_from_home = { remaining: totalRemaining, total: totalAllowance, used: used };
+            } else if (leaveType.label === 'Short Leave') {
+              balances.short_leave = { remaining: totalRemaining * 8, total: totalAllowance * 8, used: used }; // Show in hours
+            }
           }
         }
       }
-
-      balances.total_remaining_days = totalRemainingDays;
-      balances.all_exhausted = totalRemainingDays <= 0;
 
       setLeaveBalance(balances);
     } catch (error) {
@@ -319,14 +328,6 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center space-x-4">
-          <Button 
-            onClick={forceRefreshData}
-            variant="outline"
-            size="sm"
-            className="text-xs"
-          >
-            🔄 Refresh
-          </Button>
           <SlackOAuthButton />
           <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
