@@ -194,29 +194,9 @@ serve(async (req) => {
       
       const leaveTypeId = values.leave_type.leave_type_select.selected_option?.value;
       
-      // Get date values from the actions section
-      const startDate = values.start_date?.start_date_picker?.selected_date || 
-                       (payload.view.state.values.start_date_actions?.start_date_picker?.selected_date);
-      const endDate = values.end_date?.end_date_picker?.selected_date || 
-                     (payload.view.state.values.end_date_actions?.end_date_picker?.selected_date);
-                     
-      // Try alternative paths for the date pickers
-      let actualStartDate = startDate;
-      let actualEndDate = endDate;
-      
-      // Check if dates are in actions elements
-      if (!actualStartDate || !actualEndDate) {
-        const stateValues = payload.view.state.values;
-        for (const blockKey in stateValues) {
-          const block = stateValues[blockKey];
-          if (block.start_date_picker) {
-            actualStartDate = block.start_date_picker.selected_date;
-          }
-          if (block.end_date_picker) {
-            actualEndDate = block.end_date_picker.selected_date;
-          }
-        }
-      }
+      // Get date values directly from the input blocks
+      const actualStartDate = values.start_date?.start_date_picker?.selected_date;
+      const actualEndDate = values.end_date?.end_date_picker?.selected_date;
       
       const reason = values.reason?.reason_input?.value || '';
 
@@ -362,11 +342,11 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
     callback_id: 'leave_application_modal',
     title: {
       type: 'plain_text',
-      text: '🏖️ Apply for Leave',
+      text: 'Apply for Leave',
     },
     submit: {
       type: 'plain_text',
-      text: 'Submit Application',
+      text: 'Apply',
     },
     close: {
       type: 'plain_text',
@@ -375,16 +355,6 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
     private_metadata: userId,
     blocks: [
       {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '✨ *Submit your leave request instantly!*\nFill out the details below and we\'ll notify your manager.',
-        },
-      },
-      {
-        type: 'divider'
-      },
-      {
         type: 'input',
         block_id: 'leave_type',
         element: {
@@ -392,52 +362,54 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           action_id: 'leave_type_select',
           placeholder: {
             type: 'plain_text',
-            text: 'Choose leave type...',
+            text: 'Select a leave type',
           },
           options: (leaveTypes || []).map((type: any) => ({
             text: {
               type: 'plain_text',
-              text: `${type.label}`,
-              emoji: true,
+              text: type.label,
             },
             value: type.id,
           })),
         },
         label: {
           type: 'plain_text',
-          text: '📋 Leave Type',
-          emoji: true,
+          text: 'Leave Type',
         },
       },
       {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*📅 Select your leave dates*'
-        }
+        type: 'input',
+        block_id: 'start_date',
+        element: {
+          type: 'datepicker',
+          action_id: 'start_date_picker',
+          placeholder: {
+            type: 'plain_text',
+            text: 'Select start date',
+          },
+          initial_date: new Date().toISOString().split('T')[0]
+        },
+        label: {
+          type: 'plain_text',
+          text: 'Start Date',
+        },
       },
       {
-        type: 'actions',
-        elements: [
-          {
-            type: 'datepicker',
-            action_id: 'start_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Start date',
-            },
-            initial_date: new Date().toISOString().split('T')[0]
+        type: 'input',
+        block_id: 'end_date',
+        element: {
+          type: 'datepicker',
+          action_id: 'end_date_picker',
+          placeholder: {
+            type: 'plain_text',
+            text: 'Select end date',
           },
-          {
-            type: 'datepicker', 
-            action_id: 'end_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'End date',
-            },
-            initial_date: new Date().toISOString().split('T')[0]
-          }
-        ]
+          initial_date: new Date().toISOString().split('T')[0]
+        },
+        label: {
+          type: 'plain_text',
+          text: 'End Date',
+        },
       },
       {
         type: 'input',
@@ -446,28 +418,17 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           type: 'plain_text_input',
           action_id: 'reason_input',
           multiline: true,
-          max_length: 500,
           placeholder: {
             type: 'plain_text',
-            text: 'e.g., Family vacation, medical appointment, personal matter...',
+            text: 'Add a reason (optional)',
           },
         },
         label: {
           type: 'plain_text',
-          text: '📝 Reason for Leave',
-          emoji: true,
+          text: 'Reason',
         },
         optional: true,
       },
-      {
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: '💡 *Tip:* Your manager will be notified immediately and you\'ll get updates right here in Slack!'
-          }
-        ]
-      }
     ],
   };
 
