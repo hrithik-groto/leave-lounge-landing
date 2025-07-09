@@ -30,13 +30,13 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
     }
   }, [shouldWave, onWaveComplete]);
 
-  // Blinking animation when not active
+  // Blinking animation when not active - more frequent and natural
   useEffect(() => {
     if (!isWaving) {
       const blinkInterval = setInterval(() => {
         setEyesBlink(true);
-        setTimeout(() => setEyesBlink(false), 150);
-      }, 3000);
+        setTimeout(() => setEyesBlink(false), 120);
+      }, 2000 + Math.random() * 2000); // Random interval between 2-4 seconds
       return () => clearInterval(blinkInterval);
     }
   }, [isWaving]);
@@ -76,28 +76,36 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
         )}
 
         <div className="relative">
-          {/* Main Body - Cat-like character */}
-          <div className="w-16 h-20 bg-gradient-to-b from-gray-300 to-gray-400 rounded-full relative shadow-lg">
+          {/* Main Body - Cute character */}
+          <div className="w-16 h-20 bg-gradient-to-b from-orange-200 to-orange-300 rounded-full relative shadow-lg">
             
-            {/* Cat ears */}
-            <div className="absolute -top-2 left-2 w-3 h-4 bg-gray-400 rounded-full transform rotate-12"></div>
-            <div className="absolute -top-2 right-2 w-3 h-4 bg-gray-400 rounded-full transform -rotate-12"></div>
-            <div className="absolute -top-1 left-2.5 w-2 h-3 bg-pink-300 rounded-full transform rotate-12"></div>
-            <div className="absolute -top-1 right-2.5 w-2 h-3 bg-pink-300 rounded-full transform -rotate-12"></div>
+            {/* Cute ears */}
+            <div className="absolute -top-2 left-2 w-3 h-4 bg-orange-300 rounded-full transform rotate-12"></div>
+            <div className="absolute -top-2 right-2 w-3 h-4 bg-orange-300 rounded-full transform -rotate-12"></div>
+            <div className="absolute -top-1 left-2.5 w-2 h-3 bg-pink-200 rounded-full transform rotate-12"></div>
+            <div className="absolute -top-1 right-2.5 w-2 h-3 bg-pink-200 rounded-full transform -rotate-12"></div>
             
-            {/* Face */}
+            {/* Adorable Face */}
             <div className="absolute top-3 left-1/2 transform -translate-x-1/2">
-              {/* Eyes */}
-              <div className="flex space-x-2 mb-1">
-                <div className={`w-2.5 h-2.5 bg-black rounded-full transition-all duration-150 ${eyesBlink ? 'h-0.5' : ''}`}></div>
-                <div className={`w-2.5 h-2.5 bg-black rounded-full transition-all duration-150 ${eyesBlink ? 'h-0.5' : ''}`}></div>
+              {/* Big cute eyes */}
+              <div className="flex space-x-1.5 mb-1">
+                <div className={`w-3 h-3 bg-white rounded-full transition-all duration-120 ${eyesBlink ? 'h-0.5' : ''} flex items-center justify-center`}>
+                  {!eyesBlink && <div className="w-2 h-2 bg-black rounded-full"></div>}
+                </div>
+                <div className={`w-3 h-3 bg-white rounded-full transition-all duration-120 ${eyesBlink ? 'h-0.5' : ''} flex items-center justify-center`}>
+                  {!eyesBlink && <div className="w-2 h-2 bg-black rounded-full"></div>}
+                </div>
               </div>
               
-              {/* Nose */}
-              <div className="w-1.5 h-1 bg-pink-400 rounded-full mx-auto mb-1"></div>
+              {/* Pink nose */}
+              <div className="w-1.5 h-1.5 bg-pink-400 rounded-full mx-auto mb-1"></div>
               
-              {/* Mouth */}
-              <div className="w-3 h-1.5 border-b-2 border-gray-600 rounded-full"></div>
+              {/* Cute smile */}
+              <div className="w-4 h-2 border-b-2 border-gray-600 rounded-full mx-auto"></div>
+              
+              {/* Cheek blush */}
+              <div className="absolute -left-1 top-2 w-2 h-1.5 bg-pink-200 rounded-full opacity-60"></div>
+              <div className="absolute -right-1 top-2 w-2 h-1.5 bg-pink-200 rounded-full opacity-60"></div>
             </div>
 
             {/* Arms with waving animation */}

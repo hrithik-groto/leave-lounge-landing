@@ -488,20 +488,12 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Leave Balance Alert */}
-      {leaveBalances.some((type: any) => type.balance.remaining_this_month <= 0) && (
-        <Alert className="border-red-200 bg-red-50 animate-pulse">
+      {/* Leave Balance Alert - Only show when ALL leave types are exhausted */}
+      {leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0) && leaveBalances.length > 0 && (
+        <Alert className="border-red-200 bg-red-50">
           <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800 flex items-center justify-between">
-            <span>Some of your leave types are exhausted.</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowLeaveRequestForm(true)}
-              className="ml-4 bg-white hover:bg-gray-50"
-            >
-              Request Additional Leave
-            </Button>
+          <AlertDescription className="text-red-800">
+            All leave types are exhausted. Please contact HR for additional leave requests.
           </AlertDescription>
         </Alert>
       )}
