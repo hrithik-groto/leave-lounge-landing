@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { CalendarDays, Plus, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
+import { CalendarDays, Plus, FileText, Clock, Shield, AlertCircle, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -18,10 +18,18 @@ import SlackOAuthButton from '@/components/SlackOAuthButton';
 import TimelooMascot from '@/components/TimelooMascot';
 import confetti from 'canvas-confetti';
 
+interface LeaveBalance {
+  paid_leave: { remaining: number; total: number; used: number };
+  work_from_home: { remaining: number; total: number; used: number };
+  short_leave: { remaining: number; total: number; used: number };
+  total_remaining_days: number;
+  all_exhausted: boolean;
+}
+
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
   const [leaveApplications, setLeaveApplications] = useState([]);
-  const [leaveBalance, setLeaveBalance] = useState(20);
+  const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [shouldMascotWave, setShouldMascotWave] = useState(false);
@@ -86,26 +94,56 @@ const Dashboard = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('leave_applied_users')
-        .select('start_date, end_date, status')
-        .eq('user_id', user.id)
-        .in('status', ['approved', 'pending']);
+      // Get all leave types
+      const { data: leaveTypes, error: typesError } = await supabase
+        .from('leave_types')
+        .select('id, label')
+        .eq('is_active', true);
 
-      if (error) {
-        console.error('Error calculating leave balance:', error);
+      if (typesError) {
+        console.error('Error fetching leave types:', typesError);
         return;
       }
 
-      let usedLeaves = 0;
-      data?.forEach((leave: any) => {
-        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
-        usedLeaves += days;
-      });
+      const balances: any = {};
+      let totalRemainingDays = 0;
 
-      setLeaveBalance(20 - usedLeaves);
+      // Get balance for each leave type
+      for (const leaveType of leaveTypes || []) {
+        const { data: balance, error: balanceError } = await supabase.rpc('get_monthly_leave_balance', {
+          p_user_id: user.id,
+          p_leave_type_id: leaveType.id
+        });
+
+        if (balanceError) {
+          console.error('Error fetching balance for', leaveType.label, balanceError);
+          continue;
+        }
+
+        if (balance && typeof balance === 'object') {
+          const remaining = (balance as any).remaining_this_month || 0;
+          const total = (balance as any).monthly_allowance || 0;
+          const used = (balance as any).used_this_month || 0;
+
+          if (leaveType.label === 'Paid Leave') {
+            balances.paid_leave = { remaining, total, used };
+            totalRemainingDays += remaining;
+          } else if (leaveType.label === 'Work From Home') {
+            balances.work_from_home = { remaining, total, used };
+            totalRemainingDays += remaining;
+          } else if (leaveType.label === 'Short Leave') {
+            balances.short_leave = { remaining, total, used };
+            totalRemainingDays += remaining / 8; // Convert hours to days
+          }
+        }
+      }
+
+      balances.total_remaining_days = totalRemainingDays;
+      balances.all_exhausted = totalRemainingDays <= 0;
+
+      setLeaveBalance(balances);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error calculating leave balance:', error);
     }
   };
 
@@ -135,6 +173,14 @@ const Dashboard = () => {
   };
 
   const handleApplyLeaveClick = () => {
+    if (leaveBalance?.all_exhausted) {
+      toast({
+        title: "No Leaves Available",
+        description: "You have exhausted all your monthly leaves. Contact HR for additional requests.",
+        variant: "destructive"
+      });
+      return;
+    }
     calendarRef.current?.openApplyDialog();
   };
 
@@ -283,27 +329,134 @@ const Dashboard = () => {
 
   const renderLeavesRemaining = () => (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
-      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
+      <h2 className="text-2xl font-bold text-gray-900">Monthly Leave Balance</h2>
+      
+      {/* Monthly Leave Balance Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between text-green-700">
+              <span className="flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                Paid Leave
+              </span>
+              <span className="text-2xl font-bold">
+                {leaveBalance?.paid_leave?.remaining || 0}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Used:</span>
+                <span>{leaveBalance?.paid_leave?.used || 0} days</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Total:</span>
+                <span>{leaveBalance?.paid_leave?.total || 1.5} days/month</span>
+              </div>
+              <div className="w-full bg-green-200 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full transition-all duration-300" 
+                  style={{ 
+                    width: `${((leaveBalance?.paid_leave?.used || 0) / (leaveBalance?.paid_leave?.total || 1.5)) * 100}%` 
+                  }}
+                ></div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between text-blue-700">
+              <span className="flex items-center">
+                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                Work From Home
+              </span>
+              <span className="text-2xl font-bold">
+                {leaveBalance?.work_from_home?.remaining || 0}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Used:</span>
+                <span>{leaveBalance?.work_from_home?.used || 0} days</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Total:</span>
+                <span>{leaveBalance?.work_from_home?.total || 2} days/month</span>
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                  style={{ 
+                    width: `${((leaveBalance?.work_from_home?.used || 0) / (leaveBalance?.work_from_home?.total || 2)) * 100}%` 
+                  }}
+                ></div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between text-yellow-700">
+              <span className="flex items-center">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                Short Leave
+              </span>
+              <span className="text-2xl font-bold">
+                {leaveBalance?.short_leave?.remaining || 0}h
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Used:</span>
+                <span>{leaveBalance?.short_leave?.used || 0} hours</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Total:</span>
+                <span>{leaveBalance?.short_leave?.total || 4} hours/month</span>
+              </div>
+              <div className="w-full bg-yellow-200 rounded-full h-2">
+                <div 
+                  className="bg-yellow-500 h-2 rounded-full transition-all duration-300" 
+                  style={{ 
+                    width: `${((leaveBalance?.short_leave?.used || 0) / (leaveBalance?.short_leave?.total || 4)) * 100}%` 
+                  }}
+                ></div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Overall Status */}
+      <Card className={`${!leaveBalance?.all_exhausted ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
         <CardContent className="p-6">
           <div className="text-center">
-            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
-            <div className="text-lg opacity-90">Days Remaining</div>
-            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
-            {leaveBalance <= 0 && (
+            <div className="text-4xl font-bold mb-2">{leaveBalance?.total_remaining_days?.toFixed(1) || 0}</div>
+            <div className="text-lg opacity-90">Total Days Remaining This Month</div>
+            <div className="text-sm opacity-75 mt-2">Out of 7.5 monthly days</div>
+            {leaveBalance?.all_exhausted && (
               <div className="mt-3 p-2 bg-white/20 rounded-lg">
-                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
+                <p className="text-sm">All monthly leaves exhausted! Contact HR for additional requests.</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
       
-      {leaveBalance <= 5 && leaveBalance > 0 && (
-        <Alert>
+      {leaveBalance && leaveBalance.total_remaining_days <= 2 && leaveBalance.total_remaining_days > 0 && (
+        <Alert className="animate-pulse">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You have {leaveBalance} leave days remaining. Plan your time off carefully!
+            You have only {leaveBalance.total_remaining_days.toFixed(1)} leave days remaining this month. Plan carefully!
           </AlertDescription>
         </Alert>
       )}
@@ -322,7 +475,8 @@ const Dashboard = () => {
                     <p className="text-sm text-gray-500">{app.status}</p>
                   </div>
                   <span className="text-sm font-medium">
-                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
+                    {app.leave_duration_type === 'hours' ? `${app.hours_requested}h` : 
+                     `${differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days`}
                   </span>
                 </div>
               ))}
@@ -337,8 +491,10 @@ const Dashboard = () => {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between">
-                <span>Used this year:</span>
-                <span className="font-medium">{20 - leaveBalance} days</span>
+                <span>Used this month:</span>
+                <span className="font-medium">
+                  {(7.5 - (leaveBalance?.total_remaining_days || 0)).toFixed(1)} days
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Pending approval:</span>
@@ -446,37 +602,61 @@ const Dashboard = () => {
       </div>
 
       {/* Apply Leave CTA */}
-      <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+      <Card className={`border-0 shadow-xl transition-all duration-300 ${
+        leaveBalance?.all_exhausted 
+          ? 'bg-gradient-to-r from-gray-400 to-gray-500' 
+          : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-2xl'
+      } text-white`}>
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
-              <p className="text-purple-100">Apply for leave with just a few clicks</p>
+              <h3 className="text-xl font-bold mb-2">
+                {leaveBalance?.all_exhausted ? 'All Leaves Exhausted' : 'Ready to Take Some Time Off?'}
+              </h3>
+              <p className={leaveBalance?.all_exhausted ? 'text-gray-100' : 'text-purple-100'}>
+                {leaveBalance?.all_exhausted 
+                  ? 'Contact HR for additional leave requests' 
+                  : 'Apply for leave with just a few clicks'}
+              </p>
             </div>
-            <Button 
-              onClick={handleApplyLeaveClick}
-              className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Apply Leave
-            </Button>
+            {leaveBalance?.all_exhausted ? (
+              <Button 
+                onClick={() => window.open('mailto:hr@company.com', '_blank')}
+                className="bg-white text-gray-600 hover:bg-gray-50 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Contact HR
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleApplyLeaveClick}
+                className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Apply Leave
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Leave Balance Alert */}
-      {leaveBalance <= 0 && (
+      {leaveBalance?.all_exhausted && (
         <Alert className="border-red-200 bg-red-50 animate-pulse">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
-            You have exhausted all your annual leave days. Please contact HR if you need additional leave.
+            You have exhausted all your monthly leave allowance. Please contact HR if you need additional leave.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}
-        <EnhancedCalendar ref={calendarRef} onRefresh={handleLeaveSuccess} />
+        <EnhancedCalendar 
+          ref={calendarRef} 
+          allLeavesExhausted={leaveBalance?.all_exhausted || false}
+          onRefresh={handleLeaveSuccess} 
+        />
 
         {/* Leave Applications Section with Pagination */}
         <LeaveApplicationsList

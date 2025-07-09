@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Clock } from "lucide-react";
+import { CalendarIcon, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
@@ -34,9 +34,10 @@ interface LeaveBalance {
 interface EnhancedLeaveApplicationFormProps {
   onSuccess?: () => void;
   preselectedDate?: Date | null;
+  allLeavesExhausted?: boolean;
 }
 
-const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLeaveApplicationFormProps) => {
+const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExhausted = false }: EnhancedLeaveApplicationFormProps) => {
   const { user } = useUser();
   const [startDate, setStartDate] = useState<Date | undefined>(preselectedDate || new Date());
   const [endDate, setEndDate] = useState<Date | undefined>(preselectedDate || new Date());
@@ -301,6 +302,28 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       setIsSubmitting(false);
     }
   };
+
+  if (allLeavesExhausted) {
+    return (
+      <Card className="w-full max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Apply for Leave</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">All Leaves Exhausted</h3>
+            <p className="text-gray-600 mb-4">
+              You have used all your monthly leave allowance (7.5 days). Contact HR for additional leave requests.
+            </p>
+            <Button variant="outline" onClick={() => window.open('mailto:hr@company.com', '_blank')}>
+              Contact HR
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
