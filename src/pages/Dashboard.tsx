@@ -476,11 +476,17 @@ const Dashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
-              <p className="text-purple-100">Apply for leave with just a few clicks</p>
+              <p className="text-purple-100">
+                {leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0) 
+                  ? "All leave types exhausted. Request additional leave below." 
+                  : "Apply for leave with just a few clicks"
+                }
+              </p>
             </div>
             <Button 
               onClick={handleApplyLeaveClick}
-              className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+              disabled={leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0)}
+              className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               <Plus className="w-4 h-4 mr-2" />
               Apply Leave

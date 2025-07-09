@@ -59,56 +59,27 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
   }, [isWaving]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] pointer-events-none overflow-hidden" style={{ zIndex: 9999 }}>
-      {/* Beautiful Park Background - Always visible */}
-      <div className={`absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-green-200 via-green-100 to-transparent transition-opacity duration-1000 ${isWaving ? 'opacity-70' : 'opacity-40'}`}>
-        {/* Rainbow */}
-        {isWaving && (
-          <div className="absolute top-2 right-10 w-16 h-8 opacity-70">
-            <div className="absolute inset-0 bg-gradient-to-r from-red-400 via-yellow-400 via-green-400 via-blue-400 to-purple-400 rounded-full"></div>
-          </div>
-        )}
-        
-        {/* Waterfall */}
-        <div className="absolute bottom-0 right-5 w-1 h-20 bg-gradient-to-b from-blue-300 to-blue-500 opacity-40 animate-pulse"></div>
-        
-        {/* Small birds */}
-        {isWaving && (
-          <>
-            <div className="absolute top-5 left-20 text-xs animate-bounce delay-100">🐦</div>
-            <div className="absolute top-8 right-32 text-xs animate-bounce delay-500">🐦</div>
-          </>
-        )}
-        {/* Trees - Always visible */}
-        <div className="absolute bottom-0 left-10 text-2xl opacity-50">🌳</div>
-        <div className="absolute bottom-0 right-20 text-xl opacity-50">🌲</div>
-        
-        {/* Subtle grass elements when not waving */}
-        {!isWaving && (
-          <>
-            <div className="absolute bottom-0 left-32 text-sm opacity-30">🌿</div>
-            <div className="absolute bottom-0 right-40 text-sm opacity-30">🌸</div>
-          </>
-        )}
+    <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none overflow-hidden">
+      {/* Simple Park Background */}
+      <div className={`absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-green-100 to-transparent transition-all duration-500 ${isWaving ? 'opacity-60' : 'opacity-30'}`}>
+        {/* Simple decorative elements */}
+        <div className="absolute bottom-0 left-10 text-lg opacity-40">🌳</div>
+        <div className="absolute bottom-0 right-20 text-sm opacity-40">🌲</div>
       </div>
 
       {/* Mascot */}
-      <div className={`absolute bottom-6 transition-all duration-2000 ${
-        isWalking ? 'right-6 animate-bounce' : 'right-6'
-      } ${isWaving ? 'animate-bounce' : ''}`}>
+      <div className={`absolute bottom-4 right-6 transition-all duration-1000 ${
+        isWaving ? 'animate-pulse' : ''
+      }`}>
         
-        {/* Music Notes */}
+        {/* Simple music note */}
         {showMusicNotes && (
-          <>
-            <div className="absolute -top-8 -left-4 text-purple-500 animate-ping text-lg">🎵</div>
-            <div className="absolute -top-12 left-2 text-blue-500 animate-pulse delay-300 text-sm">🎶</div>
-            <div className="absolute -top-6 left-8 text-pink-500 animate-bounce delay-500 text-xs">♪</div>
-          </>
+          <div className="absolute -top-6 -left-2 text-purple-500 animate-pulse text-sm">🎵</div>
         )}
 
         <div className="relative">
-          {/* Main Body - Enhanced */}
-          <div className="w-24 h-28 bg-gradient-to-b from-purple-400 via-purple-500 to-purple-600 rounded-full relative shadow-xl border-2 border-purple-300">
+          {/* Main Body - Simple */}
+          <div className="w-20 h-24 bg-gradient-to-b from-purple-400 to-purple-500 rounded-full relative shadow-lg border border-purple-300">
             {/* Cute cheeks */}
             <div className="absolute top-6 left-1 w-2 h-2 bg-pink-300 rounded-full opacity-60"></div>
             <div className="absolute top-6 right-1 w-2 h-2 bg-pink-300 rounded-full opacity-60"></div>
@@ -135,46 +106,31 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
             </div>
 
             {/* Arms */}
-            <div className={`absolute top-10 -left-3 w-5 h-3 bg-purple-500 rounded-full transform transition-all duration-300 shadow-md ${
-              isWaving ? 'rotate-45 animate-pulse' : isWalking ? 'animate-bounce' : 'rotate-12'
+            <div className={`absolute top-8 -left-2 w-4 h-2 bg-purple-500 rounded-full transform transition-all duration-500 ${
+              isWaving ? 'rotate-12' : 'rotate-6'
             }`}></div>
-            <div className={`absolute top-10 -right-3 w-5 h-3 bg-purple-500 rounded-full transform transition-all duration-300 shadow-md ${
-              isWaving ? '-rotate-45 animate-pulse' : isWalking ? 'animate-bounce delay-100' : '-rotate-12'
+            <div className={`absolute top-8 -right-2 w-4 h-2 bg-purple-500 rounded-full transform transition-all duration-500 ${
+              isWaving ? '-rotate-12' : '-rotate-6'
             }`}></div>
 
-            {/* Enhanced Clock on chest */}
-            <div className="absolute top-16 left-1/2 transform -translate-x-1/2 w-8 h-8 bg-white rounded-full border-3 border-gray-300 shadow-md">
-              <div className="absolute top-1/2 left-1/2 w-0.5 h-2.5 bg-gray-600 transform -translate-x-1/2 -translate-y-full origin-bottom rotate-90"></div>
-              <div className="absolute top-1/2 left-1/2 w-0.5 h-2 bg-gray-800 transform -translate-x-1/2 -translate-y-full origin-bottom"></div>
-              <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
+            {/* Simple Clock on chest */}
+            <div className="absolute top-12 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300">
+              <div className="absolute top-1/2 left-1/2 w-0.5 h-2 bg-gray-600 transform -translate-x-1/2 -translate-y-full origin-bottom"></div>
+              <div className="absolute top-1/2 left-1/2 w-1 h-1 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
             </div>
 
-            {/* Legs with walking animation */}
-            <div className={`absolute -bottom-3 left-4 w-4 h-5 bg-purple-600 rounded-full shadow-md ${
-              isWalking ? 'animate-bounce' : ''
-            }`}></div>
-            <div className={`absolute -bottom-3 right-4 w-4 h-5 bg-purple-600 rounded-full shadow-md ${
-              isWalking ? 'animate-bounce delay-100' : ''
-            }`}></div>
+            {/* Simple legs */}
+            <div className="absolute -bottom-2 left-3 w-3 h-4 bg-purple-600 rounded-full"></div>
+            <div className="absolute -bottom-2 right-3 w-3 h-4 bg-purple-600 rounded-full"></div>
           </div>
 
-          {/* Speech bubble when waving */}
+          {/* Simple speech bubble when waving */}
           {isWaving && (
-            <div className="absolute -top-12 -left-20 bg-white rounded-lg p-3 shadow-xl animate-fade-in border border-purple-200">
-              <div className="text-sm font-medium text-purple-700 whitespace-nowrap">
+            <div className="absolute -top-8 -left-16 bg-white rounded-lg p-2 shadow-lg border border-purple-200">
+              <div className="text-xs font-medium text-purple-700 whitespace-nowrap">
                 Leave applied! 🎉
               </div>
-              <div className="absolute bottom-0 left-10 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white transform translate-y-full"></div>
             </div>
-          )}
-
-          {/* Floating hearts when waving */}
-          {isWaving && (
-            <>
-              <div className="absolute -top-6 left-2 text-red-400 animate-ping text-lg">💜</div>
-              <div className="absolute -top-8 right-2 text-pink-400 animate-pulse delay-300 text-lg">💙</div>
-              <div className="absolute -top-4 right-8 text-purple-400 animate-bounce delay-500 text-lg">💚</div>
-            </>
           )}
         </div>
       </div>
