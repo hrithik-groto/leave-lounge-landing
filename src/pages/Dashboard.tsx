@@ -1,35 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle, Zap } from 'lucide-react';
+import { CalendarDays, Plus, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
 import { UserButton } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import NotificationBell from '@/components/NotificationBell';
-import SlackOAuthButton from '@/components/SlackOAuthButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import LeaveApplicationsList from '@/components/LeaveApplicationsList';
+import confetti from 'canvas-confetti';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-  const [reason, setReason] = useState('');
-  const [isApplyingLeave, setIsApplyingLeave] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [leaveApplications, setLeaveApplications] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState(20);
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -113,116 +105,30 @@ const Dashboard = () => {
     }
   };
 
-  const handleApplyLeave = async () => {
-    if (!user || !selectedDate || !endDate) {
-      toast({
-        title: "Error",
-        description: "Please select both start and end dates",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const leaveDays = differenceInDays(endDate, selectedDate) + 1;
+  const triggerConfetti = () => {
+    // Left side confetti
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { x: 0, y: 0.6 },
+      colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
+    });
     
-    // Check if requested days exceed 20
-    if (leaveDays > 20) {
-      toast({
-        title: "Error",
-        description: "You cannot apply for more than 20 days of leave at once",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (leaveDays > leaveBalance) {
-      toast({
-        title: "Insufficient Leave Balance",
-        description: `You don't have enough leave balance. Available: ${leaveBalance} days, Requested: ${leaveDays} days`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (leaveBalance <= 0) {
-      toast({
-        title: "No Leave Balance",
-        description: "You have used all your annual leave. Please contact HR for additional leave requests.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsApplyingLeave(true);
-
-    try {
-      const { error } = await supabase
-        .from('leave_applied_users')
-        .insert({
-          user_id: user.id,
-          start_date: format(selectedDate, 'yyyy-MM-dd'),
-          end_date: format(endDate, 'yyyy-MM-dd'),
-          reason: reason || 'No reason provided',
-          status: 'pending'
-        });
-
-      if (error) {
-        throw error;
-      }
-
-      // Notify admin about new leave application
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: '23510de5-ed66-402d-9511-0c8de9f59ad7', // Admin ID
-          message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')} (${leaveDays} days)`,
-          type: 'info'
-        });
-
-      // Send Slack notification to channel and individual user
-      try {
-        await supabase.functions.invoke('slack-notify', {
-          body: {
-            leaveApplication: {
-              user_id: user.id,
-              start_date: format(selectedDate, 'yyyy-MM-dd'),
-              end_date: format(endDate, 'yyyy-MM-dd'),
-              reason: reason || 'No reason provided',
-              status: 'pending',
-              applied_at: new Date().toISOString()
-            },
-            isTest: false,
-            sendToUser: true
-          }
-        });
-      } catch (slackError) {
-        console.error('Error sending Slack notification:', slackError);
-        // Don't fail the leave application if Slack fails
-      }
-
-      toast({
-        title: "Success",
-        description: "Leave application submitted successfully!"
-      });
-
-      setSelectedDate(undefined);
-      setEndDate(undefined);
-      setReason('');
-      setIsDialogOpen(false);
-      fetchLeaveApplications();
-      calculateLeaveBalance();
-
-    } catch (error) {
-      console.error('Error applying for leave:', error);
-      toast({
-        title: "Error",
-        description: "Failed to submit leave application",
-        variant: "destructive"
-      });
-    } finally {
-      setIsApplyingLeave(false);
-    }
+    // Right side confetti
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { x: 1, y: 0.6 },
+      colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
+    });
   };
+
+  const handleLeaveSuccess = () => {
+    triggerConfetti();
+    fetchLeaveApplications();
+    calculateLeaveBalance();
+  };
+
 
   const handleRevertLeave = async (applicationId: string) => {
     try {
@@ -255,13 +161,13 @@ const Dashboard = () => {
   };
 
   const renderNavbar = () => (
-    <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
+    <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         <div className="flex space-x-6">
           <button
             onClick={() => setCurrentPage('dashboard')}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentPage === 'dashboard' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
+              currentPage === 'dashboard' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
             }`}
           >
             <CalendarDays className="w-4 h-4" />
@@ -269,8 +175,8 @@ const Dashboard = () => {
           </button>
           <button
             onClick={() => setCurrentPage('leave-types')}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentPage === 'leave-types' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
+              currentPage === 'leave-types' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -278,8 +184,8 @@ const Dashboard = () => {
           </button>
           <button
             onClick={() => setCurrentPage('leaves-remaining')}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentPage === 'leaves-remaining' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
+              currentPage === 'leaves-remaining' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
             }`}
           >
             <Clock className="w-4 h-4" />
@@ -287,8 +193,8 @@ const Dashboard = () => {
           </button>
           <button
             onClick={() => setCurrentPage('policies')}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentPage === 'policies' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:text-purple-600'
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
+              currentPage === 'policies' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
             }`}
           >
             <Shield className="w-4 h-4" />
@@ -297,7 +203,7 @@ const Dashboard = () => {
           {isAdmin && (
             <button
               onClick={() => navigate('/admin')}
-              className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-300 hover:scale-105"
             >
               <Shield className="w-4 h-4" />
               <span>Admin Panel</span>
@@ -520,31 +426,63 @@ const Dashboard = () => {
   );
 
   const renderDashboard = () => (
-    <div className="space-y-8">
-      {/* Enhanced Leave Application Form */}
-      <EnhancedLeaveApplicationForm onSuccess={() => {
-        fetchLeaveApplications();
-        calculateLeaveBalance();
-      }} />
+    <div className="space-y-8 relative">
+      {/* Floating particles background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-purple-300 rounded-full animate-pulse opacity-30"></div>
+        <div className="absolute top-3/4 right-1/4 w-1 h-1 bg-pink-300 rounded-full animate-bounce opacity-40"></div>
+        <div className="absolute top-1/2 left-3/4 w-1.5 h-1.5 bg-blue-300 rounded-full animate-ping opacity-25"></div>
+        <div className="absolute top-1/6 right-1/3 w-1 h-1 bg-green-300 rounded-full animate-pulse opacity-30"></div>
+      </div>
+
+      {/* Apply Leave CTA */}
+      <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
+              <p className="text-purple-100">Apply for leave with just a few clicks</p>
+            </div>
+            <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Apply Leave
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold text-purple-700">
+                    Apply for Leave
+                  </DialogTitle>
+                </DialogHeader>
+                <EnhancedLeaveApplicationForm 
+                  onSuccess={() => {
+                    setIsApplyDialogOpen(false);
+                    handleLeaveSuccess();
+                  }} 
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Leave Balance Alert */}
       {leaveBalance <= 0 && (
-        <div className="lg:col-span-3 mb-6">
-          <Alert className="border-red-200 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              You have exhausted all your annual leave days. Please contact HR if you need additional leave.
-            </AlertDescription>
-          </Alert>
-        </div>
+        <Alert className="border-red-200 bg-red-50 animate-pulse">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            You have exhausted all your annual leave days. Please contact HR if you need additional leave.
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}
-        <EnhancedCalendar onRefresh={() => {
-          fetchLeaveApplications();
-          calculateLeaveBalance();
-        }} />
+        <EnhancedCalendar onRefresh={handleLeaveSuccess} />
 
         {/* Leave Applications Section with Pagination */}
         <LeaveApplicationsList
@@ -565,7 +503,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
       {renderNavbar()}
       <div className="pt-6 px-4">
         <div className="max-w-7xl mx-auto">

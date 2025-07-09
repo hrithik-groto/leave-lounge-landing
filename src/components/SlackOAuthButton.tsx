@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useUser } from '@clerk/clerk-react';
-import { Slack, CheckCircle } from 'lucide-react';
+import { Slack, CheckCircle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -78,6 +78,34 @@ const SlackOAuthButton = () => {
     }
   };
 
+  const handleDisconnect = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_slack_integrations')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setIsConnected(false);
+      toast({
+        title: "Disconnected",
+        description: "Your Slack account has been disconnected.",
+      });
+    } catch (error) {
+      console.error('Error disconnecting Slack:', error);
+      toast({
+        title: "Error",
+        description: "Failed to disconnect Slack account.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <Button disabled className="bg-gray-200">
@@ -89,18 +117,19 @@ const SlackOAuthButton = () => {
 
   if (isConnected) {
     return (
-      <div className="flex items-center space-x-2">
-        <Badge className="bg-green-100 text-green-800 border-green-200 flex items-center space-x-1">
-          <CheckCircle className="w-3 h-3" />
-          <span>Slack Connected</span>
+      <div className="flex items-center space-x-3">
+        <Badge className="bg-green-100 text-green-800 border-green-200 flex items-center space-x-1 animate-pulse px-3 py-1.5">
+          <CheckCircle className="w-4 h-4" />
+          <span className="font-medium">Connected</span>
         </Badge>
         <Button 
-          onClick={handleSlackOAuth}
+          onClick={handleDisconnect}
           variant="outline"
           size="sm"
+          className="border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 transition-all duration-300"
         >
-          <Slack className="w-4 h-4 mr-2" />
-          Reconnect
+          <X className="w-4 h-4 mr-2" />
+          Disconnect
         </Button>
       </div>
     );
@@ -109,7 +138,7 @@ const SlackOAuthButton = () => {
   return (
     <Button 
       onClick={handleSlackOAuth}
-      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 hover:scale-105 transition-all duration-300 shadow-lg"
     >
       <Slack className="w-4 h-4 mr-2" />
       Connect Your Slack Account

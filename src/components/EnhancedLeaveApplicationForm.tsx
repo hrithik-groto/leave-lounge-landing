@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import confetti from 'canvas-confetti';
 
 interface LeaveType {
   id: string;
@@ -254,6 +255,21 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       } catch (notificationError) {
         console.error('Failed to create in-app notification:', notificationError);
       }
+
+      // Trigger confetti
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { x: 0, y: 0.6 },
+        colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
+      });
+      
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { x: 1, y: 0.6 },
+        colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
+      });
 
       toast({
         title: "🎉 Leave Application Submitted!",
