@@ -473,7 +473,24 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
 
   // Open modal using Slack API
   const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+  console.log('Bot token available:', botToken ? 'Yes' : 'No');
+  
+  if (!botToken) {
+    console.error('SLACK_BOT_TOKEN not found in environment variables');
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Configuration error: Bot token not available. Please contact your administrator.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
+  }
+  
   try {
+    console.log('Opening modal with trigger_id:', payload.trigger_id);
     const modalResponse = await fetch('https://slack.com/api/views.open', {
       method: 'POST',
       headers: {
@@ -487,13 +504,35 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
     });
 
     const responseData = await modalResponse.json();
-    console.log('Modal response:', responseData);
+    console.log('Modal API response:', JSON.stringify(responseData, null, 2));
     
     if (!responseData.ok) {
-      console.error('Error opening modal:', responseData.error);
+      console.error('Slack API error:', responseData.error);
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: `❌ Failed to open leave application form: ${responseData.error}. Please try again or contact support.`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
     }
+    
+    console.log('Modal opened successfully');
   } catch (error) {
     console.error('Error opening modal:', error);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to open leave application form. Please try again or contact support.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
   }
 
   return new Response('', { status: 200 });
