@@ -19,11 +19,13 @@ import TimelooMascot from '@/components/TimelooMascot';
 import confetti from 'canvas-confetti';
 
 interface LeaveBalance {
-  paid_leave: { remaining: number; total: number; used: number };
-  work_from_home: { remaining: number; total: number; used: number };
-  short_leave: { remaining: number; total: number; used: number };
   total_remaining_days: number;
+  total_used_days: number;
+  total_allowance: number;
   all_exhausted: boolean;
+  paid_leave?: { remaining: number; total: number; used: number };
+  work_from_home?: { remaining: number; total: number; used: number };
+  short_leave?: { remaining: number; total: number; used: number };
 }
 
 const Dashboard = () => {
@@ -156,42 +158,18 @@ const Dashboard = () => {
         return;
       }
 
-      const balances: any = {};
       if (totalBalance && typeof totalBalance === 'object') {
         const totalRemaining = (totalBalance as any).total_remaining_days || 0;
         const totalUsed = (totalBalance as any).total_used_days || 0;
         const totalAllowance = (totalBalance as any).total_allowance || 7.5;
         
-        balances.total_remaining_days = totalRemaining;
-        balances.all_exhausted = totalRemaining <= 0;
-        
-        // For display purposes, we'll show individual type data but note they're part of the unified system
-        for (const leaveType of leaveTypes || []) {
-          const { data: balance, error: balanceError } = await supabase.rpc('get_monthly_leave_balance', {
-            p_user_id: user.id,
-            p_leave_type_id: leaveType.id
-          });
-
-          if (balanceError) {
-            console.error('Error fetching balance for', leaveType.label, balanceError);
-            continue;
-          }
-
-          if (balance && typeof balance === 'object') {
-            const used = (balance as any).used_this_month || 0;
-
-            if (leaveType.label === 'Paid Leave') {
-              balances.paid_leave = { remaining: totalRemaining, total: totalAllowance, used: used };
-            } else if (leaveType.label === 'Work From Home') {
-              balances.work_from_home = { remaining: totalRemaining, total: totalAllowance, used: used };
-            } else if (leaveType.label === 'Short Leave') {
-              balances.short_leave = { remaining: totalRemaining * 8, total: totalAllowance * 8, used: used }; // Show in hours
-            }
-          }
-        }
+        setLeaveBalance({
+          total_remaining_days: totalRemaining,
+          total_used_days: totalUsed,
+          total_allowance: totalAllowance,
+          all_exhausted: totalRemaining <= 0
+        });
       }
-
-      setLeaveBalance(balances);
     } catch (error) {
       console.error('Error calculating leave balance:', error);
     }
@@ -340,6 +318,14 @@ const Dashboard = () => {
   const renderLeaveTypes = () => (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Leave Types</h2>
+      
+      <Alert className="mb-6">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          <strong>New Unified System:</strong> All leave types now count towards a total monthly allowance of 7.5 days. You can mix and match any leave types as long as you don't exceed 7.5 days total per month.
+        </AlertDescription>
+      </Alert>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
           <CardHeader className="pb-3">
@@ -350,7 +336,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Regular vacation time for rest and relaxation.</p>
-            <p className="text-xs text-gray-500">• 1.5 days per month</p>
+            <p className="text-xs text-gray-500">• Counts towards 7.5 days/month total</p>
             <p className="text-xs text-gray-500">• Requires approval</p>
             <p className="text-xs text-gray-500">• Full day only</p>
           </CardContent>
@@ -365,7 +351,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Remote work days for better work-life balance.</p>
-            <p className="text-xs text-gray-500">• 2 days per month</p>
+            <p className="text-xs text-gray-500">• Counts towards 7.5 days/month total</p>
             <p className="text-xs text-gray-500">• No approval required</p>
             <p className="text-xs text-gray-500">• Full day only</p>
           </CardContent>
@@ -380,9 +366,9 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Hourly leave for appointments and personal matters.</p>
-            <p className="text-xs text-gray-500">• 4 hours per month</p>
+            <p className="text-xs text-gray-500">• Counts towards 7.5 days/month total</p>
             <p className="text-xs text-gray-500">• No approval required</p>
-            <p className="text-xs text-gray-500">• Min 1 hour, max 4 hours per request</p>
+            <p className="text-xs text-gray-500">• 8 hours = 1 day</p>
           </CardContent>
         </Card>
       </div>
@@ -393,120 +379,37 @@ const Dashboard = () => {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Monthly Leave Balance</h2>
       
-      {/* Monthly Leave Balance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-green-700">
-              <span className="flex items-center">
-                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                Paid Leave
-              </span>
-              <span className="text-2xl font-bold">
-                {leaveBalance?.paid_leave?.remaining || 0}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Used:</span>
-                <span>{leaveBalance?.paid_leave?.used || 0} days</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Total:</span>
-                <span>{leaveBalance?.paid_leave?.total || 1.5} days/month</span>
-              </div>
-              <div className="w-full bg-green-200 rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full transition-all duration-300" 
-                  style={{ 
-                    width: `${((leaveBalance?.paid_leave?.used || 0) / (leaveBalance?.paid_leave?.total || 1.5)) * 100}%` 
-                  }}
-                ></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-blue-700">
-              <span className="flex items-center">
-                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                Work From Home
-              </span>
-              <span className="text-2xl font-bold">
-                {leaveBalance?.work_from_home?.remaining || 0}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Used:</span>
-                <span>{leaveBalance?.work_from_home?.used || 0} days</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Total:</span>
-                <span>{leaveBalance?.work_from_home?.total || 2} days/month</span>
-              </div>
-              <div className="w-full bg-blue-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
-                  style={{ 
-                    width: `${((leaveBalance?.work_from_home?.used || 0) / (leaveBalance?.work_from_home?.total || 2)) * 100}%` 
-                  }}
-                ></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-yellow-700">
-              <span className="flex items-center">
-                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
-                Short Leave
-              </span>
-              <span className="text-2xl font-bold">
-                {leaveBalance?.short_leave?.remaining || 0}h
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Used:</span>
-                <span>{leaveBalance?.short_leave?.used || 0} hours</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Total:</span>
-                <span>{leaveBalance?.short_leave?.total || 4} hours/month</span>
-              </div>
-              <div className="w-full bg-yellow-200 rounded-full h-2">
-                <div 
-                  className="bg-yellow-500 h-2 rounded-full transition-all duration-300" 
-                  style={{ 
-                    width: `${((leaveBalance?.short_leave?.used || 0) / (leaveBalance?.short_leave?.total || 4)) * 100}%` 
-                  }}
-                ></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Overall Status */}
+      <Alert className="mb-6">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          <strong>Unified System:</strong> You have a total monthly allowance of 7.5 days that can be used across all leave types. Mix and match as needed!
+        </AlertDescription>
+      </Alert>
+      
+      {/* Main Balance Display */}
       <Card className={`${!leaveBalance?.all_exhausted ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
-        <CardContent className="p-6">
+        <CardContent className="p-8">
           <div className="text-center">
-            <div className="text-4xl font-bold mb-2">{leaveBalance?.total_remaining_days?.toFixed(1) || 0}</div>
-            <div className="text-lg opacity-90">Total Days Remaining This Month</div>
-            <div className="text-sm opacity-75 mt-2">Out of 7.5 monthly days</div>
+            <div className="text-5xl font-bold mb-3">{leaveBalance?.total_remaining_days?.toFixed(1) || 0}</div>
+            <div className="text-xl opacity-90 mb-2">Days Remaining This Month</div>
+            <div className="text-sm opacity-75">Out of {leaveBalance?.total_allowance || 7.5} total monthly days</div>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-white/20 rounded-full h-3 mt-4 mb-4">
+              <div 
+                className="bg-white h-3 rounded-full transition-all duration-300" 
+                style={{ 
+                  width: `${((leaveBalance?.total_used_days || 0) / (leaveBalance?.total_allowance || 7.5)) * 100}%` 
+                }}
+              ></div>
+            </div>
+            
+            <div className="text-sm opacity-90">
+              Used: {leaveBalance?.total_used_days?.toFixed(1) || 0} days
+            </div>
+            
             {leaveBalance?.all_exhausted && (
-              <div className="mt-3 p-2 bg-white/20 rounded-lg">
+              <div className="mt-4 p-3 bg-white/20 rounded-lg">
                 <p className="text-sm">All monthly leaves exhausted! Contact HR for additional requests.</p>
               </div>
             )}

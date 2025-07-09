@@ -8,6 +8,8 @@ interface TimelooMascotProps {
 const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWaveComplete }) => {
   const [isWaving, setIsWaving] = useState(false);
   const [eyesBlink, setEyesBlink] = useState(false);
+  const [isSmiling, setIsSmiling] = useState(false);
+  const [isWinking, setIsWinking] = useState(false);
   useEffect(() => {
     if (shouldWave) {
       setIsWaving(true);
@@ -30,6 +32,28 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
     }
   }, [isWaving]);
 
+  // Random smile animation
+  useEffect(() => {
+    if (!isWaving) {
+      const smileInterval = setInterval(() => {
+        setIsSmiling(true);
+        setTimeout(() => setIsSmiling(false), 1000);
+      }, 8000 + Math.random() * 7000); // Random smiling between 8-15 seconds
+      return () => clearInterval(smileInterval);
+    }
+  }, [isWaving]);
+
+  // Random wink animation
+  useEffect(() => {
+    if (!isWaving && !eyesBlink) {
+      const winkInterval = setInterval(() => {
+        setIsWinking(true);
+        setTimeout(() => setIsWinking(false), 300);
+      }, 12000 + Math.random() * 8000); // Random winking between 12-20 seconds
+      return () => clearInterval(winkInterval);
+    }
+  }, [isWaving, eyesBlink]);
+
 
   return (
     <div className="fixed bottom-6 left-6 z-50 pointer-events-none">
@@ -42,14 +66,16 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
             <div className="absolute top-3 left-1/2 transform -translate-x-1/2">
               {/* Eyes */}
               <div className="flex space-x-2.5 mb-1.5">
-                <div className={`w-2.5 h-2.5 bg-white rounded-full relative transition-all duration-200 shadow-sm ${eyesBlink ? 'h-0.5 scale-y-10' : ''}`}>
-                  {!eyesBlink && (
+                {/* Left Eye */}
+                <div className={`w-2.5 h-2.5 bg-white rounded-full relative transition-all duration-200 shadow-sm ${eyesBlink || isWinking ? 'h-0.5 scale-y-10' : ''}`}>
+                  {!eyesBlink && !isWinking && (
                     <>
                       <div className="w-1.5 h-1.5 bg-black rounded-full absolute top-0.5 left-0.5"></div>
                       <div className="w-0.5 h-0.5 bg-white rounded-full absolute top-0.5 left-1"></div>
                     </>
                   )}
                 </div>
+                {/* Right Eye */}
                 <div className={`w-2.5 h-2.5 bg-white rounded-full relative transition-all duration-200 shadow-sm ${eyesBlink ? 'h-0.5 scale-y-10' : ''}`}>
                   {!eyesBlink && (
                     <>
@@ -59,8 +85,8 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
                   )}
                 </div>
               </div>
-              {/* Cute smile */}
-              <div className="w-4 h-2 border-b-3 border-white rounded-full opacity-90"></div>
+              {/* Smile - bigger when smiling */}
+              <div className={`${isSmiling ? 'w-5 h-3 border-b-4' : 'w-4 h-2 border-b-3'} border-white rounded-full opacity-90 transition-all duration-300`}></div>
               {/* Cute cheek blush */}
               <div className="absolute -left-1 top-2 w-1.5 h-1 bg-pink-300 rounded-full opacity-40"></div>
               <div className="absolute -right-1 top-2 w-1.5 h-1 bg-pink-300 rounded-full opacity-40"></div>
