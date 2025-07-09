@@ -520,9 +520,6 @@ const Dashboard = () => {
 
   const renderDashboard = () => (
     <div className="space-y-8">
-      {/* Slack Integration Section */}
-      <SlackIntegration />
-      
       {/* Enhanced Leave Application Form */}
       <EnhancedLeaveApplicationForm onSuccess={() => {
         fetchLeaveApplications();
@@ -545,126 +542,10 @@ const Dashboard = () => {
       <div className="lg:col-span-2">
         <Card className="hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle className="flex items-center">
-                <CalendarDays className="w-5 h-5 mr-2" />
-                Calendar View
-              </CardTitle>
-              
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button 
-                    className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white"
-                    disabled={leaveBalance <= 0}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Apply for Leave
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Apply for Leave</DialogTitle>
-                  </DialogHeader>
-                  
-                  {leaveBalance <= 0 ? (
-                    <Alert className="border-red-200 bg-red-50">
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                      <AlertDescription className="text-red-800">
-                        You have no remaining leave days. Please contact HR for additional leave requests.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <>
-                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-blue-800">
-                          Available leave balance: <strong>{leaveBalance} days</strong>
-                        </p>
-                        <p className="text-xs text-blue-600 mt-1">
-                          Maximum 20 days per request
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <Label htmlFor="start-date">Start Date</Label>
-                          <div className="mt-2 flex justify-center">
-                            <Calendar
-                              mode="single"
-                              selected={selectedDate}
-                              onSelect={(date) => {
-                                setSelectedDate(date);
-                                if (endDate && date && endDate < date) {
-                                  setEndDate(undefined);
-                                }
-                              }}
-                              className="rounded-md border"
-                              disabled={(date) => date < new Date()}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="end-date">End Date</Label>
-                          <div className="mt-2 flex justify-center">
-                            <Calendar
-                              mode="single"
-                              selected={endDate}
-                              onSelect={setEndDate}
-                              className="rounded-md border"
-                              disabled={(date) => date < (selectedDate || new Date())}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {selectedDate && endDate && (
-                        <div className="p-4 bg-blue-50 rounded-lg animate-fade-in">
-                          <p className="text-sm text-blue-800">
-                            Leave Duration: {differenceInDays(endDate, selectedDate) + 1} day(s)
-                          </p>
-                          <p className="text-sm text-blue-600">
-                            From {format(selectedDate, 'MMM dd, yyyy')} to {format(endDate, 'MMM dd, yyyy')}
-                          </p>
-                          {differenceInDays(endDate, selectedDate) + 1 > 20 && (
-                            <p className="text-sm text-red-600 mt-2">
-                              ⚠️ Cannot apply for more than 20 days at once
-                            </p>
-                          )}
-                          {differenceInDays(endDate, selectedDate) + 1 > leaveBalance && (
-                            <p className="text-sm text-red-600 mt-2">
-                              ⚠️ Insufficient leave balance
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      <div>
-                        <Label htmlFor="reason">Reason (Optional)</Label>
-                        <Textarea
-                          id="reason"
-                          placeholder="Enter reason for leave..."
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          className="mt-1"
-                        />
-                      </div>
-
-                      <Button 
-                        onClick={handleApplyLeave} 
-                        disabled={isApplyingLeave || !selectedDate || !endDate || 
-                          (selectedDate && endDate && 
-                            (differenceInDays(endDate, selectedDate) + 1 > 20 || 
-                             differenceInDays(endDate, selectedDate) + 1 > leaveBalance)
-                          )}
-                        className="w-full"
-                      >
-                        {isApplyingLeave ? 'Submitting...' : 'Submit Application'}
-                      </Button>
-                    </>
-                  )}
-                </DialogContent>
-              </Dialog>
-            </div>
+            <CardTitle className="flex items-center">
+              <CalendarDays className="w-5 h-5 mr-2" />
+              Calendar View
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Calendar
