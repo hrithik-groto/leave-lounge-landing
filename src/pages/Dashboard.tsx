@@ -14,22 +14,16 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import LeaveApplicationsList from '@/components/LeaveApplicationsList';
-import SlackOAuthButton from '@/components/SlackOAuthButton';
-import TimelooMascot from '@/components/TimelooMascot';
-import LeaveRequestForm from '@/components/LeaveRequestForm';
 import confetti from 'canvas-confetti';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
   const [leaveApplications, setLeaveApplications] = useState([]);
-  const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
+  const [leaveBalance, setLeaveBalance] = useState(20);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
-  const [shouldMascotWave, setShouldMascotWave] = useState(false);
-  const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
 
   // Check if current user is admin
   const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
@@ -38,7 +32,7 @@ const Dashboard = () => {
     if (user && isLoaded) {
       createOrUpdateProfile();
       fetchLeaveApplications();
-      fetchLeaveBalances();
+      calculateLeaveBalance();
     }
   }, [user, isLoaded]);
 
@@ -84,39 +78,30 @@ const Dashboard = () => {
     }
   };
 
-  const fetchLeaveBalances = async () => {
+  const calculateLeaveBalance = async () => {
     if (!user) return;
 
     try {
-      // Get all leave types
-      const { data: leaveTypes, error: leaveTypesError } = await supabase
-        .from('leave_types')
-        .select('*')
-        .eq('is_active', true);
+      const { data, error } = await supabase
+        .from('leave_applied_users')
+        .select('start_date, end_date, status')
+        .eq('user_id', user.id)
+        .in('status', ['approved', 'pending']);
 
-      if (leaveTypesError) {
-        console.error('Error fetching leave types:', leaveTypesError);
+      if (error) {
+        console.error('Error calculating leave balance:', error);
         return;
       }
 
-      // Calculate balances for each leave type
-      const balances = await Promise.all(
-        (leaveTypes || []).map(async (leaveType: any) => {
-          const { data: balanceData } = await supabase.rpc('get_monthly_leave_balance', {
-            p_user_id: user.id,
-            p_leave_type_id: leaveType.id
-          });
+      let usedLeaves = 0;
+      data?.forEach((leave: any) => {
+        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
+        usedLeaves += days;
+      });
 
-          return {
-            ...leaveType,
-            balance: balanceData || { monthly_allowance: 0, used_this_month: 0, remaining_this_month: 0 }
-          };
-        })
-      );
-
-      setLeaveBalances(balances);
+      setLeaveBalance(20 - usedLeaves);
     } catch (error) {
-      console.error('Error fetching leave balances:', error);
+      console.error('Error:', error);
     }
   };
 
@@ -140,17 +125,8 @@ const Dashboard = () => {
 
   const handleLeaveSuccess = () => {
     triggerConfetti();
-    setShouldMascotWave(true);
     fetchLeaveApplications();
-    fetchLeaveBalances();
-  };
-
-  const handleApplyLeaveClick = () => {
-    // Check if all leave types are exhausted
-    const allExhausted = leaveBalances.length > 0 && leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0);
-    if (!allExhausted) {
-      calendarRef.current?.openApplyDialog();
-    }
+    calculateLeaveBalance();
   };
 
 
@@ -173,7 +149,7 @@ const Dashboard = () => {
       });
 
       fetchLeaveApplications();
-      fetchLeaveBalances();
+      calculateLeaveBalance();
     } catch (error) {
       console.error('Error cancelling leave:', error);
       toast({
@@ -235,7 +211,6 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center space-x-4">
-          <SlackOAuthButton />
           <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
           <UserButton afterSignOutUrl="/" />
@@ -298,41 +273,27 @@ const Dashboard = () => {
 
   const renderLeavesRemaining = () => (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Leave Balances</h2>
-      
-      {/* Individual Leave Type Balances */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {leaveBalances.map((leaveType: any) => (
-          <Card key={leaveType.id} className="border-l-4" style={{ borderLeftColor: leaveType.color }}>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <h3 className="font-semibold text-gray-900 mb-2">{leaveType.label}</h3>
-                <div className="text-2xl font-bold mb-1" style={{ color: leaveType.color }}>
-                  {leaveType.balance.remaining_this_month || 0}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {leaveType.balance.duration_type === 'hours' ? 'Hours' : 'Days'} Remaining
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Used: {leaveType.balance.used_this_month || 0} / {leaveType.balance.monthly_allowance || 0}
-                </div>
-                {leaveType.balance.remaining_this_month <= 0 && (
-                  <div className="mt-2 p-2 bg-red-50 rounded-lg">
-                    <p className="text-xs text-red-700">All {leaveType.label.toLowerCase()} used!</p>
-                  </div>
-                )}
+      <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
+      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
+        <CardContent className="p-6">
+          <div className="text-center">
+            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
+            <div className="text-lg opacity-90">Days Remaining</div>
+            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
+            {leaveBalance <= 0 && (
+              <div className="mt-3 p-2 bg-white/20 rounded-lg">
+                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Warning for low balances */}
-      {leaveBalances.some((type: any) => type.balance.remaining_this_month <= 1) && (
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      
+      {leaveBalance <= 5 && leaveBalance > 0 && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You're running low on some leave types. Plan accordingly!
+            You have {leaveBalance} leave days remaining. Plan your time off carefully!
           </AlertDescription>
         </Alert>
       )}
@@ -340,7 +301,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Recent Leave History</CardTitle>
+            <CardTitle>Leave History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -351,7 +312,7 @@ const Dashboard = () => {
                     <p className="text-sm text-gray-500">{app.status}</p>
                   </div>
                   <span className="text-sm font-medium">
-                    {app.leave_duration_type === 'hours' ? `${app.hours_requested}h` : `${differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days`}
+                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
                   </span>
                 </div>
               ))}
@@ -361,10 +322,14 @@ const Dashboard = () => {
         
         <Card>
           <CardHeader>
-            <CardTitle>This Month's Summary</CardTitle>
+            <CardTitle>Quick Stats</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>Used this year:</span>
+                <span className="font-medium">{20 - leaveBalance} days</span>
+              </div>
               <div className="flex justify-between">
                 <span>Pending approval:</span>
                 <span className="font-medium">
@@ -376,10 +341,6 @@ const Dashboard = () => {
                 <span className="font-medium">
                   {leaveApplications.filter((app: any) => app.status === 'approved').length} applications
                 </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Total leave types:</span>
-                <span className="font-medium">{leaveBalances.length} types</span>
               </div>
             </div>
           </CardContent>
@@ -466,6 +427,13 @@ const Dashboard = () => {
 
   const renderDashboard = () => (
     <div className="space-y-8 relative">
+      {/* Floating particles background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-purple-300 rounded-full animate-pulse opacity-30"></div>
+        <div className="absolute top-3/4 right-1/4 w-1 h-1 bg-pink-300 rounded-full animate-bounce opacity-40"></div>
+        <div className="absolute top-1/2 left-3/4 w-1.5 h-1.5 bg-blue-300 rounded-full animate-ping opacity-25"></div>
+        <div className="absolute top-1/6 right-1/3 w-1 h-1 bg-green-300 rounded-full animate-pulse opacity-30"></div>
+      </div>
 
       {/* Apply Leave CTA */}
       <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
@@ -473,52 +441,48 @@ const Dashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
-              <p className="text-purple-100">
-                {leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0) 
-                  ? "All leave types exhausted. Request additional leave below." 
-                  : "Apply for leave with just a few clicks"
-                }
-              </p>
+              <p className="text-purple-100">Apply for leave with just a few clicks</p>
             </div>
-            <Button 
-              onClick={handleApplyLeaveClick}
-              disabled={leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0)}
-              className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Apply Leave
-            </Button>
+            <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Apply Leave
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold text-purple-700">
+                    Apply for Leave
+                  </DialogTitle>
+                </DialogHeader>
+                <EnhancedLeaveApplicationForm 
+                  onSuccess={() => {
+                    setIsApplyDialogOpen(false);
+                    handleLeaveSuccess();
+                  }} 
+                />
+              </DialogContent>
+            </Dialog>
           </div>
         </CardContent>
       </Card>
 
-      {/* Leave Balance Alert - Only show when ALL leave types are exhausted */}
-      {leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0) && leaveBalances.length > 0 && (
-        <Alert className="border-red-200 bg-red-50">
+      {/* Leave Balance Alert */}
+      {leaveBalance <= 0 && (
+        <Alert className="border-red-200 bg-red-50 animate-pulse">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
-            All leave types are exhausted. Please contact HR for additional leave requests.
+            You have exhausted all your annual leave days. Please contact HR if you need additional leave.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Leave Request Form Dialog */}
-      <Dialog open={showLeaveRequestForm} onOpenChange={setShowLeaveRequestForm}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Request Additional Leave</DialogTitle>
-          </DialogHeader>
-          <LeaveRequestForm onSuccess={() => setShowLeaveRequestForm(false)} />
-        </DialogContent>
-      </Dialog>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}
-        <EnhancedCalendar 
-          ref={calendarRef} 
-          onRefresh={handleLeaveSuccess}
-          isLeaveExhausted={leaveBalances.length > 0 && leaveBalances.every((type: any) => type.balance.remaining_this_month <= 0)}
-        />
+        <EnhancedCalendar onRefresh={handleLeaveSuccess} />
 
         {/* Leave Applications Section with Pagination */}
         <LeaveApplicationsList
@@ -527,12 +491,6 @@ const Dashboard = () => {
           title="Your Leave Applications"
         />
       </div>
-
-      {/* Timeloo Mascot */}
-      <TimelooMascot 
-        shouldWave={shouldMascotWave} 
-        onWaveComplete={() => setShouldMascotWave(false)}
-      />
     </div>
   );
 

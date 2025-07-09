@@ -117,14 +117,21 @@ const SlackOAuthButton = () => {
 
   if (isConnected) {
     return (
-      <Button 
-        onClick={handleDisconnect}
-        className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 hover:scale-105 transition-all duration-300 shadow-lg text-white"
-      >
-        <CheckCircle className="w-4 h-4 mr-2" />
-        Slack Connected
-        <X className="w-3 h-3 ml-2 opacity-70" />
-      </Button>
+      <div className="flex items-center space-x-3">
+        <Badge className="bg-green-100 text-green-800 border-green-200 flex items-center space-x-1 animate-pulse px-3 py-1.5">
+          <CheckCircle className="w-4 h-4" />
+          <span className="font-medium">Connected</span>
+        </Badge>
+        <Button 
+          onClick={handleDisconnect}
+          variant="outline"
+          size="sm"
+          className="border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 transition-all duration-300"
+        >
+          <X className="w-4 h-4 mr-2" />
+          Disconnect
+        </Button>
+      </div>
     );
   }
 

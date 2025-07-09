@@ -85,8 +85,6 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
   useEffect(() => {
     if (selectedLeaveType && user) {
       fetchLeaveBalance();
-    } else if (!selectedLeaveType) {
-      setLeaveBalance(null);
     }
   }, [selectedLeaveType, user]);
 
@@ -163,39 +161,6 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       toast({
         title: "Date Required",
         description: "Please select a start date",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Check if start date is in the past
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (startDate < today) {
-      toast({
-        title: "Invalid Date",
-        description: "Cannot apply for leave on past dates",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Check if end date is before start date for multi-day leaves
-    if (!isShortLeave && endDate && endDate < startDate) {
-      toast({
-        title: "Invalid Date Range",
-        description: "End date cannot be before start date",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Check leave balance before submission
-    const selectedLeaveTypeData = leaveTypes.find(lt => lt.id === selectedLeaveType);
-    if (leaveBalance && leaveBalance.remaining_this_month <= 0) {
-      toast({
-        title: "Insufficient Balance",
-        description: `You have exhausted your ${selectedLeaveTypeData?.label} balance. Please contact HR for additional leave.`,
         variant: "destructive"
       });
       return;
@@ -401,13 +366,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                     mode="single"
                     selected={startDate}
                     onSelect={setStartDate}
-                      disabled={(date) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-                        return date < today;
-                      }}
+                    disabled={(date) => date < new Date()}
                     initialFocus
                     className="pointer-events-auto"
                   />
@@ -436,11 +395,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                       mode="single"
                       selected={startDate}
                       onSelect={setStartDate}
-                      disabled={(date) => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        return date < today;
-                      }}
+                      disabled={(date) => date < new Date()}
                       initialFocus
                       className="pointer-events-auto"
                     />
@@ -468,11 +423,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                       mode="single"
                       selected={endDate}
                       onSelect={setEndDate}
-                      disabled={(date) => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        return date < today || (startDate && date < startDate);
-                      }}
+                      disabled={(date) => date < new Date() || (startDate && date < startDate)}
                       initialFocus
                       className="pointer-events-auto"
                     />
