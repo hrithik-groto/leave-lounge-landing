@@ -17,7 +17,8 @@ import NotificationBell from '@/components/NotificationBell';
 import SlackOAuthButton from '@/components/SlackOAuthButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
-import SlackIntegration from '@/components/SlackIntegration';
+import EnhancedCalendar from '@/components/EnhancedCalendar';
+import LeaveApplicationsList from '@/components/LeaveApplicationsList';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
@@ -538,88 +539,19 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Calendar Section */}
-      <div className="lg:col-span-2">
-        <Card className="hover:shadow-lg transition-shadow duration-300">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <CalendarDays className="w-5 h-5 mr-2" />
-              Calendar View
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              className="rounded-md border w-full"
-              classNames={{
-                months: "flex w-full flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 flex-1",
-                month: "space-y-4 w-full flex flex-col",
-                table: "w-full h-full border-collapse space-y-1",
-                head_row: "flex w-full",
-                head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1",
-                row: "flex w-full mt-2",
-                cell: "h-14 w-full text-center text-sm p-0 relative flex-1",
-                day: "h-14 w-full p-0 font-normal hover:bg-accent hover:text-accent-foreground flex items-center justify-center"
-              }}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Enhanced Calendar Section */}
+        <EnhancedCalendar onRefresh={() => {
+          fetchLeaveApplications();
+          calculateLeaveBalance();
+        }} />
 
-      {/* Leave Applications Section */}
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Leave Applications</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {leaveApplications.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No leave applications yet</p>
-              ) : (
-                leaveApplications.map((application: any) => (
-                  <div key={application.id} className="border rounded-lg p-4 space-y-2 hover:shadow-md transition-shadow duration-200">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">
-                          {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
-                        </p>
-                        <p className="text-sm text-gray-600">{application.reason}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          application.status === 'approved' ? 'bg-green-100 text-green-800' :
-                          application.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {application.status}
-                        </span>
-                        {application.status === 'pending' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRevertLeave(application.id)}
-                            className="p-1 h-6 w-6 hover:bg-red-50 hover:border-red-300"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Applied: {format(new Date(application.applied_at), 'MMM dd, yyyy')}
-                    </p>
-                    <p className="text-xs text-blue-600">
-                      Duration: {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Leave Applications Section with Pagination */}
+        <LeaveApplicationsList
+          applications={leaveApplications}
+          onRevert={handleRevertLeave}
+          title="Your Leave Applications"
+        />
       </div>
     </div>
   );

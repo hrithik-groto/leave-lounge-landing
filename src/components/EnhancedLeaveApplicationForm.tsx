@@ -32,12 +32,13 @@ interface LeaveBalance {
 
 interface EnhancedLeaveApplicationFormProps {
   onSuccess?: () => void;
+  preselectedDate?: Date | null;
 }
 
-const EnhancedLeaveApplicationForm = ({ onSuccess }: EnhancedLeaveApplicationFormProps) => {
+const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLeaveApplicationFormProps) => {
   const { user } = useUser();
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [startDate, setStartDate] = useState<Date | undefined>(preselectedDate || new Date());
+  const [endDate, setEndDate] = useState<Date | undefined>(preselectedDate || new Date());
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
   const [reason, setReason] = useState('');
