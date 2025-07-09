@@ -21,7 +21,7 @@ import confetti from 'canvas-confetti';
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
   const [leaveApplications, setLeaveApplications] = useState([]);
-  const [leaveBalance, setLeaveBalance] = useState(20);
+  const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [shouldMascotWave, setShouldMascotWave] = useState(false);
@@ -36,7 +36,7 @@ const Dashboard = () => {
     if (user && isLoaded) {
       createOrUpdateProfile();
       fetchLeaveApplications();
-      calculateLeaveBalance();
+      fetchLeaveBalances();
     }
   }, [user, isLoaded]);
 
@@ -82,30 +82,39 @@ const Dashboard = () => {
     }
   };
 
-  const calculateLeaveBalance = async () => {
+  const fetchLeaveBalances = async () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('leave_applied_users')
-        .select('start_date, end_date, status')
-        .eq('user_id', user.id)
-        .in('status', ['approved', 'pending']);
+      // Get all leave types
+      const { data: leaveTypes, error: leaveTypesError } = await supabase
+        .from('leave_types')
+        .select('*')
+        .eq('is_active', true);
 
-      if (error) {
-        console.error('Error calculating leave balance:', error);
+      if (leaveTypesError) {
+        console.error('Error fetching leave types:', leaveTypesError);
         return;
       }
 
-      let usedLeaves = 0;
-      data?.forEach((leave: any) => {
-        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
-        usedLeaves += days;
-      });
+      // Calculate balances for each leave type
+      const balances = await Promise.all(
+        (leaveTypes || []).map(async (leaveType: any) => {
+          const { data: balanceData } = await supabase.rpc('get_monthly_leave_balance', {
+            p_user_id: user.id,
+            p_leave_type_id: leaveType.id
+          });
 
-      setLeaveBalance(20 - usedLeaves);
+          return {
+            ...leaveType,
+            balance: balanceData || { monthly_allowance: 0, used_this_month: 0, remaining_this_month: 0 }
+          };
+        })
+      );
+
+      setLeaveBalances(balances);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching leave balances:', error);
     }
   };
 
@@ -131,7 +140,7 @@ const Dashboard = () => {
     triggerConfetti();
     setShouldMascotWave(true);
     fetchLeaveApplications();
-    calculateLeaveBalance();
+    fetchLeaveBalances();
   };
 
   const handleApplyLeaveClick = () => {
@@ -158,7 +167,7 @@ const Dashboard = () => {
       });
 
       fetchLeaveApplications();
-      calculateLeaveBalance();
+      fetchLeaveBalances();
     } catch (error) {
       console.error('Error cancelling leave:', error);
       toast({
@@ -283,27 +292,41 @@ const Dashboard = () => {
 
   const renderLeavesRemaining = () => (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
-      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
-        <CardContent className="p-6">
-          <div className="text-center">
-            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
-            <div className="text-lg opacity-90">Days Remaining</div>
-            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
-            {leaveBalance <= 0 && (
-              <div className="mt-3 p-2 bg-white/20 rounded-lg">
-                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <h2 className="text-2xl font-bold text-gray-900">Leave Balances</h2>
       
-      {leaveBalance <= 5 && leaveBalance > 0 && (
+      {/* Individual Leave Type Balances */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {leaveBalances.map((leaveType: any) => (
+          <Card key={leaveType.id} className="border-l-4" style={{ borderLeftColor: leaveType.color }}>
+            <CardContent className="p-4">
+              <div className="text-center">
+                <h3 className="font-semibold text-gray-900 mb-2">{leaveType.label}</h3>
+                <div className="text-2xl font-bold mb-1" style={{ color: leaveType.color }}>
+                  {leaveType.balance.remaining_this_month || 0}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {leaveType.balance.duration_type === 'hours' ? 'Hours' : 'Days'} Remaining
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Used: {leaveType.balance.used_this_month || 0} / {leaveType.balance.monthly_allowance || 0}
+                </div>
+                {leaveType.balance.remaining_this_month <= 0 && (
+                  <div className="mt-2 p-2 bg-red-50 rounded-lg">
+                    <p className="text-xs text-red-700">All {leaveType.label.toLowerCase()} used!</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Warning for low balances */}
+      {leaveBalances.some((type: any) => type.balance.remaining_this_month <= 1) && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You have {leaveBalance} leave days remaining. Plan your time off carefully!
+            You're running low on some leave types. Plan accordingly!
           </AlertDescription>
         </Alert>
       )}
@@ -311,7 +334,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Leave History</CardTitle>
+            <CardTitle>Recent Leave History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -322,7 +345,7 @@ const Dashboard = () => {
                     <p className="text-sm text-gray-500">{app.status}</p>
                   </div>
                   <span className="text-sm font-medium">
-                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
+                    {app.leave_duration_type === 'hours' ? `${app.hours_requested}h` : `${differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days`}
                   </span>
                 </div>
               ))}
@@ -332,14 +355,10 @@ const Dashboard = () => {
         
         <Card>
           <CardHeader>
-            <CardTitle>Quick Stats</CardTitle>
+            <CardTitle>This Month's Summary</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>Used this year:</span>
-                <span className="font-medium">{20 - leaveBalance} days</span>
-              </div>
               <div className="flex justify-between">
                 <span>Pending approval:</span>
                 <span className="font-medium">
@@ -351,6 +370,10 @@ const Dashboard = () => {
                 <span className="font-medium">
                   {leaveApplications.filter((app: any) => app.status === 'approved').length} applications
                 </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total leave types:</span>
+                <span className="font-medium">{leaveBalances.length} types</span>
               </div>
             </div>
           </CardContent>
@@ -465,11 +488,11 @@ const Dashboard = () => {
       </Card>
 
       {/* Leave Balance Alert */}
-      {leaveBalance <= 0 && (
+      {leaveBalances.some((type: any) => type.balance.remaining_this_month <= 0) && (
         <Alert className="border-red-200 bg-red-50 animate-pulse">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
-            You have exhausted all your annual leave days. Please contact HR if you need additional leave.
+            Some of your leave types are exhausted. Check your balance before applying for leave.
           </AlertDescription>
         </Alert>
       )}
