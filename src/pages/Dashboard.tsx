@@ -52,6 +52,8 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user) return;
 
+    console.log('Setting up realtime subscription for user:', user.id);
+
     const channel = supabase
       .channel('leave-balance-updates')
       .on(
@@ -63,14 +65,26 @@ const Dashboard = () => {
         },
         (payload) => {
           console.log('Leave application change detected:', payload);
-          // Refresh leave applications and balance when any change occurs
+          console.log('Event type:', payload.eventType);
+          console.log('Affected user:', (payload.new as any)?.user_id || (payload.old as any)?.user_id);
+          
+          // Refresh data regardless of which user's data changed
+          // This ensures the UI stays in sync with database state
           fetchLeaveApplications();
           calculateLeaveBalance();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to leave_applied_users changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Error subscribing to realtime channel');
+        }
+      });
 
     return () => {
+      console.log('Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [user]);
