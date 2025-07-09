@@ -151,7 +151,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
 
     if (!selectedLeaveType) {
       toast({
-        title: "Leave Type Required",
+        title: "Leave Type Required", 
         description: "Please select a leave type",
         variant: "destructive"
       });
@@ -167,11 +167,59 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
       return;
     }
 
+    // Calculate the duration for this specific request
     const duration = calculateLeaveDuration();
-    if (leaveBalance && duration > leaveBalance.remaining_this_month) {
+    
+    // Get current balance for the selected leave type to double-check
+    try {
+      const { data: currentBalance, error: balanceError } = await supabase.rpc('get_monthly_leave_balance', {
+        p_user_id: user.id,
+        p_leave_type_id: selectedLeaveType
+      });
+
+      if (balanceError) {
+        toast({
+          title: "Error checking balance",
+          description: "Unable to verify leave balance. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const remaining = (currentBalance as any)?.remaining_this_month || 0;
+      
+      if (duration > remaining) {
+        toast({
+          title: "Insufficient Leave Balance",
+          description: `You only have ${remaining} ${(currentBalance as any)?.duration_type || 'units'} remaining this month`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Check if all leaves would be exhausted after this application
+      const { data: totalBalance, error: totalError } = await supabase.rpc('get_total_remaining_leaves', {
+        p_user_id: user.id
+      });
+
+      if (!totalError && totalBalance) {
+        const totalRemaining = (totalBalance as any)?.total_remaining_days || 0;
+        const requestedInDays = (currentBalance as any)?.duration_type === 'hours' ? duration / 8 : duration;
+        
+        if (totalRemaining - requestedInDays <= 0) {
+          toast({
+            title: "⚠️ Last Leave Request",
+            description: "This will exhaust all your monthly leaves. You won't be able to apply for more leaves this month.",
+            className: "bg-gradient-to-r from-orange-50 to-red-50 border-orange-200"
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error('Error checking balance:', error);
       toast({
-        title: "Insufficient Leave Balance",
-        description: `You only have ${leaveBalance.remaining_this_month} ${leaveBalance.duration_type} remaining this month`,
+        title: "Error",
+        description: "Unable to verify leave balance. Please try again.",
         variant: "destructive"
       });
       return;
