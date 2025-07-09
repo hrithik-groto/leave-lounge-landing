@@ -16,6 +16,8 @@ import { useNavigate } from 'react-router-dom';
 import NotificationBell from '@/components/NotificationBell';
 import SlackOAuthButton from '@/components/SlackOAuthButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
+import SlackIntegration from '@/components/SlackIntegration';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
@@ -318,27 +320,14 @@ const Dashboard = () => {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center space-x-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span>Annual Leave</span>
+              <span>Paid Leave</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Regular vacation time for rest and relaxation.</p>
-            <p className="text-xs text-gray-500">• 20 days per year</p>
-            <p className="text-xs text-gray-500">• Can be carried forward</p>
-          </CardContent>
-        </Card>
-        
-        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span>Sick Leave</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 text-sm mb-2">Time off for medical appointments and illness.</p>
-            <p className="text-xs text-gray-500">• As needed basis</p>
-            <p className="text-xs text-gray-500">• Medical certificate required</p>
+            <p className="text-xs text-gray-500">• 1.5 days per month</p>
+            <p className="text-xs text-gray-500">• Requires approval</p>
+            <p className="text-xs text-gray-500">• Full day only</p>
           </CardContent>
         </Card>
         
@@ -346,13 +335,29 @@ const Dashboard = () => {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center space-x-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span>Personal Leave</span>
+              <span>Work From Home</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600 text-sm mb-2">Emergency or personal matters requiring time off.</p>
-            <p className="text-xs text-gray-500">• Subject to approval</p>
-            <p className="text-xs text-gray-500">• Advance notice preferred</p>
+            <p className="text-gray-600 text-sm mb-2">Remote work days for better work-life balance.</p>
+            <p className="text-xs text-gray-500">• 2 days per month</p>
+            <p className="text-xs text-gray-500">• No approval required</p>
+            <p className="text-xs text-gray-500">• Full day only</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+              <span>Short Leave</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 text-sm mb-2">Hourly leave for appointments and personal matters.</p>
+            <p className="text-xs text-gray-500">• 4 hours per month</p>
+            <p className="text-xs text-gray-500">• No approval required</p>
+            <p className="text-xs text-gray-500">• Min 1 hour, max 4 hours per request</p>
           </CardContent>
         </Card>
       </div>
@@ -443,24 +448,29 @@ const Dashboard = () => {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>General Leave Policy</CardTitle>
+            <CardTitle>Monthly Leave Entitlements</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <h4 className="font-medium mb-2">Annual Leave Entitlement</h4>
-              <p className="text-gray-600 text-sm">All employees are entitled to 20 days of annual leave per calendar year.</p>
+              <h4 className="font-medium mb-2 flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                Paid Leave
+              </h4>
+              <p className="text-gray-600 text-sm">1.5 days per month. Requires management approval. Must be requested in advance.</p>
             </div>
             <div>
-              <h4 className="font-medium mb-2">Application Process</h4>
-              <p className="text-gray-600 text-sm">Leave applications must be submitted at least 2 weeks in advance for approval.</p>
+              <h4 className="font-medium mb-2 flex items-center">
+                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                Work From Home
+              </h4>
+              <p className="text-gray-600 text-sm">2 days per month. No approval required. Can be used for better work-life balance.</p>
             </div>
             <div>
-              <h4 className="font-medium mb-2">Approval Requirements</h4>
-              <p className="text-gray-600 text-sm">All leave requests require manager approval and are subject to operational requirements.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2">Maximum Days Per Request</h4>
-              <p className="text-gray-600 text-sm">You cannot apply for more than 20 days of leave in a single request.</p>
+              <h4 className="font-medium mb-2 flex items-center">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                Short Leave
+              </h4>
+              <p className="text-gray-600 text-sm">4 hours per month. No approval required. For appointments and personal matters. Minimum 1 hour blocks.</p>
             </div>
           </CardContent>
         </Card>
@@ -471,16 +481,36 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <h4 className="font-medium mb-2">Maximum Consecutive Days</h4>
-              <p className="text-gray-600 text-sm">Employees may take a maximum of 10 consecutive days without special approval.</p>
+              <h4 className="font-medium mb-2">Monthly Reset</h4>
+              <p className="text-gray-600 text-sm">All leave balances reset at the beginning of each month. Unused leave does not carry forward.</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Short Leave Usage</h4>
+              <p className="text-gray-600 text-sm">Short leaves can be taken in 1-hour increments and must be within regular working hours (9 AM - 6 PM).</p>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Approval Process</h4>
+              <p className="text-gray-600 text-sm">Paid leaves require manager approval. WFH and Short leaves are automatically approved upon submission.</p>
             </div>
             <div>
               <h4 className="font-medium mb-2">Cancellation Policy</h4>
-              <p className="text-gray-600 text-sm">Leave can be cancelled before approval without penalty. Approved leave cancellation requires manager consent.</p>
+              <p className="text-gray-600 text-sm">Leave can be cancelled before the start date. Contact your manager for approved leave cancellations.</p>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Slack Integration</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h4 className="font-medium mb-2">Slack Commands</h4>
+              <p className="text-gray-600 text-sm">Use <code className="bg-gray-100 px-1 rounded">/leaves</code> command in Slack to apply for leave directly from your workspace.</p>
             </div>
             <div>
-              <h4 className="font-medium mb-2">Emergency Leave</h4>
-              <p className="text-gray-600 text-sm">In case of emergencies, employees should contact their manager immediately.</p>
+              <h4 className="font-medium mb-2">Notifications</h4>
+              <p className="text-gray-600 text-sm">Connect your Slack account to receive real-time notifications about leave status updates.</p>
             </div>
           </CardContent>
         </Card>
@@ -489,31 +519,15 @@ const Dashboard = () => {
   );
 
   const renderDashboard = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Slack Integration CTA */}
-      <div className="lg:col-span-3 mb-6">
-        <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 hover:shadow-lg transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-purple-900">Connect with Slack</h3>
-                  <p className="text-purple-700 text-sm">
-                    Apply for leaves directly from Slack using <code className="bg-purple-100 px-1 rounded">/leaves</code> command.
-                    Get notifications when your leave is approved/rejected.
-                  </p>
-                </div>
-              </div>
-              <div className="flex space-x-3">
-                <SlackOAuthButton />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="space-y-8">
+      {/* Slack Integration Section */}
+      <SlackIntegration />
+      
+      {/* Enhanced Leave Application Form */}
+      <EnhancedLeaveApplicationForm onSuccess={() => {
+        fetchLeaveApplications();
+        calculateLeaveBalance();
+      }} />
 
       {/* Leave Balance Alert */}
       {leaveBalance <= 0 && (

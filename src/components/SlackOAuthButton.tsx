@@ -4,17 +4,41 @@ import { Badge } from '@/components/ui/badge';
 import { useUser } from '@clerk/clerk-react';
 import { Slack, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const SlackOAuthButton = () => {
   const { user } = useUser();
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
       checkSlackConnection();
     }
-  }, [user]);
+    
+    // Listen for URL changes to detect OAuth callback
+    const handleUrlChange = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('slack_connected') === 'true') {
+        setIsConnected(true);
+        toast({
+          title: "🎉 Slack Connected!",
+          description: "Your Slack account has been successfully connected!",
+          className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+        });
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+    
+    handleUrlChange();
+    window.addEventListener('popstate', handleUrlChange);
+    
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, [user, toast]);
 
   const checkSlackConnection = async () => {
     if (!user) return;

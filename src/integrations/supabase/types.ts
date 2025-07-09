@@ -170,6 +170,9 @@ export type Database = {
           hours_requested: number | null
           id: string
           is_half_day: boolean | null
+          leave_duration_type: string | null
+          leave_time_end: string | null
+          leave_time_start: string | null
           leave_type_id: string | null
           meeting_details: string | null
           reason: string | null
@@ -186,6 +189,9 @@ export type Database = {
           hours_requested?: number | null
           id?: string
           is_half_day?: boolean | null
+          leave_duration_type?: string | null
+          leave_time_end?: string | null
+          leave_time_start?: string | null
           leave_type_id?: string | null
           meeting_details?: string | null
           reason?: string | null
@@ -202,6 +208,9 @@ export type Database = {
           hours_requested?: number | null
           id?: string
           is_half_day?: boolean | null
+          leave_duration_type?: string | null
+          leave_time_end?: string | null
+          leave_time_start?: string | null
           leave_type_id?: string | null
           meeting_details?: string | null
           reason?: string | null
@@ -670,6 +679,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_monthly_leave_balance: {
+        Args: {
+          p_user_id: string
+          p_leave_type_id: string
+          p_month?: number
+          p_year?: number
+        }
+        Returns: Json
+      }
       initialize_user_leave_balances: {
         Args: { user_uuid: string }
         Returns: undefined
