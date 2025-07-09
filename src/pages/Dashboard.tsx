@@ -209,8 +209,20 @@ const Dashboard = () => {
   const handleLeaveSuccess = () => {
     triggerConfetti();
     setShouldMascotWave(true);
+    // Force refresh data
     fetchLeaveApplications();
     calculateLeaveBalance();
+  };
+
+  const forceRefreshData = () => {
+    console.log('Force refreshing leave data...');
+    console.log('Current user:', user?.id);
+    fetchLeaveApplications();
+    calculateLeaveBalance();
+    toast({
+      title: "Data Refreshed",
+      description: "Leave balance and applications have been refreshed from database"
+    });
   };
 
   const handleApplyLeaveClick = () => {
@@ -307,6 +319,14 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center space-x-4">
+          <Button 
+            onClick={forceRefreshData}
+            variant="outline"
+            size="sm"
+            className="text-xs"
+          >
+            🔄 Refresh
+          </Button>
           <SlackOAuthButton />
           <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
