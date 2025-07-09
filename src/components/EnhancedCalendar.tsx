@@ -1,11 +1,10 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, Users, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, Users } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -28,30 +27,15 @@ interface LeaveApplication {
 
 interface EnhancedCalendarProps {
   onRefresh?: () => void;
-  allLeavesExhausted?: boolean;
 }
 
-interface EnhancedCalendarRef {
-  openApplyDialog: () => void;
-}
-
-const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(({ onRefresh, allLeavesExhausted = false }, ref) => {
+const EnhancedCalendar: React.FC<EnhancedCalendarProps> = ({ onRefresh }) => {
   const { user } = useUser();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [leaveApplications, setLeaveApplications] = useState<LeaveApplication[]>([]);
   const [monthlyLeaves, setMonthlyLeaves] = useState<{ [key: string]: LeaveApplication[] }>({});
-
-  useImperativeHandle(ref, () => ({
-    openApplyDialog: () => {
-      if (allLeavesExhausted) {
-        return;
-      }
-      setSelectedDate(new Date());
-      setIsApplyDialogOpen(true);
-    }
-  }));
 
   useEffect(() => {
     fetchLeaveApplications();
@@ -103,9 +87,6 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
   };
 
   const handleDateClick = (date: Date) => {
-    if (allLeavesExhausted) {
-      return;
-    }
     setSelectedDate(date);
     setIsApplyDialogOpen(true);
   };
@@ -181,89 +162,61 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
     const leaveTypes = getLeaveTypesForDate(date);
     
     return (
-      <TooltipProvider key={date.toISOString()}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => handleDateClick(date)}
-              disabled={allLeavesExhausted}
-              className={cn(
-                'h-28 p-2 text-left border border-gray-200 transition-all duration-300 relative group',
-                !allLeavesExhausted && 'hover:bg-purple-50 hover:shadow-md hover:scale-105',
-                allLeavesExhausted && 'cursor-not-allowed opacity-60',
-                isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
-                isCurrentDay && 'ring-2 ring-purple-500 bg-gradient-to-br from-purple-100 to-pink-100 shadow-lg',
-                leaveCount > 0 && 'border-purple-300 bg-gradient-to-br from-purple-25 to-purple-50'
-              )}
-            >
-              <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between mb-1">
-                  <span className={cn(
-                    'text-sm font-bold',
-                    isCurrentDay && 'text-purple-700'
-                  )}>
-                    {format(date, 'd')}
-                  </span>
-                  {leaveCount > 0 && (
-                    <Badge 
-                      variant="secondary" 
-                      className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 font-semibold"
-                    >
-                      {leaveCount}
-                    </Badge>
-                  )}
-                </div>
-                
-                <div className="flex-1 flex flex-col gap-1 overflow-hidden">
-                  {leaveTypes.slice(0, 2).map((leave, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-1 text-xs px-2 py-1 rounded-md shadow-sm border border-white/50"
-                      style={{ 
-                        backgroundColor: leave.leave_types?.color || '#3B82F6',
-                        color: 'white'
-                      }}
-                    >
-                      <User className="w-3 h-3" />
-                      <span className="truncate font-medium">
-                        {leave.profiles?.name?.split(' ')[0] || 'User'}
-                      </span>
-                    </div>
-                  ))}
-                  {leaveCount > 2 && (
-                    <div className="text-xs text-gray-600 px-2 py-1 bg-gray-100 rounded-md border border-gray-200 font-medium">
-                      +{leaveCount - 2} more people
-                    </div>
-                  )}
-                </div>
-                
-                {/* Hover effect for adding leave */}
-                {!allLeavesExhausted && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center rounded-lg">
-                    <div className="bg-white/90 rounded-full p-2 shadow-lg">
-                      <Plus className="h-4 w-4 text-purple-600" />
-                    </div>
-                  </div>
-                )}
+      <button
+        key={date.toISOString()}
+        onClick={() => handleDateClick(date)}
+        className={cn(
+          'h-24 p-1 text-left border border-gray-200 hover:bg-purple-50 transition-all duration-200 relative group',
+          isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
+          isCurrentDay && 'ring-2 ring-purple-500 bg-purple-100',
+          leaveCount > 0 && 'border-purple-300'
+        )}
+      >
+        <div className="h-full flex flex-col">
+          <div className="flex items-center justify-between">
+            <span className={cn(
+              'text-sm font-medium',
+              isCurrentDay && 'text-purple-700'
+            )}>
+              {format(date, 'd')}
+            </span>
+            {leaveCount > 0 && (
+              <Badge 
+                variant="secondary" 
+                className="text-xs px-1 bg-purple-100 text-purple-700"
+              >
+                {leaveCount}
+              </Badge>
+            )}
+          </div>
+          
+          <div className="flex-1 flex flex-col gap-0.5 mt-1">
+            {leaveTypes.map((leave, index) => (
+              <div
+                key={index}
+                className="text-xs px-1 py-0.5 rounded truncate"
+                style={{ 
+                  backgroundColor: leave.leave_types?.color || '#3B82F6',
+                  color: 'white'
+                }}
+                title={`${leave.profiles?.name || 'Unknown'} - ${leave.leave_types?.label || 'Leave'}`}
+              >
+                {leave.profiles?.name?.split(' ')[0] || 'User'}
               </div>
-            </button>
-          </TooltipTrigger>
-          {leaveCount > 0 && (
-            <TooltipContent>
-              <div className="max-w-48">
-                <p className="font-semibold mb-1">People on leave:</p>
-                {leaveTypes.map((leave, index) => (
-                  <div key={index} className="text-sm">
-                    <span className="font-medium">{leave.profiles?.name || 'Unknown'}</span>
-                    {' - '}
-                    <span className="text-gray-600">{leave.leave_types?.label || 'Leave'}</span>
-                  </div>
-                ))}
+            ))}
+            {leaveCount > 3 && (
+              <div className="text-xs text-gray-500 px-1">
+                +{leaveCount - 3} more
               </div>
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+            )}
+          </div>
+          
+          {/* Hover effect for adding leave */}
+          <div className="absolute inset-0 bg-purple-500 bg-opacity-0 group-hover:bg-opacity-5 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+            <Plus className="h-4 w-4 text-purple-600" />
+          </div>
+        </div>
+      </button>
     );
   };
 
@@ -296,7 +249,7 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
         
         {/* Leave Application Dialog */}
         <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center space-x-2">
                 <Clock className="h-5 w-5 text-purple-600" />
@@ -322,8 +275,6 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
       </CardContent>
     </Card>
   );
-});
-
-EnhancedCalendar.displayName = 'EnhancedCalendar';
+};
 
 export default EnhancedCalendar;

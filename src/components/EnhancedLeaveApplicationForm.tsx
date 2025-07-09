@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
@@ -34,10 +34,9 @@ interface LeaveBalance {
 interface EnhancedLeaveApplicationFormProps {
   onSuccess?: () => void;
   preselectedDate?: Date | null;
-  allLeavesExhausted?: boolean;
 }
 
-const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExhausted = false }: EnhancedLeaveApplicationFormProps) => {
+const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLeaveApplicationFormProps) => {
   const { user } = useUser();
   const [startDate, setStartDate] = useState<Date | undefined>(preselectedDate || new Date());
   const [endDate, setEndDate] = useState<Date | undefined>(preselectedDate || new Date());
@@ -151,7 +150,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
 
     if (!selectedLeaveType) {
       toast({
-        title: "Leave Type Required", 
+        title: "Leave Type Required",
         description: "Please select a leave type",
         variant: "destructive"
       });
@@ -167,59 +166,11 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
       return;
     }
 
-    // Calculate the duration for this specific request
     const duration = calculateLeaveDuration();
-    
-    // Get current balance for the selected leave type to double-check
-    try {
-      const { data: currentBalance, error: balanceError } = await supabase.rpc('get_monthly_leave_balance', {
-        p_user_id: user.id,
-        p_leave_type_id: selectedLeaveType
-      });
-
-      if (balanceError) {
-        toast({
-          title: "Error checking balance",
-          description: "Unable to verify leave balance. Please try again.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const remaining = (currentBalance as any)?.remaining_this_month || 0;
-      
-      if (duration > remaining) {
-        toast({
-          title: "Insufficient Leave Balance",
-          description: `You only have ${remaining} ${(currentBalance as any)?.duration_type || 'units'} remaining this month`,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Check if all leaves would be exhausted after this application
-      const { data: totalBalance, error: totalError } = await supabase.rpc('get_total_remaining_leaves', {
-        p_user_id: user.id
-      });
-
-      if (!totalError && totalBalance) {
-        const totalRemaining = (totalBalance as any)?.total_remaining_days || 0;
-        const requestedInDays = (currentBalance as any)?.duration_type === 'hours' ? duration / 8 : duration;
-        
-        if (totalRemaining - requestedInDays <= 0) {
-          toast({
-            title: "⚠️ Last Leave Request",
-            description: "This will use all your remaining 7.5 days for this month. You won't be able to apply for more leaves this month.",
-            className: "bg-gradient-to-r from-orange-50 to-red-50 border-orange-200"
-          });
-        }
-      }
-
-    } catch (error) {
-      console.error('Error checking balance:', error);
+    if (leaveBalance && duration > leaveBalance.remaining_this_month) {
       toast({
-        title: "Error",
-        description: "Unable to verify leave balance. Please try again.",
+        title: "Insufficient Leave Balance",
+        description: `You only have ${leaveBalance.remaining_this_month} ${leaveBalance.duration_type} remaining this month`,
         variant: "destructive"
       });
       return;
@@ -351,28 +302,6 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
     }
   };
 
-  if (allLeavesExhausted) {
-    return (
-      <Card className="w-full max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Apply for Leave</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">All Leaves Exhausted</h3>
-            <p className="text-gray-600 mb-4">
-              You have used all your monthly leave allowance of 7.5 days. Contact HR for additional leave requests.
-            </p>
-            <Button variant="outline" onClick={() => window.open('mailto:hr@company.com', '_blank')}>
-              Contact HR
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
@@ -408,10 +337,8 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate, allLeavesExh
             {leaveBalance && (
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  <strong>Monthly Balance:</strong> {leaveBalance.remaining_this_month} days remaining out of {leaveBalance.monthly_allowance} days total
-                </p>
-                <p className="text-xs text-blue-600 mt-1">
-                  Total used this month: {(leaveBalance as any).total_used_all_types || 0} days (across all leave types)
+                  <strong>This Month:</strong> {leaveBalance.remaining_this_month} {leaveBalance.duration_type} remaining 
+                  (Used: {leaveBalance.used_this_month}/{leaveBalance.monthly_allowance})
                 </p>
               </div>
             )}

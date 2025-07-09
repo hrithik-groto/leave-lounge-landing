@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { CalendarDays, Plus, FileText, Clock, Shield, AlertCircle, Users } from 'lucide-react';
+import { CalendarDays, Plus, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -14,30 +14,16 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import LeaveApplicationsList from '@/components/LeaveApplicationsList';
-import SlackOAuthButton from '@/components/SlackOAuthButton';
-import TimelooMascot from '@/components/TimelooMascot';
 import confetti from 'canvas-confetti';
-
-interface LeaveBalance {
-  total_remaining_days: number;
-  total_used_days: number;
-  total_allowance: number;
-  all_exhausted: boolean;
-  paid_leave?: { remaining: number; total: number; used: number };
-  work_from_home?: { remaining: number; total: number; used: number };
-  short_leave?: { remaining: number; total: number; used: number };
-}
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
   const [leaveApplications, setLeaveApplications] = useState([]);
-  const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
+  const [leaveBalance, setLeaveBalance] = useState(20);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
-  const [shouldMascotWave, setShouldMascotWave] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
 
   // Check if current user is admin
   const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
@@ -49,47 +35,6 @@ const Dashboard = () => {
       calculateLeaveBalance();
     }
   }, [user, isLoaded]);
-
-  // Real-time subscription for leave applications updates
-  useEffect(() => {
-    if (!user) return;
-
-    console.log('Setting up realtime subscription for user:', user.id);
-
-    const channel = supabase
-      .channel('leave-balance-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'leave_applied_users'
-        },
-        (payload) => {
-          console.log('Leave application change detected:', payload);
-          console.log('Event type:', payload.eventType);
-          console.log('Affected user:', (payload.new as any)?.user_id || (payload.old as any)?.user_id);
-          
-          // Refresh data regardless of which user's data changed
-          // This ensures the UI stays in sync with database state
-          fetchLeaveApplications();
-          calculateLeaveBalance();
-        }
-      )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to leave_applied_users changes');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Error subscribing to realtime channel');
-        }
-      });
-
-    return () => {
-      console.log('Cleaning up realtime subscription');
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
 
   const createOrUpdateProfile = async () => {
     if (!user) return;
@@ -137,41 +82,26 @@ const Dashboard = () => {
     if (!user) return;
 
     try {
-      // Get all leave types
-      const { data: leaveTypes, error: typesError } = await supabase
-        .from('leave_types')
-        .select('id, label')
-        .eq('is_active', true);
+      const { data, error } = await supabase
+        .from('leave_applied_users')
+        .select('start_date, end_date, status')
+        .eq('user_id', user.id)
+        .in('status', ['approved', 'pending']);
 
-      if (typesError) {
-        console.error('Error fetching leave types:', typesError);
+      if (error) {
+        console.error('Error calculating leave balance:', error);
         return;
       }
 
-      // Use the new unified 7.5 days system
-      const { data: totalBalance, error: totalError } = await supabase.rpc('get_total_remaining_leaves', {
-        p_user_id: user.id
+      let usedLeaves = 0;
+      data?.forEach((leave: any) => {
+        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
+        usedLeaves += days;
       });
 
-      if (totalError) {
-        console.error('Error fetching total balance:', totalError);
-        return;
-      }
-
-      if (totalBalance && typeof totalBalance === 'object') {
-        const totalRemaining = (totalBalance as any).total_remaining_days || 0;
-        const totalUsed = (totalBalance as any).total_used_days || 0;
-        const totalAllowance = (totalBalance as any).total_allowance || 7.5;
-        
-        setLeaveBalance({
-          total_remaining_days: totalRemaining,
-          total_used_days: totalUsed,
-          total_allowance: totalAllowance,
-          all_exhausted: totalRemaining <= 0
-        });
-      }
+      setLeaveBalance(20 - usedLeaves);
     } catch (error) {
-      console.error('Error calculating leave balance:', error);
+      console.error('Error:', error);
     }
   };
 
@@ -195,33 +125,8 @@ const Dashboard = () => {
 
   const handleLeaveSuccess = () => {
     triggerConfetti();
-    setShouldMascotWave(true);
-    // Force refresh data
     fetchLeaveApplications();
     calculateLeaveBalance();
-  };
-
-  const forceRefreshData = () => {
-    console.log('Force refreshing leave data...');
-    console.log('Current user:', user?.id);
-    fetchLeaveApplications();
-    calculateLeaveBalance();
-    toast({
-      title: "Data Refreshed",
-      description: "Leave balance and applications have been refreshed from database"
-    });
-  };
-
-  const handleApplyLeaveClick = () => {
-    if (leaveBalance?.all_exhausted) {
-      toast({
-        title: "No Leaves Available",
-        description: "You have exhausted all your monthly leaves. Contact HR for additional requests.",
-        variant: "destructive"
-      });
-      return;
-    }
-    calendarRef.current?.openApplyDialog();
   };
 
 
@@ -306,7 +211,6 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center space-x-4">
-          <SlackOAuthButton />
           <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
           <UserButton afterSignOutUrl="/" />
@@ -318,14 +222,6 @@ const Dashboard = () => {
   const renderLeaveTypes = () => (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Leave Types</h2>
-      
-      <Alert className="mb-6">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          <strong>New Unified System:</strong> All leave types now count towards a total monthly allowance of 7.5 days. You can mix and match any leave types as long as you don't exceed 7.5 days total per month.
-        </AlertDescription>
-      </Alert>
-      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
           <CardHeader className="pb-3">
@@ -336,7 +232,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Regular vacation time for rest and relaxation.</p>
-            <p className="text-xs text-gray-500">• Counts towards 7.5 days/month total</p>
+            <p className="text-xs text-gray-500">• 1.5 days per month</p>
             <p className="text-xs text-gray-500">• Requires approval</p>
             <p className="text-xs text-gray-500">• Full day only</p>
           </CardContent>
@@ -351,7 +247,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Remote work days for better work-life balance.</p>
-            <p className="text-xs text-gray-500">• Counts towards 7.5 days/month total</p>
+            <p className="text-xs text-gray-500">• 2 days per month</p>
             <p className="text-xs text-gray-500">• No approval required</p>
             <p className="text-xs text-gray-500">• Full day only</p>
           </CardContent>
@@ -366,9 +262,9 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 text-sm mb-2">Hourly leave for appointments and personal matters.</p>
-            <p className="text-xs text-gray-500">• Counts towards 7.5 days/month total</p>
+            <p className="text-xs text-gray-500">• 4 hours per month</p>
             <p className="text-xs text-gray-500">• No approval required</p>
-            <p className="text-xs text-gray-500">• 8 hours = 1 day</p>
+            <p className="text-xs text-gray-500">• Min 1 hour, max 4 hours per request</p>
           </CardContent>
         </Card>
       </div>
@@ -377,51 +273,27 @@ const Dashboard = () => {
 
   const renderLeavesRemaining = () => (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Monthly Leave Balance</h2>
-      
-      <Alert className="mb-6">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          <strong>Unified System:</strong> You have a total monthly allowance of 7.5 days that can be used across all leave types. Mix and match as needed!
-        </AlertDescription>
-      </Alert>
-      
-      {/* Main Balance Display */}
-      <Card className={`${!leaveBalance?.all_exhausted ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
-        <CardContent className="p-8">
+      <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
+      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
+        <CardContent className="p-6">
           <div className="text-center">
-            <div className="text-5xl font-bold mb-3">{leaveBalance?.total_remaining_days?.toFixed(1) || 0}</div>
-            <div className="text-xl opacity-90 mb-2">Days Remaining This Month</div>
-            <div className="text-sm opacity-75">Out of {leaveBalance?.total_allowance || 7.5} total monthly days</div>
-            
-            {/* Progress Bar */}
-            <div className="w-full bg-white/20 rounded-full h-3 mt-4 mb-4">
-              <div 
-                className="bg-white h-3 rounded-full transition-all duration-300" 
-                style={{ 
-                  width: `${((leaveBalance?.total_used_days || 0) / (leaveBalance?.total_allowance || 7.5)) * 100}%` 
-                }}
-              ></div>
-            </div>
-            
-            <div className="text-sm opacity-90">
-              Used: {leaveBalance?.total_used_days?.toFixed(1) || 0} days
-            </div>
-            
-            {leaveBalance?.all_exhausted && (
-              <div className="mt-4 p-3 bg-white/20 rounded-lg">
-                <p className="text-sm">All monthly leaves exhausted! Contact HR for additional requests.</p>
+            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
+            <div className="text-lg opacity-90">Days Remaining</div>
+            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
+            {leaveBalance <= 0 && (
+              <div className="mt-3 p-2 bg-white/20 rounded-lg">
+                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
       
-      {leaveBalance && leaveBalance.total_remaining_days <= 2 && leaveBalance.total_remaining_days > 0 && (
-        <Alert className="animate-pulse">
+      {leaveBalance <= 5 && leaveBalance > 0 && (
+        <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You have only {leaveBalance.total_remaining_days.toFixed(1)} leave days remaining this month. Plan carefully!
+            You have {leaveBalance} leave days remaining. Plan your time off carefully!
           </AlertDescription>
         </Alert>
       )}
@@ -440,8 +312,7 @@ const Dashboard = () => {
                     <p className="text-sm text-gray-500">{app.status}</p>
                   </div>
                   <span className="text-sm font-medium">
-                    {app.leave_duration_type === 'hours' ? `${app.hours_requested}h` : 
-                     `${differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days`}
+                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
                   </span>
                 </div>
               ))}
@@ -456,10 +327,8 @@ const Dashboard = () => {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between">
-                <span>Used this month:</span>
-                <span className="font-medium">
-                  {(7.5 - (leaveBalance?.total_remaining_days || 0)).toFixed(1)} days
-                </span>
+                <span>Used this year:</span>
+                <span className="font-medium">{20 - leaveBalance} days</span>
               </div>
               <div className="flex justify-between">
                 <span>Pending approval:</span>
@@ -567,61 +436,53 @@ const Dashboard = () => {
       </div>
 
       {/* Apply Leave CTA */}
-      <Card className={`border-0 shadow-xl transition-all duration-300 ${
-        leaveBalance?.all_exhausted 
-          ? 'bg-gradient-to-r from-gray-400 to-gray-500' 
-          : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-2xl'
-      } text-white`}>
+      <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-bold mb-2">
-                {leaveBalance?.all_exhausted ? 'All Leaves Exhausted' : 'Ready to Take Some Time Off?'}
-              </h3>
-              <p className={leaveBalance?.all_exhausted ? 'text-gray-100' : 'text-purple-100'}>
-                {leaveBalance?.all_exhausted 
-                  ? 'Contact HR for additional leave requests' 
-                  : 'Apply for leave with just a few clicks'}
-              </p>
+              <h3 className="text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
+              <p className="text-purple-100">Apply for leave with just a few clicks</p>
             </div>
-            {leaveBalance?.all_exhausted ? (
-              <Button 
-                onClick={() => window.open('mailto:hr@company.com', '_blank')}
-                className="bg-white text-gray-600 hover:bg-gray-50 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
-              >
-                <Users className="w-4 h-4 mr-2" />
-                Contact HR
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleApplyLeaveClick}
-                className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Apply Leave
-              </Button>
-            )}
+            <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-6 py-3"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Apply Leave
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold text-purple-700">
+                    Apply for Leave
+                  </DialogTitle>
+                </DialogHeader>
+                <EnhancedLeaveApplicationForm 
+                  onSuccess={() => {
+                    setIsApplyDialogOpen(false);
+                    handleLeaveSuccess();
+                  }} 
+                />
+              </DialogContent>
+            </Dialog>
           </div>
         </CardContent>
       </Card>
 
       {/* Leave Balance Alert */}
-      {leaveBalance?.all_exhausted && (
+      {leaveBalance <= 0 && (
         <Alert className="border-red-200 bg-red-50 animate-pulse">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
-            You have exhausted all your monthly leave allowance. Please contact HR if you need additional leave.
+            You have exhausted all your annual leave days. Please contact HR if you need additional leave.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}
-        <EnhancedCalendar 
-          ref={calendarRef} 
-          allLeavesExhausted={leaveBalance?.all_exhausted || false}
-          onRefresh={handleLeaveSuccess} 
-        />
+        <EnhancedCalendar onRefresh={handleLeaveSuccess} />
 
         {/* Leave Applications Section with Pagination */}
         <LeaveApplicationsList
@@ -630,12 +491,6 @@ const Dashboard = () => {
           title="Your Leave Applications"
         />
       </div>
-
-      {/* Timeloo Mascot */}
-      <TimelooMascot 
-        shouldWave={shouldMascotWave} 
-        onWaveComplete={() => setShouldMascotWave(false)}
-      />
     </div>
   );
 

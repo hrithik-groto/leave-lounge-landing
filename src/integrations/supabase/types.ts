@@ -14,50 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      admin_granted_leaves: {
-        Row: {
-          created_at: string | null
-          expires_at: string | null
-          granted_amount: number
-          granted_at: string | null
-          granted_by: string
-          id: string
-          leave_type_id: string
-          reason: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          expires_at?: string | null
-          granted_amount?: number
-          granted_at?: string | null
-          granted_by: string
-          id?: string
-          leave_type_id: string
-          reason?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          expires_at?: string | null
-          granted_amount?: number
-          granted_at?: string | null
-          granted_by?: string
-          id?: string
-          leave_type_id?: string
-          reason?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fk_admin_granted_leaves_leave_type_id"
-            columns: ["leave_type_id"]
-            isOneToOne: false
-            referencedRelation: "leave_types"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       approvals: {
         Row: {
           approver_id: string
@@ -402,59 +358,6 @@ export type Database = {
           },
         ]
       }
-      leave_requests_additional: {
-        Row: {
-          admin_comments: string | null
-          created_at: string | null
-          id: string
-          leave_type_id: string
-          reason: string
-          requested_amount: number
-          requested_at: string | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          status: string | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          admin_comments?: string | null
-          created_at?: string | null
-          id?: string
-          leave_type_id: string
-          reason: string
-          requested_amount?: number
-          requested_at?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          status?: string | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          admin_comments?: string | null
-          created_at?: string | null
-          id?: string
-          leave_type_id?: string
-          reason?: string
-          requested_amount?: number
-          requested_at?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          status?: string | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fk_leave_requests_additional_leave_type_id"
-            columns: ["leave_type_id"]
-            isOneToOne: false
-            referencedRelation: "leave_types"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       leave_types: {
         Row: {
           accrual_rule: Database["public"]["Enums"]["accrual_rule"]
@@ -783,10 +686,6 @@ export type Database = {
           p_month?: number
           p_year?: number
         }
-        Returns: Json
-      }
-      get_total_remaining_leaves: {
-        Args: { p_user_id: string; p_month?: number; p_year?: number }
         Returns: Json
       }
       initialize_user_leave_balances: {
