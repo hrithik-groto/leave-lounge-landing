@@ -16,6 +16,7 @@ import EnhancedCalendar from '@/components/EnhancedCalendar';
 import LeaveApplicationsList from '@/components/LeaveApplicationsList';
 import SlackOAuthButton from '@/components/SlackOAuthButton';
 import TimelooMascot from '@/components/TimelooMascot';
+import LeaveRequestForm from '@/components/LeaveRequestForm';
 import confetti from 'canvas-confetti';
 
 const Dashboard = () => {
@@ -25,6 +26,7 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [shouldMascotWave, setShouldMascotWave] = useState(false);
+  const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
@@ -491,11 +493,29 @@ const Dashboard = () => {
       {leaveBalances.some((type: any) => type.balance.remaining_this_month <= 0) && (
         <Alert className="border-red-200 bg-red-50 animate-pulse">
           <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            Some of your leave types are exhausted. Check your balance before applying for leave.
+          <AlertDescription className="text-red-800 flex items-center justify-between">
+            <span>Some of your leave types are exhausted.</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowLeaveRequestForm(true)}
+              className="ml-4 bg-white hover:bg-gray-50"
+            >
+              Request Additional Leave
+            </Button>
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Leave Request Form Dialog */}
+      <Dialog open={showLeaveRequestForm} onOpenChange={setShowLeaveRequestForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Additional Leave</DialogTitle>
+          </DialogHeader>
+          <LeaveRequestForm onSuccess={() => setShowLeaveRequestForm(false)} />
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Enhanced Calendar Section */}

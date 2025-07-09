@@ -59,9 +59,9 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
   }, [isWaving]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none overflow-hidden">
-      {/* Beautiful Park Background - Always visible but subtle when not waving */}
-      <div className={`absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-green-200 via-green-100 to-transparent transition-opacity duration-1000 ${isWaving ? 'opacity-60' : 'opacity-20'}`}>
+    <div className="fixed bottom-0 left-0 right-0 z-[100] pointer-events-none overflow-hidden" style={{ zIndex: 9999 }}>
+      {/* Beautiful Park Background - Always visible */}
+      <div className={`absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-green-200 via-green-100 to-transparent transition-opacity duration-1000 ${isWaving ? 'opacity-70' : 'opacity-40'}`}>
         {/* Rainbow */}
         {isWaving && (
           <div className="absolute top-2 right-10 w-16 h-8 opacity-70">

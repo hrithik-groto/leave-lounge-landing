@@ -65,8 +65,7 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
           profiles!fk_leave_applied_users_user_id (name),
           leave_types (label, color)
         `)
-        .gte('start_date', format(startDate, 'yyyy-MM-dd'))
-        .lte('end_date', format(endDate, 'yyyy-MM-dd'))
+        .or(`start_date.lte.${format(endDate, 'yyyy-MM-dd')},end_date.gte.${format(startDate, 'yyyy-MM-dd')}`)
         .in('status', ['approved', 'pending']);
 
       if (error) {
