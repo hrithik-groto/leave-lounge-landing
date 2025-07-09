@@ -59,9 +59,9 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
   }, [isWaving]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none overflow-hidden">
-      {/* Beautiful Park Background */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-green-200 via-green-100 to-transparent opacity-60">
+    <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none overflow-hidden">
+      {/* Beautiful Park Background - Always visible but subtle when not waving */}
+      <div className={`absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-green-200 via-green-100 to-transparent transition-opacity duration-1000 ${isWaving ? 'opacity-60' : 'opacity-20'}`}>
         {/* Rainbow */}
         {isWaving && (
           <div className="absolute top-2 right-10 w-16 h-8 opacity-70">
@@ -79,10 +79,17 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
             <div className="absolute top-8 right-32 text-xs animate-bounce delay-500">🐦</div>
           </>
         )}
+        {/* Trees - Always visible */}
+        <div className="absolute bottom-0 left-10 text-2xl opacity-50">🌳</div>
+        <div className="absolute bottom-0 right-20 text-xl opacity-50">🌲</div>
         
-        {/* Trees */}
-        <div className="absolute bottom-0 left-10 text-2xl">🌳</div>
-        <div className="absolute bottom-0 right-20 text-xl">🌲</div>
+        {/* Subtle grass elements when not waving */}
+        {!isWaving && (
+          <>
+            <div className="absolute bottom-0 left-32 text-sm opacity-30">🌿</div>
+            <div className="absolute bottom-0 right-40 text-sm opacity-30">🌸</div>
+          </>
+        )}
       </div>
 
       {/* Mascot */}
