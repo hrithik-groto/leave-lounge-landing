@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, Plus, X, LogOut, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -26,8 +26,6 @@ const Dashboard = () => {
   const [leaveApplications, setLeaveApplications] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState(20);
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [currentLeaveAppPage, setCurrentLeaveAppPage] = useState(1);
-  const [leaveApplicationsPerPage] = useState(5);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -608,19 +606,10 @@ const Dashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 p-3 bg-purple-50 rounded-lg">
-              <p className="text-sm text-purple-800 font-medium">✨ Click on any date to apply for leave!</p>
-            </div>
             <Calendar
               mode="single"
               selected={selectedDate}
-              onSelect={(date) => {
-                if (date) {
-                  setSelectedDate(date);
-                  setEndDate(date);
-                  setIsDialogOpen(true);
-                }
-              }}
+              onSelect={setSelectedDate}
               className="rounded-md border w-full"
               classNames={{
                 months: "flex w-full flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 flex-1",
@@ -630,9 +619,8 @@ const Dashboard = () => {
                 head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1",
                 row: "flex w-full mt-2",
                 cell: "h-14 w-full text-center text-sm p-0 relative flex-1",
-                day: "h-14 w-full p-0 font-normal hover:bg-purple-100 hover:text-purple-900 flex items-center justify-center cursor-pointer transition-colors duration-200"
+                day: "h-14 w-full p-0 font-normal hover:bg-accent hover:text-accent-foreground flex items-center justify-center"
               }}
-              disabled={(date) => date < new Date()}
             />
           </CardContent>
         </Card>
@@ -649,15 +637,7 @@ const Dashboard = () => {
               {leaveApplications.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No leave applications yet</p>
               ) : (
-                (() => {
-                  const indexOfLastApp = currentLeaveAppPage * leaveApplicationsPerPage;
-                  const indexOfFirstApp = indexOfLastApp - leaveApplicationsPerPage;
-                  const currentApps = leaveApplications.slice(indexOfFirstApp, indexOfLastApp);
-                  const totalPages = Math.ceil(leaveApplications.length / leaveApplicationsPerPage);
-
-                  return (
-                    <>
-                      {currentApps.map((application: any) => (
+                leaveApplications.map((application: any) => (
                   <div key={application.id} className="border rounded-lg p-4 space-y-2 hover:shadow-md transition-shadow duration-200">
                     <div className="flex justify-between items-start">
                       <div>
@@ -693,37 +673,7 @@ const Dashboard = () => {
                       Duration: {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
                     </p>
                   </div>
-                      ))}
-
-                      {/* Pagination Controls */}
-                      {totalPages > 1 && (
-                        <div className="flex justify-center items-center space-x-2 mt-6 pt-4 border-t">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCurrentLeaveAppPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentLeaveAppPage === 1}
-                          >
-                            <ChevronLeft className="w-4 h-4 mr-1" />
-                            Previous
-                          </Button>
-                          <span className="text-sm text-gray-600">
-                            Page {currentLeaveAppPage} of {totalPages}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCurrentLeaveAppPage(prev => Math.min(prev + 1, totalPages))}
-                            disabled={currentLeaveAppPage === totalPages}
-                          >
-                            Next
-                            <ChevronRight className="w-4 h-4 ml-1" />
-                          </Button>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()
+                ))
               )}
             </div>
           </CardContent>
