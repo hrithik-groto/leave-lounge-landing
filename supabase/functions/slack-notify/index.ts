@@ -188,56 +188,25 @@ serve(async (req) => {
 
     // Only send to admin for new applications, or to user for approvals/rejections
     if (!isApprovalUpdate) {
-      // Send to admin only (replace with your actual admin Slack user ID)
-      const adminSlackUserId = 'U0123456789'; // Replace with actual admin Slack user ID
+      // Send to webhook for new applications (admin notifications)
+      console.log('Sending new application notification to admin via webhook');
       
-      try {
-        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-        if (botToken) {
-          // Send DM to admin
-          const adminResponse = await fetch('https://slack.com/api/chat.postMessage', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${botToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              channel: adminSlackUserId,
-              ...slackMessage,
-            }),
-          });
+      // Send to webhook channel for admin notifications
+      const slackResponse = await fetch(slackWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(slackMessage),
+      });
 
-          if (adminResponse.ok) {
-            console.log('Successfully sent Slack notification to admin');
-          } else {
-            const adminError = await adminResponse.text();
-            console.error('Failed to send admin notification:', adminError);
-            // Fallback to webhook if DM fails
-            throw new Error('Admin DM failed, using webhook fallback');
-          }
-        } else {
-          throw new Error('SLACK_BOT_TOKEN not configured, using webhook fallback');
-        }
-      } catch (adminError) {
-        console.error('Error sending admin DM, falling back to webhook:', adminError);
-        
-        // Fallback to webhook
-        const slackResponse = await fetch(slackWebhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(slackMessage),
-        });
-
-        if (!slackResponse.ok) {
-          const errorText = await slackResponse.text();
-          console.error('Slack webhook error:', errorText);
-          throw new Error(`Slack webhook error: ${slackResponse.status} - ${errorText}`);
-        }
-
-        console.log('Successfully sent Slack channel notification (fallback)');
+      if (!slackResponse.ok) {
+        const errorText = await slackResponse.text();
+        console.error('Slack webhook error:', errorText);
+        throw new Error(`Slack webhook error: ${slackResponse.status} - ${errorText}`);
       }
+
+      console.log('Successfully sent Slack channel notification');
     } else if (sendToUser || isApprovalUpdate) {
       // Send to the user who applied for leave (for approval/rejection updates)
       try {
