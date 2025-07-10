@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Columns3, Grid, Calendar as CalendarIcon } from 'lucide-react';
+import { Columns3, Grid, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, addMonths, subMonths, isAfter, isBefore, startOfDay } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 export type LeaveInfo = {
   id: string;
@@ -32,52 +33,65 @@ interface DayProps {
   day: DayType;
   onHover: (day: string | null, leaveCount: number) => void;
   onClick: (date: Date) => void;
+  userHasLeaveOnDate?: boolean;
+  isDisabled?: boolean;
 }
 
-const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick }) => {
+const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLeaveOnDate, isDisabled }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const leaveCount = day.leaveInfo?.length || 0;
+  const approvedLeaveCount = day.leaveInfo?.filter(leave => leave.status === 'approved').length || 0;
+  const isPastDate = isBefore(day.date, startOfDay(new Date()));
+  const canClick = day.isCurrentMonth && !isPastDate && !userHasLeaveOnDate && !isDisabled;
   
   return (
     <motion.div
-      className={`relative flex items-center justify-center py-1 cursor-pointer transition-all duration-200 ${classNames} hover:bg-accent/50`}
+      className={`relative flex items-center justify-center py-1 transition-all duration-200 ${classNames} ${
+        canClick ? 'cursor-pointer hover:bg-accent/50' : 'cursor-not-allowed opacity-50'
+      } ${userHasLeaveOnDate ? 'ring-2 ring-orange-400 bg-orange-50' : ''} ${
+        isPastDate ? 'bg-muted/30' : ''
+      }`}
       style={{ height: '4rem', borderRadius: 16 }}
       onMouseEnter={() => {
         setIsHovered(true);
-        onHover(day.day, leaveCount);
+        onHover(day.day, approvedLeaveCount);
       }}
       onMouseLeave={() => {
         setIsHovered(false);
         onHover(null, 0);
       }}
-      onClick={() => onClick(day.date)}
+      onClick={() => canClick && onClick(day.date)}
       id={`day-${day.day}`}
     >
       <motion.div className="flex flex-col items-center justify-center">
-        <span className={`text-sm ${day.isCurrentMonth ? 'text-foreground' : 'text-muted-foreground'}`}>
+        <span className={`text-sm ${day.isCurrentMonth ? 'text-foreground' : 'text-muted-foreground'} ${
+          isPastDate ? 'line-through opacity-40' : ''
+        }`}>
           {day.day}
         </span>
+        {userHasLeaveOnDate && (
+          <span className="text-xs text-orange-600 font-medium">Applied</span>
+        )}
       </motion.div>
       
-      {leaveCount > 0 && (
+      {approvedLeaveCount > 0 && (
         <motion.div
           className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-primary p-1 text-[10px] font-bold text-primary-foreground"
           layoutId={`day-${day.day}-leave-count`}
           style={{ borderRadius: 999 }}
         >
-          {leaveCount}
+          {approvedLeaveCount}
         </motion.div>
       )}
 
       <AnimatePresence>
-        {leaveCount > 0 && isHovered && (
+        {approvedLeaveCount > 0 && isHovered && (
           <div className="absolute inset-0 flex size-full items-center justify-center">
             <motion.div
               className="flex size-10 items-center justify-center bg-primary p-1 text-xs font-bold text-primary-foreground"
               layoutId={`day-${day.day}-leave-count`}
               style={{ borderRadius: 999 }}
             >
-              {leaveCount}
+              {approvedLeaveCount}
             </motion.div>
           </div>
         )}
@@ -90,7 +104,18 @@ const CalendarGrid: React.FC<{
   days: DayType[];
   onHover: (day: string | null, leaveCount: number) => void;
   onDayClick: (date: Date) => void;
-}> = ({ days, onHover, onDayClick }) => {
+  userLeaves: LeaveInfo[];
+  currentUserId: string | undefined;
+}> = ({ days, onHover, onDayClick, userLeaves, currentUserId }) => {
+  // Check if user has leave on specific dates
+  const userHasLeaveOnDate = (date: Date) => {
+    return userLeaves.some(leave => {
+      const leaveStart = new Date(leave.start_date);
+      const leaveEnd = new Date(leave.end_date);
+      return date >= leaveStart && date <= leaveEnd;
+    });
+  };
+
   return (
     <div className="grid grid-cols-7 gap-2">
       {days.map((day, index) => (
@@ -100,6 +125,8 @@ const CalendarGrid: React.FC<{
           day={day}
           onHover={onHover}
           onClick={onDayClick}
+          userHasLeaveOnDate={userHasLeaveOnDate(day.date)}
+          isDisabled={false}
         />
       ))}
     </div>
@@ -109,16 +136,19 @@ const CalendarGrid: React.FC<{
 interface LeaveCalendarProps {
   onDayClick?: (date: Date) => void;
   className?: string;
+  currentUserId?: string;
 }
 
 const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
-  ({ className, onDayClick, ...props }, ref) => {
+  ({ className, onDayClick, currentUserId, ...props }, ref) => {
     const [moreView, setMoreView] = useState(false);
     const [hoveredDay, setHoveredDay] = useState<string | null>(null);
     const [hoveredLeaveCount, setHoveredLeaveCount] = useState(0);
-    const [currentDate] = useState(new Date());
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [leaveData, setLeaveData] = useState<LeaveInfo[]>([]);
+    const [userLeaves, setUserLeaves] = useState<LeaveInfo[]>([]);
     const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
 
     const handleDayHover = (day: string | null, leaveCount: number) => {
       setHoveredDay(day);
@@ -126,17 +156,51 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
     };
 
     const handleDayClick = (date: Date) => {
+      // Check if it's a past date
+      if (isBefore(date, startOfDay(new Date()))) {
+        toast({
+          title: "Invalid Date",
+          description: "Cannot apply for leave on past dates",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Check if user already has leave on this date
+      const hasLeave = userLeaves.some(leave => {
+        const leaveStart = new Date(leave.start_date);
+        const leaveEnd = new Date(leave.end_date);
+        return date >= leaveStart && date <= leaveEnd;
+      });
+
+      if (hasLeave) {
+        toast({
+          title: "Leave Already Applied",
+          description: "You have already applied for leave on this date",
+          variant: "destructive"
+        });
+        return;
+      }
+
       if (onDayClick) {
         onDayClick(date);
       }
+    };
+
+    const goToPreviousMonth = () => {
+      setCurrentDate(prev => subMonths(prev, 1));
+    };
+
+    const goToNextMonth = () => {
+      setCurrentDate(prev => addMonths(prev, 1));
     };
 
     // Fetch leave data
     useEffect(() => {
       const fetchLeaveData = async () => {
         try {
-          // First, get the leave applications
-          const { data: leaves, error: leavesError } = await supabase
+          // Get all leaves for the current month (for calendar display)
+          const { data: allLeaves, error: allLeavesError } = await supabase
             .from('leave_applied_users')
             .select(`
               id,
@@ -151,21 +215,51 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
               leave_type_id
             `)
             .gte('end_date', format(startOfMonth(currentDate), 'yyyy-MM-dd'))
-            .lte('start_date', format(endOfMonth(currentDate), 'yyyy-MM-dd'))
-            .in('status', ['approved', 'pending']);
+            .lte('start_date', format(endOfMonth(currentDate), 'yyyy-MM-dd'));
 
-          if (leavesError) {
-            console.error('Error fetching leave data:', leavesError);
+          // Get user's own leaves (including pending)
+          let userLeavesQuery = null;
+          if (currentUserId) {
+            userLeavesQuery = await supabase
+              .from('leave_applied_users')
+              .select(`
+                id,
+                user_id,
+                start_date,
+                end_date,
+                reason,
+                status,
+                is_half_day,
+                leave_time_start,
+                leave_time_end,
+                leave_type_id
+              `)
+              .eq('user_id', currentUserId)
+              .gte('end_date', format(startOfMonth(currentDate), 'yyyy-MM-dd'))
+              .lte('start_date', format(endOfMonth(currentDate), 'yyyy-MM-dd'))
+              .in('status', ['approved', 'pending']);
+          }
+
+          if (allLeavesError) {
+            console.error('Error fetching leave data:', allLeavesError);
             return;
           }
 
-          if (!leaves || leaves.length === 0) {
+          if (userLeavesQuery?.error) {
+            console.error('Error fetching user leaves:', userLeavesQuery.error);
+          }
+
+          const allLeavesData = allLeaves || [];
+          const userLeavesData = userLeavesQuery?.data || [];
+
+          if (allLeavesData.length === 0) {
             setLeaveData([]);
+            setUserLeaves([]);
             return;
           }
 
           // Get user profiles
-          const userIds = [...new Set(leaves.map(leave => leave.user_id))];
+          const userIds = [...new Set(allLeavesData.map(leave => leave.user_id))];
           const { data: profiles, error: profilesError } = await supabase
             .from('profiles')
             .select('id, name, email')
@@ -176,7 +270,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
           }
 
           // Get leave types
-          const leaveTypeIds = [...new Set(leaves.map(leave => leave.leave_type_id).filter(Boolean))];
+          const leaveTypeIds = [...new Set(allLeavesData.map(leave => leave.leave_type_id).filter(Boolean))];
           const { data: leaveTypes, error: leaveTypesError } = await supabase
             .from('leave_types')
             .select('id, label')
@@ -186,8 +280,8 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
             console.error('Error fetching leave types:', leaveTypesError);
           }
 
-          // Transform the data
-          const transformedLeaves: LeaveInfo[] = leaves.map(leave => {
+          // Transform all leaves data
+          const transformedAllLeaves: LeaveInfo[] = allLeavesData.map(leave => {
             const profile = profiles?.find(p => p.id === leave.user_id);
             const leaveType = leaveTypes?.find(lt => lt.id === leave.leave_type_id);
             
@@ -206,7 +300,28 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
             };
           });
 
-          setLeaveData(transformedLeaves);
+          // Transform user leaves data
+          const transformedUserLeaves: LeaveInfo[] = userLeavesData.map(leave => {
+            const profile = profiles?.find(p => p.id === leave.user_id);
+            const leaveType = leaveTypes?.find(lt => lt.id === leave.leave_type_id);
+            
+            return {
+              id: leave.id,
+              user_name: profile?.name || 'Unknown User',
+              user_email: profile?.email || '',
+              leave_type: leaveType?.label || 'Unknown',
+              reason: leave.reason || '',
+              start_date: leave.start_date,
+              end_date: leave.end_date,
+              status: leave.status || 'pending',
+              is_half_day: leave.is_half_day || false,
+              leave_time_start: leave.leave_time_start,
+              leave_time_end: leave.leave_time_end,
+            };
+          });
+
+          setLeaveData(transformedAllLeaves);
+          setUserLeaves(transformedUserLeaves);
         } catch (error) {
           console.error('Error in fetchLeaveData:', error);
         } finally {
@@ -215,7 +330,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
       };
 
       fetchLeaveData();
-    }, [currentDate]);
+    }, [currentDate, currentUserId]);
 
     // Generate calendar days
     const days = useMemo(() => {
@@ -248,7 +363,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
         const isCurrentMonth = date.getMonth() === currentDate.getMonth();
         const isWeekend = getDay(date) === 0 || getDay(date) === 6;
         
-        // Find leaves for this date
+        // Find approved leaves for this date (for display count)
         const dayLeaves = leaveData.filter(leave => {
           const leaveStart = new Date(leave.start_date);
           const leaveEnd = new Date(leave.end_date);
@@ -307,15 +422,37 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
           <motion.div layout className="w-full max-w-lg">
             <motion.div key="calendar-view" className="flex w-full flex-col gap-4">
               <div className="flex w-full items-center justify-between">
-                <motion.h2 className="mb-2 text-4xl font-bold tracking-wider text-foreground">
-                  {format(currentDate, 'MMM')} <span className="opacity-50">{format(currentDate, 'yyyy')}</span>
-                </motion.h2>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      onClick={goToPreviousMonth}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </motion.button>
+                    <motion.h2 className="text-4xl font-bold tracking-wider text-foreground min-w-[200px] text-center">
+                      {format(currentDate, 'MMM')} <span className="opacity-50">{format(currentDate, 'yyyy')}</span>
+                    </motion.h2>
+                    <motion.button
+                      className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      onClick={goToNextMonth}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </motion.button>
+                  </div>
+                </div>
                 <motion.button
                   className="relative flex items-center gap-3 rounded-lg border border-border px-1.5 py-1 text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setMoreView(!moreView)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
-                  <Columns3 className="z-[2] w-4 h-4" />
-                  <Grid className="z-[2] w-4 h-4" />
+                  <Columns3 className={`z-[2] w-4 h-4 transition-opacity ${!moreView ? 'opacity-100' : 'opacity-50'}`} />
+                  <Grid className={`z-[2] w-4 h-4 transition-opacity ${moreView ? 'opacity-100' : 'opacity-50'}`} />
                   <div
                     className="absolute left-0 top-0 h-[85%] w-7 rounded-md bg-primary transition-transform duration-300"
                     style={{
@@ -339,7 +476,13 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
                 ))}
               </div>
               
-              <CalendarGrid days={days} onHover={handleDayHover} onDayClick={handleDayClick} />
+              <CalendarGrid 
+                days={days} 
+                onHover={handleDayHover} 
+                onDayClick={handleDayClick}
+                userLeaves={userLeaves}
+                currentUserId={currentUserId}
+              />
               
               {hoveredDay && hoveredLeaveCount > 0 && (
                 <motion.div
@@ -348,9 +491,15 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
                   exit={{ opacity: 0, y: 10 }}
                   className="text-sm text-muted-foreground text-center"
                 >
-                  {hoveredLeaveCount} user{hoveredLeaveCount > 1 ? 's' : ''} on leave on {hoveredDay}
+                  {hoveredLeaveCount} user{hoveredLeaveCount > 1 ? 's' : ''} on approved leave on {hoveredDay}
                 </motion.div>
               )}
+              
+              <div className="text-xs text-muted-foreground text-center">
+                <p>• Gray dates are past days (cannot apply)</p>
+                <p>• Orange bordered dates have your existing leaves</p>
+                <p>• Click on available dates to apply for leave</p>
+              </div>
             </motion.div>
           </motion.div>
           

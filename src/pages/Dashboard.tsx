@@ -617,6 +617,7 @@ const Dashboard = () => {
             <LeaveCalendar 
               onDayClick={(date) => openLeaveDialog(date)}
               className="w-full"
+              currentUserId={user?.id}
             />
           </CardContent>
         </Card>
