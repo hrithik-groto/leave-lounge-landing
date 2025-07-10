@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Clock, User, Tag, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { LeaveInfo } from './leave-calendar';
@@ -40,19 +39,14 @@ const LeaveTooltip: React.FC<LeaveTooltipProps> = ({
   };
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.8, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.8, y: 10 }}
-        transition={{ duration: 0.2 }}
-        className="fixed z-50 bg-white border border-border rounded-lg shadow-lg p-4 max-w-sm w-80"
-        style={{
-          left: position.x,
-          top: position.y - 10,
-          transform: 'translateX(-50%)'
-        }}
-      >
+    <div
+      className="fixed z-50 bg-white border border-border rounded-lg shadow-lg p-4 max-w-sm w-80 animate-fade-in"
+      style={{
+        left: position.x,
+        top: position.y - 10,
+        transform: 'translateX(-50%)'
+      }}
+    >
         <div className="space-y-3">
           <div className="flex items-center space-x-2 text-sm font-medium text-foreground border-b pb-2">
             <Calendar className="w-4 h-4" />
@@ -66,14 +60,12 @@ const LeaveTooltip: React.FC<LeaveTooltipProps> = ({
                 Approved Leaves ({approvedLeaves.length})
               </h4>
               <div className="space-y-2">
-                {approvedLeaves.map((leave, index) => (
-                  <motion.div
-                    key={`approved-${leave.id}-${index}`}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-green-50 border border-green-200 rounded-md p-2"
-                  >
+                 {approvedLeaves.map((leave, index) => (
+                   <div
+                     key={`approved-${leave.id}-${index}`}
+                     className="bg-green-50 border border-green-200 rounded-md p-2 animate-fade-in"
+                     style={{ animationDelay: `${index * 50}ms` }}
+                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2 min-w-0 flex-1">
                         <User className="w-3 h-3 text-green-600 flex-shrink-0" />
@@ -109,7 +101,7 @@ const LeaveTooltip: React.FC<LeaveTooltipProps> = ({
                         </p>
                       </div>
                     )}
-                  </motion.div>
+                   </div>
                 ))}
               </div>
             </div>
@@ -122,14 +114,12 @@ const LeaveTooltip: React.FC<LeaveTooltipProps> = ({
                 Pending Approval ({pendingLeaves.length})
               </h4>
               <div className="space-y-2">
-                {pendingLeaves.map((leave, index) => (
-                  <motion.div
-                    key={`pending-${leave.id}-${index}`}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-orange-50 border border-orange-200 rounded-md p-2"
-                  >
+                 {pendingLeaves.map((leave, index) => (
+                   <div
+                     key={`pending-${leave.id}-${index}`}
+                     className="bg-orange-50 border border-orange-200 rounded-md p-2 animate-fade-in"
+                     style={{ animationDelay: `${index * 50}ms` }}
+                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2 min-w-0 flex-1">
                         <User className="w-3 h-3 text-orange-600 flex-shrink-0" />
@@ -165,7 +155,7 @@ const LeaveTooltip: React.FC<LeaveTooltipProps> = ({
                         </p>
                       </div>
                     )}
-                  </motion.div>
+                   </div>
                 ))}
               </div>
             </div>
@@ -175,8 +165,7 @@ const LeaveTooltip: React.FC<LeaveTooltipProps> = ({
             {approvedLeaves.length + pendingLeaves.length} user{approvedLeaves.length + pendingLeaves.length !== 1 ? 's' : ''} on leave
           </div>
         </div>
-      </motion.div>
-    </AnimatePresence>
+    </div>
   );
 };
 
