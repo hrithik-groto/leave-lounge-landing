@@ -15,14 +15,22 @@ import { UserButton } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import NotificationBell from '@/components/NotificationBell';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import LeaveCalendar from '@/components/ui/leave-calendar';
+import { useLeaveApplication } from '@/hooks/useLeaveApplication';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const { 
+    isDialogOpen, 
+    selectedDate, 
+    endDate, 
+    setSelectedDate, 
+    setEndDate, 
+    openLeaveDialog, 
+    closeLeaveDialog 
+  } = useLeaveApplication();
   const [reason, setReason] = useState('');
   const [isApplyingLeave, setIsApplyingLeave] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [leaveApplications, setLeaveApplications] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState(20);
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -183,7 +191,7 @@ const Dashboard = () => {
       setSelectedDate(undefined);
       setEndDate(undefined);
       setReason('');
-      setIsDialogOpen(false);
+      closeLeaveDialog();
       fetchLeaveApplications();
       calculateLeaveBalance();
 
@@ -490,7 +498,7 @@ const Dashboard = () => {
                 Calendar View
               </CardTitle>
               
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <Dialog open={isDialogOpen} onOpenChange={(open) => open ? openLeaveDialog() : closeLeaveDialog()}>
                 <DialogTrigger asChild>
                   <Button 
                     className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white"
@@ -606,21 +614,9 @@ const Dashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              className="rounded-md border w-full"
-              classNames={{
-                months: "flex w-full flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 flex-1",
-                month: "space-y-4 w-full flex flex-col",
-                table: "w-full h-full border-collapse space-y-1",
-                head_row: "flex w-full",
-                head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1",
-                row: "flex w-full mt-2",
-                cell: "h-14 w-full text-center text-sm p-0 relative flex-1",
-                day: "h-14 w-full p-0 font-normal hover:bg-accent hover:text-accent-foreground flex items-center justify-center"
-              }}
+            <LeaveCalendar 
+              onDayClick={(date) => openLeaveDialog(date)}
+              className="w-full"
             />
           </CardContent>
         </Card>
