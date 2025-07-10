@@ -14,6 +14,7 @@ import { format, differenceInDays } from 'date-fns';
 import { UserButton } from '@clerk/clerk-react';
 import NotificationBell from '@/components/NotificationBell';
 import SlackIntegration from '@/components/SlackIntegration';
+import LeaveApplicationsList from '@/components/LeaveApplicationsList';
 
 const AdminDashboard = () => {
   const { user, isLoaded } = useUser();
@@ -27,7 +28,7 @@ const AdminDashboard = () => {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [additionalLeaves, setAdditionalLeaves] = useState('');
   const [isAddingLeaves, setIsAddingLeaves] = useState(false);
-  const [processingApplications, setProcessingApplications] = useState(new Set());
+  const [processingApplications, setProcessingApplications] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -154,7 +155,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleApproveLeave = async (applicationId, userId) => {
+  const handleApproveLeave = async (applicationId: string, userId: string) => {
     console.log('Approving leave application:', applicationId, 'for user:', userId);
     setProcessingApplications(prev => new Set(prev).add(applicationId));
     
@@ -241,7 +242,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleRejectLeave = async (applicationId, userId) => {
+  const handleRejectLeave = async (applicationId: string, userId: string) => {
     console.log('Rejecting leave application:', applicationId, 'for user:', userId);
     setProcessingApplications(prev => new Set(prev).add(applicationId));
     
@@ -604,102 +605,16 @@ const AdminDashboard = () => {
             </Card>
           )}
 
-          {/* Leave Applications Table */}
-          <Card className="hover:shadow-xl transition-all duration-300 bg-white">
-            <CardHeader>
-              <CardTitle>Leave Applications Management</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Leave Dates</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Applied Date</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {leaveApplications.map((application) => (
-                    <TableRow key={application.id} className="hover:bg-gray-50 transition-colors duration-200">
-                      <TableCell className="font-medium">
-                        {application.profiles?.name || 'Unknown User'}
-                      </TableCell>
-                      <TableCell>{application.profiles?.email || 'No email'}</TableCell>
-                      <TableCell>
-                        {format(new Date(application.start_date), 'MMM dd')} - {format(new Date(application.end_date), 'MMM dd, yyyy')}
-                      </TableCell>
-                      <TableCell>
-                        {differenceInDays(new Date(application.end_date), new Date(application.start_date)) + 1} day(s)
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">{application.reason || 'No reason provided'}</TableCell>
-                      <TableCell>
-                        <Badge variant={
-                          application.status === 'approved' ? 'default' :
-                          application.status === 'rejected' ? 'destructive' :
-                          'secondary'
-                        }>
-                          {application.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{format(new Date(application.applied_at), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>
-                        {application.status === 'pending' && (
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleApproveLeave(application.id, application.user_id)}
-                              disabled={processingApplications.has(application.id)}
-                              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-md hover:shadow-lg"
-                            >
-                              {processingApplications.has(application.id) ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              ) : (
-                                <>
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Approve
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleRejectLeave(application.id, application.user_id)}
-                              disabled={processingApplications.has(application.id)}
-                              className="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 transition-all duration-300 shadow-md hover:shadow-lg"
-                            >
-                              {processingApplications.has(application.id) ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              ) : (
-                                <>
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Reject
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        )}
-                        {application.status !== 'pending' && (
-                          <span className="text-gray-400 text-sm">
-                            {application.status === 'approved' ? 'Approved' : 'Rejected'}
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {leaveApplications.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">No leave applications found</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Leave Applications with Pagination */}
+          <LeaveApplicationsList
+            applications={leaveApplications}
+            title="Leave Applications Management"
+            showUserName={true}
+            isAdmin={true}
+            onApprove={handleApproveLeave}
+            onReject={handleRejectLeave}
+            processingApplications={processingApplications}
+          />
         </div>
       </div>
     </div>

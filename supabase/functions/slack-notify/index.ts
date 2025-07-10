@@ -186,29 +186,25 @@ serve(async (req) => {
 
     console.log('Sending message to Slack...');
 
-    // Only send to admin for new applications, or to user for approvals/rejections
-    if (!isApprovalUpdate) {
-      // Send to webhook for new applications (admin notifications)
-      console.log('Sending new application notification to admin via webhook');
-      
-      // Send to webhook channel for admin notifications
-      const slackResponse = await fetch(slackWebhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(slackMessage),
-      });
+    // Send to Slack channel (webhook)
+    const slackResponse = await fetch(slackWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(slackMessage),
+    });
 
-      if (!slackResponse.ok) {
-        const errorText = await slackResponse.text();
-        console.error('Slack webhook error:', errorText);
-        throw new Error(`Slack webhook error: ${slackResponse.status} - ${errorText}`);
-      }
+    if (!slackResponse.ok) {
+      const errorText = await slackResponse.text();
+      console.error('Slack API error:', errorText);
+      throw new Error(`Slack API error: ${slackResponse.status} - ${errorText}`);
+    }
 
-      console.log('Successfully sent Slack channel notification');
-    } else if (sendToUser || isApprovalUpdate) {
-      // Send to the user who applied for leave (for approval/rejection updates)
+    console.log('Successfully sent Slack channel notification');
+
+    // Send individual DM if requested and user has Slack integration
+    if (sendToUser) {
       try {
         const { data: slackIntegration } = await supabaseClient
           .from('user_slack_integrations')
@@ -216,7 +212,7 @@ serve(async (req) => {
           .eq('user_id', leaveApplication.user_id)
           .single();
 
-        if (slackIntegration?.slack_user_id) {
+        if (slackIntegration?.access_token) {
           const botToken = Deno.env.get('SLACK_BOT_TOKEN');
           if (botToken) {
             // Send DM to user
@@ -233,18 +229,16 @@ serve(async (req) => {
             });
 
             if (dmResponse.ok) {
-              console.log('Successfully sent Slack notification to user');
+              console.log('Successfully sent individual Slack DM');
             } else {
               const dmError = await dmResponse.text();
-              console.error('Failed to send user notification:', dmError);
+              console.error('Failed to send individual DM:', dmError);
             }
           }
-        } else {
-          console.log('User does not have Slack integration set up');
         }
-      } catch (userError) {
-        console.error('Error sending user notification:', userError);
-        // Don't fail the main request if user DM fails
+      } catch (dmError) {
+        console.error('Error sending individual DM:', dmError);
+        // Don't fail the main request if DM fails
       }
     }
 
