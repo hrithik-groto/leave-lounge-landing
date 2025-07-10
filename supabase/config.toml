@@ -57,3 +57,6 @@ verify_jwt = false
 
 [functions.slack-oauth]
 verify_jwt = false
+
+[functions.slack-verify]
+verify_jwt = false

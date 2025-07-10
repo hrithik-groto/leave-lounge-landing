@@ -8,27 +8,109 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Add detailed logging
+  console.log('=== SLACK COMMAND REQUEST START ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Headers:', Object.fromEntries(req.headers.entries()));
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Test endpoint - return simple response for GET requests
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ 
+        status: 'ok', 
+        message: 'Slack Commands endpoint is working',
+        timestamp: new Date().toISOString()
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200 
+      }
+    );
+  }
+
+  // Only handle POST requests from here
+  if (req.method !== 'POST') {
+    console.log('Non-POST request received:', req.method);
+    return new Response('Method not allowed', { 
+      status: 405,
+      headers: corsHeaders 
+    });
+  }
+
   try {
+    // First check if this is a URL verification challenge
+    const contentType = req.headers.get('content-type') || '';
+    console.log('Content-Type:', contentType);
+    
+    if (contentType.includes('application/json')) {
+      // Handle JSON payload (URL verification)
+      const body = await req.text();
+      console.log('Raw JSON body:', body);
+      
+      try {
+        const jsonData = JSON.parse(body);
+        if (jsonData.type === 'url_verification') {
+          console.log('URL verification challenge:', jsonData.challenge);
+          return new Response(jsonData.challenge, {
+            headers: { 'Content-Type': 'text/plain' },
+            status: 200
+          });
+        }
+      } catch (e) {
+        console.log('Not JSON verification challenge');
+      }
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     // Parse the form data from Slack
-    const formData = await req.formData();
+    let formData;
+    try {
+      formData = await req.formData();
+      console.log('✅ Successfully parsed FormData');
+    } catch (parseError) {
+      console.error('❌ Failed to parse FormData:', parseError);
+      return new Response('Invalid form data', { 
+        status: 400,
+        headers: corsHeaders 
+      });
+    }
+
     const command = formData.get('command');
     const userId = formData.get('user_id');
     const teamId = formData.get('team_id');
     const text = formData.get('text');
+    const token = formData.get('token');
     
-    console.log('Received Slack command:', { command, userId, teamId, text });
+    console.log('📝 Received Slack command data:', { 
+      command, 
+      userId, 
+      teamId, 
+      text,
+      token: token ? 'present' : 'missing'
+    });
+    console.log('📋 All FormData entries:', Array.from(formData.entries()));
 
     if (command !== '/leaves') {
-      return new Response('Unknown command', { status: 400 });
+      console.log('❌ Unknown command received:', command);
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: `❌ Unknown command: ${command}. Expected: /leaves`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      );
     }
 
     // Find the user in our database based on Slack user ID
@@ -51,159 +133,216 @@ serve(async (req) => {
       );
     }
 
-    // Get leave types for the modal
-    const { data: leaveTypes, error: leaveTypesError } = await supabaseClient
-      .from('leave_types')
-      .select('id, label, color')
-      .eq('is_active', true);
+    // Get user profile for personalized greeting and check if admin
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('name')
+      .eq('id', slackIntegration.user_id)
+      .single();
 
-    if (leaveTypesError) {
-      console.error('Error fetching leave types:', leaveTypesError);
-    }
+    const userName = profile?.name || 'there';
+    const isAdmin = slackIntegration.user_id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
 
-    // Create and send the modal to Slack
-    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-    if (!botToken) {
-      return new Response(
-        JSON.stringify({
-          response_type: 'ephemeral',
-          text: '❌ Slack bot token not configured. Please contact your administrator.',
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // Create different message blocks based on user role
+    let messageBlocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `Hi ${userName}! ${isAdmin ? '👑 *Admin Dashboard* -' : 'Would you like to:'}`
         }
-      );
-    }
+      }
+    ];
 
-    const modal = {
-      type: 'modal',
-      callback_id: 'leave_application_modal',
-      title: {
-        type: 'plain_text',
-        text: '🏖️ Apply for Leave',
-      },
-      submit: {
-        type: 'plain_text',
-        text: 'Submit',
-      },
-      close: {
-        type: 'plain_text',
-        text: 'Cancel',
-      },
-      private_metadata: slackIntegration.user_id, // Store user_id for later use
-      blocks: [
+    console.log('🔧 DEBUG: Creating buttons for user:', userId, 'isAdmin:', isAdmin);
+
+    if (isAdmin) {
+      // Admin-specific options
+      messageBlocks = messageBlocks.concat([
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📋 Review Leave Requests',
+                emoji: true
+              },
+              action_id: 'admin_review_requests',
+              value: slackIntegration.user_id,
+              style: 'primary'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '👥 Team Leave Overview',
+                emoji: true
+              },
+              action_id: 'admin_team_overview',
+              value: slackIntegration.user_id
+            }
+          ]
+        },
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: '✨ *Apply for your leave directly from Slack!*',
-          },
-        },
-        {
-          type: 'input',
-          block_id: 'leave_type',
-          element: {
-            type: 'static_select',
-            action_id: 'leave_type_select',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select leave type',
-            },
-            options: (leaveTypes || []).map(type => ({
-              text: {
-                type: 'plain_text',
-                text: type.label,
-              },
-              value: type.id,
-            })),
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Leave Type',
-          },
-        },
-        {
-          type: 'input',
-          block_id: 'start_date',
-          element: {
-            type: 'datepicker',
-            action_id: 'start_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select start date',
-            },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Start Date',
-          },
-        },
-        {
-          type: 'input',
-          block_id: 'end_date',
-          element: {
-            type: 'datepicker',
-            action_id: 'end_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select end date',
-            },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'End Date',
-          },
-        },
-        {
-          type: 'input',
-          block_id: 'reason',
-          element: {
-            type: 'plain_text_input',
-            action_id: 'reason_input',
-            multiline: true,
-            placeholder: {
-              type: 'plain_text',
-              text: 'Enter reason for leave (optional)',
-            },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Reason',
-          },
-          optional: true,
-        },
-      ],
-    };
-
-    // Open the modal using Slack API
-    const modalResponse = await fetch('https://slack.com/api/views.open', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        trigger_id: formData.get('trigger_id'),
-        view: modal,
-      }),
-    });
-
-    if (!modalResponse.ok) {
-      const modalError = await modalResponse.text();
-      console.error('Error opening modal:', modalError);
-      return new Response(
-        JSON.stringify({
-          response_type: 'ephemeral',
-          text: '❌ Failed to open leave application form. Please try again.',
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            text: '*Personal Actions*'
+          }
         }
-      );
+      ]);
     }
 
-    // Return empty response since modal was opened
-    return new Response('', { status: 200 });
+    // Common user options
+    messageBlocks = messageBlocks.concat([
+      {
+        type: 'actions',
+        elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '🏖️ Apply leave',
+                emoji: true
+              },
+              action_id: 'apply_leave',
+              value: slackIntegration.user_id,
+              style: 'primary'
+            },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📊 Check leave balance',
+              emoji: true
+            },
+            action_id: 'check_balance',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '👥 See teammates on leave',
+              emoji: true
+            },
+            action_id: 'teammates_leave',
+            value: slackIntegration.user_id
+          }
+        ]
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*You can also*'
+        }
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📋 View/Cancel upcoming leaves',
+              emoji: true
+            },
+            action_id: 'view_upcoming',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🎉 See upcoming holidays',
+              emoji: true
+            },
+            action_id: 'view_holidays',
+            value: slackIntegration.user_id
+          }
+        ]
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📖 See leave policy',
+              emoji: true
+            },
+            action_id: 'leave_policy',
+            value: slackIntegration.user_id
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '✅ Clear pending requests',
+              emoji: true
+            },
+            action_id: 'clear_pending',
+            value: slackIntegration.user_id
+          }
+        ]
+      },
+      {
+        type: 'divider'
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '🤔 *Wondering what more you can do with Timeloo?*'
+        },
+        accessory: {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '⭐ View more',
+            emoji: true
+          },
+          action_id: 'view_more',
+          value: slackIntegration.user_id
+        }
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '💬 Talk to us',
+              emoji: true
+            },
+            action_id: 'talk_to_us',
+            value: slackIntegration.user_id
+          }
+        ]
+      }
+    ]);
+
+    // Create interactive message with buttons
+    const interactiveMessage = {
+      response_type: 'ephemeral',
+      blocks: messageBlocks
+    };
+
+    console.log('🚀 Sending interactive message with blocks:', JSON.stringify(messageBlocks, null, 2));
+    console.log('🔧 DEBUG: Full interactive message:', JSON.stringify(interactiveMessage, null, 2));
+
+    return new Response(
+      JSON.stringify(interactiveMessage),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
 
   } catch (error) {
     console.error('Error in slack-commands function:', error);
