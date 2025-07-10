@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Columns3, Grid, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, addMonths, subMonths, isAfter, isBefore, startOfDay } from 'date-fns';
@@ -46,7 +45,7 @@ const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLea
   const canClick = day.isCurrentMonth && !isPastDate && !userHasLeaveOnDate && !isDisabled;
   
   return (
-    <motion.div
+    <div
       className={`relative flex items-center justify-center py-1 transition-all duration-200 ${classNames} ${
         canClick ? 'cursor-pointer hover:bg-accent/50' : isPastDate ? 'cursor-not-allowed opacity-50 bg-muted/50' : 'cursor-default'
       } ${userHasLeaveOnDate ? 'ring-2 ring-orange-400 bg-orange-50 dark:bg-orange-950/20' : ''}`}
@@ -62,7 +61,7 @@ const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLea
       onClick={() => canClick && onClick(day.date)}
       id={`day-${day.day}`}
     >
-      <motion.div className="flex flex-col items-center justify-center">
+      <div className="flex flex-col items-center justify-center">
         <span className={`text-sm font-medium ${
           day.isCurrentMonth 
             ? isPastDate 
@@ -75,36 +74,30 @@ const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLea
         {userHasLeaveOnDate && (
           <span className="text-xs text-orange-600 font-medium">Applied</span>
         )}
-      </motion.div>
+      </div>
       
       {totalLeaveCount > 0 && (
-        <motion.div
-          className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-primary p-1 text-[10px] font-bold text-primary-foreground shadow-sm"
-          layoutId={`day-${day.day}-leave-count`}
+        <div
+          className={`absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-primary p-1 text-[10px] font-bold text-primary-foreground shadow-sm transition-transform hover:scale-110 ${
+            isHovered ? 'scale-125' : ''
+          }`}
           style={{ borderRadius: 999 }}
-          whileHover={{ scale: 1.1 }}
         >
           {totalLeaveCount}
-        </motion.div>
+        </div>
       )}
 
-      <AnimatePresence>
-        {totalLeaveCount > 0 && isHovered && (
-          <div className="absolute inset-0 flex size-full items-center justify-center">
-            <motion.div
-              className="flex size-10 items-center justify-center bg-primary p-1 text-xs font-bold text-primary-foreground shadow-md"
-              layoutId={`day-${day.day}-leave-count`}
-              style={{ borderRadius: 999 }}
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.8 }}
-            >
-              {totalLeaveCount}
-            </motion.div>
+      {totalLeaveCount > 0 && isHovered && (
+        <div className="absolute inset-0 flex size-full items-center justify-center">
+          <div
+            className="flex size-10 items-center justify-center bg-primary p-1 text-xs font-bold text-primary-foreground shadow-md animate-scale-in"
+            style={{ borderRadius: 999 }}
+          >
+            {totalLeaveCount}
           </div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -553,182 +546,151 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
     }
 
     return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          ref={ref}
-          className={`relative mx-auto my-10 flex w-full flex-col items-center justify-center gap-8 lg:flex-row ${className}`}
-          {...props}
-        >
-          <motion.div layout className="w-full max-w-lg">
-            <motion.div key="calendar-view" className="flex w-full flex-col gap-4">
-              <div className="flex w-full items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <motion.button
-                      className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      onClick={goToPreviousMonth}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </motion.button>
-                    <motion.h2 className="text-4xl font-bold tracking-wider text-foreground min-w-[200px] text-center">
-                      {format(currentDate, 'MMM')} <span className="opacity-50">{format(currentDate, 'yyyy')}</span>
-                    </motion.h2>
-                    <motion.button
-                      className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      onClick={goToNextMonth}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </motion.button>
-                  </div>
-                </div>
-                <motion.button
-                  className="relative flex items-center gap-3 rounded-lg border border-border px-1.5 py-1 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setMoreView(!moreView)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Columns3 className={`z-[2] w-4 h-4 transition-opacity ${!moreView ? 'opacity-100' : 'opacity-50'}`} />
-                  <Grid className={`z-[2] w-4 h-4 transition-opacity ${moreView ? 'opacity-100' : 'opacity-50'}`} />
-                  <div
-                    className="absolute left-0 top-0 h-[85%] w-7 rounded-md bg-primary transition-transform duration-300"
-                    style={{
-                      top: '50%',
-                      transform: moreView
-                        ? 'translateY(-50%) translateX(40px)'
-                        : 'translateY(-50%) translateX(4px)',
-                    }}
-                  />
-                </motion.button>
-              </div>
-              
-              <div className="grid grid-cols-7 gap-2">
-                {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => (
-                  <div
-                    key={day}
-                    className="rounded-xl bg-muted py-1 text-center text-xs text-muted-foreground font-medium"
+      <div
+        ref={ref}
+        className={`relative mx-auto my-10 flex w-full flex-col items-center justify-center gap-8 lg:flex-row ${className}`}
+        {...props}
+      >
+        <div className="w-full max-w-lg">
+          <div className="flex w-full flex-col gap-4">
+            <div className="flex w-full items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors hover:scale-105 active:scale-95"
+                    onClick={goToPreviousMonth}
                   >
-                    {day}
-                  </div>
-                ))}
-              </div>
-              
-              <CalendarGrid 
-                days={days} 
-                onHover={handleDayHover} 
-                onDayClick={handleDayClick}
-                userLeaves={userLeaves}
-                currentUserId={currentUserId}
-              />
-              
-              {hoveredDay && hoveredLeaveCount > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="text-sm text-muted-foreground text-center"
-                >
-                  {hoveredLeaveCount} user{hoveredLeaveCount > 1 ? 's' : ''} on approved leave on {hoveredDay}
-                </motion.div>
-              )}
-              
-              <div className="text-xs text-muted-foreground text-center">
-                <p>• Gray dates are past days (cannot apply)</p>
-                <p>• Orange bordered dates have your existing leaves</p>
-                <p>• Click on available dates to apply for leave</p>
-              </div>
-            </motion.div>
-          </motion.div>
-          
-          {moreView && (
-            <motion.div
-              className="w-full max-w-lg"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.3 }}
-            >
-              <motion.div key="more-view" className="mt-4 flex w-full flex-col gap-4">
-                <div className="flex w-full flex-col items-start justify-between">
-                  <motion.h2 className="mb-2 text-4xl font-bold tracking-wider text-foreground">
-                    Leave Applications
-                  </motion.h2>
-                  <p className="font-medium text-muted-foreground">
-                    See all leave applications for {format(currentDate, 'MMMM yyyy')}
-                  </p>
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <h2 className="text-4xl font-bold tracking-wider text-foreground min-w-[200px] text-center">
+                    {format(currentDate, 'MMM')} <span className="opacity-50">{format(currentDate, 'yyyy')}</span>
+                  </h2>
+                  <button
+                    className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors hover:scale-105 active:scale-95"
+                    onClick={goToNextMonth}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-                
-                <motion.div
-                  className="flex h-[620px] flex-col items-start justify-start overflow-hidden overflow-y-scroll rounded-xl border-2 border-border shadow-md bg-card"
-                  layout
+              </div>
+              <button
+                className="relative flex items-center gap-3 rounded-lg border border-border px-1.5 py-1 text-muted-foreground hover:text-foreground transition-colors hover:scale-102 active:scale-98"
+                onClick={() => setMoreView(!moreView)}
+              >
+                <Columns3 className={`z-[2] w-4 h-4 transition-opacity ${!moreView ? 'opacity-100' : 'opacity-50'}`} />
+                <Grid className={`z-[2] w-4 h-4 transition-opacity ${moreView ? 'opacity-100' : 'opacity-50'}`} />
+                <div
+                  className="absolute left-0 top-0 h-[85%] w-7 rounded-md bg-primary transition-transform duration-300"
+                  style={{
+                    top: '50%',
+                    transform: moreView
+                      ? 'translateY(-50%) translateX(40px)'
+                      : 'translateY(-50%) translateX(4px)',
+                  }}
+                />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-7 gap-2">
+              {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => (
+                <div
+                  key={day}
+                  className="rounded-xl bg-muted py-1 text-center text-xs text-muted-foreground font-medium"
                 >
-                  <AnimatePresence>
-                    {sortedLeaves.length === 0 ? (
-                      <div className="flex items-center justify-center w-full h-full text-muted-foreground">
-                        No leave applications found
-                      </div>
-                    ) : (
-                      sortedLeaves.map((leave, index) => (
-                        <motion.div
-                          key={leave.id}
-                          className="w-full border-b border-border py-0 last:border-b-0"
-                          layout
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{
-                            duration: 0.2,
-                            delay: index * 0.05,
-                          }}
-                        >
-                          <div className="p-3">
-                            <div className="mb-2 flex items-center justify-between">
-                              <span className="text-sm text-foreground font-medium">
-                                {format(new Date(leave.start_date), 'MMM dd')} - {format(new Date(leave.end_date), 'MMM dd')}
-                              </span>
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                leave.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                leave.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {leave.status}
-                              </span>
-                            </div>
-                            <h3 className="mb-1 text-lg font-semibold text-foreground">
-                              {leave.user_name}
-                            </h3>
-                            <p className="mb-1 text-sm text-muted-foreground">
-                              {leave.leave_type} • {leave.user_email}
-                            </p>
-                            {leave.reason && (
-                              <p className="text-sm text-muted-foreground italic">
-                                "{leave.reason}"
-                              </p>
-                            )}
-                            {leave.is_half_day && (
-                              <div className="flex items-center mt-2 text-primary">
-                                <CalendarIcon className="mr-1 h-4 w-4" />
-                                <span className="text-sm">
-                                  Half day {leave.leave_time_start && leave.leave_time_end 
-                                    ? `(${leave.leave_time_start} - ${leave.leave_time_end})`
-                                    : ''
-                                  }
-                                </span>
-                              </div>
-                            )}
+                  {day}
+                </div>
+              ))}
+            </div>
+            
+            <CalendarGrid 
+              days={days} 
+              onHover={handleDayHover} 
+              onDayClick={handleDayClick}
+              userLeaves={userLeaves}
+              currentUserId={currentUserId}
+            />
+            
+            {hoveredDay && hoveredLeaveCount > 0 && (
+              <div className="text-sm text-muted-foreground text-center animate-fade-in">
+                {hoveredLeaveCount} user{hoveredLeaveCount > 1 ? 's' : ''} on approved leave on {hoveredDay}
+              </div>
+            )}
+            
+            <div className="text-xs text-muted-foreground text-center">
+              <p>• Gray dates are past days (cannot apply)</p>
+              <p>• Orange bordered dates have your existing leaves</p>
+              <p>• Click on available dates to apply for leave</p>
+            </div>
+          </div>
+        </div>
+        
+        {moreView && (
+          <div className="w-full max-w-lg animate-fade-in">
+            <div className="mt-4 flex w-full flex-col gap-4">
+              <div className="flex w-full flex-col items-start justify-between">
+                <h2 className="mb-2 text-4xl font-bold tracking-wider text-foreground">
+                  Leave Applications
+                </h2>
+                <p className="font-medium text-muted-foreground">
+                  See all leave applications for {format(currentDate, 'MMMM yyyy')}
+                </p>
+              </div>
+              
+              <div className="flex h-[620px] flex-col items-start justify-start overflow-hidden overflow-y-scroll rounded-xl border-2 border-border shadow-md bg-card">
+                {sortedLeaves.length === 0 ? (
+                  <div className="flex items-center justify-center w-full h-full text-muted-foreground">
+                    No leave applications found
+                  </div>
+                ) : (
+                  sortedLeaves.map((leave, index) => (
+                    <div
+                      key={leave.id}
+                      className="w-full border-b border-border py-0 last:border-b-0 animate-fade-in"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <div className="p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-sm text-foreground font-medium">
+                            {format(new Date(leave.start_date), 'MMM dd')} - {format(new Date(leave.end_date), 'MMM dd')}
+                          </span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            leave.status === 'approved' ? 'bg-green-100 text-green-800' :
+                            leave.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {leave.status}
+                          </span>
+                        </div>
+                        <h3 className="mb-1 text-lg font-semibold text-foreground">
+                          {leave.user_name}
+                        </h3>
+                        <p className="mb-1 text-sm text-muted-foreground">
+                          {leave.leave_type} • {leave.user_email}
+                        </p>
+                        {leave.reason && (
+                          <p className="text-sm text-muted-foreground italic">
+                            "{leave.reason}"
+                          </p>
+                        )}
+                        {leave.is_half_day && (
+                          <div className="flex items-center mt-2 text-primary">
+                            <CalendarIcon className="mr-1 h-4 w-4" />
+                            <span className="text-sm">
+                              Half day {leave.leave_time_start && leave.leave_time_end 
+                                ? `(${leave.leave_time_start} - ${leave.leave_time_end})`
+                                : ''
+                              }
+                            </span>
                           </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              </motion.div>
-            </motion.div>
-          )}
-        </motion.div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Tooltip */}
         <LeaveTooltip
@@ -737,7 +699,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
           leaves={hoveredLeaves}
           date={hoveredDate}
         />
-      </AnimatePresence>
+      </div>
     );
   }
 );
