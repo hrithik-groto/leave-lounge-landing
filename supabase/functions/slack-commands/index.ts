@@ -51,15 +51,14 @@ serve(async (req) => {
       );
     }
 
-    // Get leave types for the modal
-    const { data: leaveTypes, error: leaveTypesError } = await supabaseClient
-      .from('leave_types')
-      .select('id, label, color')
-      .eq('is_active', true);
+    // Get user's name for personalization
+    const { data: userProfile } = await supabaseClient
+      .from('profiles')
+      .select('name')
+      .eq('id', slackIntegration.user_id)
+      .single();
 
-    if (leaveTypesError) {
-      console.error('Error fetching leave types:', leaveTypesError);
-    }
+    const userName = userProfile?.name || 'there';
 
     // Create and send the modal to Slack
     const botToken = Deno.env.get('SLACK_BOT_TOKEN');
@@ -75,20 +74,17 @@ serve(async (req) => {
       );
     }
 
+    // Main leave management modal
     const modal = {
       type: 'modal',
-      callback_id: 'leave_application_modal',
+      callback_id: 'leave_home_modal',
       title: {
         type: 'plain_text',
-        text: '🏖️ Apply for Leave',
-      },
-      submit: {
-        type: 'plain_text',
-        text: 'Submit',
+        text: 'Timeloo'
       },
       close: {
         type: 'plain_text',
-        text: 'Cancel',
+        text: 'Close'
       },
       private_metadata: slackIntegration.user_id, // Store user_id for later use
       blocks: [
@@ -96,83 +92,71 @@ serve(async (req) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: '✨ *Apply for your leave directly from Slack!*',
-          },
+            text: `Hi *${userName}*! What would you like to do today?`
+          }
         },
         {
-          type: 'input',
-          block_id: 'leave_type',
-          element: {
-            type: 'static_select',
-            action_id: 'leave_type_select',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select leave type',
-            },
-            options: (leaveTypes || []).map(type => ({
+          type: 'actions',
+          block_id: 'leave_actions',
+          elements: [
+            {
+              type: 'button',
               text: {
                 type: 'plain_text',
-                text: type.label,
+                text: '📝 Apply leave'
               },
-              value: type.id,
-            })),
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Leave Type',
-          },
+              action_id: 'apply_leave',
+              style: 'primary'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '👀 View/Cancel upcoming'
+              },
+              action_id: 'view_cancel'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '⚖️ Check balance'
+              },
+              action_id: 'check_balance'
+            }
+          ]
         },
         {
-          type: 'input',
-          block_id: 'start_date',
-          element: {
-            type: 'datepicker',
-            action_id: 'start_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select start date',
+          type: 'actions',
+          block_id: 'secondary_actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '👥 Teammates on leave'
+              },
+              action_id: 'teammates_on_leave'
             },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Start Date',
-          },
-        },
-        {
-          type: 'input',
-          block_id: 'end_date',
-          element: {
-            type: 'datepicker',
-            action_id: 'end_date_picker',
-            placeholder: {
-              type: 'plain_text',
-              text: 'Select end date',
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📋 See policy'
+              },
+              action_id: 'see_policy'
             },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'End Date',
-          },
-        },
-        {
-          type: 'input',
-          block_id: 'reason',
-          element: {
-            type: 'plain_text_input',
-            action_id: 'reason_input',
-            multiline: true,
-            placeholder: {
-              type: 'plain_text',
-              text: 'Enter reason for leave (optional)',
-            },
-          },
-          label: {
-            type: 'plain_text',
-            text: 'Reason',
-          },
-          optional: true,
-        },
-      ],
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '🎉 Upcoming holidays'
+              },
+              action_id: 'see_holidays'
+            }
+          ]
+        }
+      ]
     };
 
     // Open the modal using Slack API
