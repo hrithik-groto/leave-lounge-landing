@@ -26,6 +26,7 @@ serve(async (req) => {
     const text = formData.get('text');
     
     console.log('Received Slack command:', { command, userId, teamId, text });
+    console.log('Processing /leaves command for user:', userId);
 
     if (command !== '/leaves') {
       return new Response('Unknown command', { status: 400 });
@@ -74,7 +75,10 @@ serve(async (req) => {
       );
     }
 
-    // Main leave management modal
+    // Check if user is admin
+    const isAdmin = slackIntegration.user_id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+
+    // Main leave management modal - comprehensive version
     const modal = {
       type: 'modal',
       callback_id: 'leave_home_modal',
@@ -86,78 +90,174 @@ serve(async (req) => {
         type: 'plain_text',
         text: 'Close'
       },
-      private_metadata: slackIntegration.user_id, // Store user_id for later use
+      private_metadata: slackIntegration.user_id,
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `Hi *${userName}*! What would you like to do today?`
+            text: `Hi *${userName}*! ${isAdmin ? '👑 Admin Dashboard -' : ''}`
           }
-        },
-        {
-          type: 'actions',
-          block_id: 'leave_actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📝 Apply leave'
-              },
-              action_id: 'apply_leave',
-              style: 'primary'
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '👀 View/Cancel upcoming'
-              },
-              action_id: 'view_cancel'
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '⚖️ Check balance'
-              },
-              action_id: 'check_balance'
-            }
-          ]
-        },
-        {
-          type: 'actions',
-          block_id: 'secondary_actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '👥 Teammates on leave'
-              },
-              action_id: 'teammates_on_leave'
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📋 See policy'
-              },
-              action_id: 'see_policy'
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '🎉 Upcoming holidays'
-              },
-              action_id: 'see_holidays'
-            }
-          ]
         }
       ]
     };
+
+    // Add admin actions if user is admin
+    if (isAdmin) {
+      modal.blocks.push({
+        type: 'actions',
+        block_id: 'admin_actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📋 Review Leave Requests'
+            },
+            action_id: 'review_requests',
+            style: 'primary'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '👥 Team Leave Overview'
+            },
+            action_id: 'team_overview'
+          }
+        ]
+      });
+    }
+
+    // Personal Actions section
+    modal.blocks.push(
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Personal Actions*'
+        }
+      },
+      {
+        type: 'actions',
+        block_id: 'personal_actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🏖️ Apply leave'
+            },
+            action_id: 'apply_leave',
+            style: 'primary'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📊 Check leave balance'
+            },
+            action_id: 'check_balance'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '👥 See teammates on leave'
+            },
+            action_id: 'teammates_on_leave'
+          }
+        ]
+      }
+    );
+
+    // You can also section
+    modal.blocks.push(
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*You can also*'
+        }
+      },
+      {
+        type: 'actions',
+        block_id: 'additional_actions_1',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📅 View/Cancel upcoming leaves'
+            },
+            action_id: 'view_cancel'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🎉 See upcoming holidays'
+            },
+            action_id: 'see_holidays'
+          }
+        ]
+      },
+      {
+        type: 'actions',
+        block_id: 'additional_actions_2',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📋 See leave policy'
+            },
+            action_id: 'see_policy'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '✅ Clear pending requests'
+            },
+            action_id: 'clear_pending'
+          }
+        ]
+      }
+    );
+
+    // Bottom section
+    modal.blocks.push(
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '🤔 *Wondering what more you can do with Timeloo?*'
+        },
+        accessory: {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '⭐ View more'
+          },
+          action_id: 'view_more'
+        }
+      },
+      {
+        type: 'actions',
+        block_id: 'bottom_actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '💬 Talk to us'
+            },
+            action_id: 'talk_to_us'
+          }
+        ]
+      }
+    );
 
     // Open the modal using Slack API
     const modalResponse = await fetch('https://slack.com/api/views.open', {

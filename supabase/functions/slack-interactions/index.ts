@@ -202,16 +202,21 @@ serve(async (req) => {
         return new Response('', { status: 200 });
       }
 
-      // Handle other button actions with placeholder responses
+      // Handle other button actions with more comprehensive responses
       const actionResponses = {
-        'view_cancel': '👀 Your upcoming leaves will be shown here.',
-        'check_balance': '⚖️ Your leave balance will be displayed here.',
-        'teammates_on_leave': '👥 Your teammates on leave will be listed here.',
-        'see_policy': '📋 Leave policy information will be shown here.',
-        'see_holidays': '🎉 Upcoming holidays will be displayed here.'
+        'review_requests': '📋 Admin: You can review all pending leave requests here.',
+        'team_overview': '👥 Admin: Team leave overview will be displayed here.',
+        'view_cancel': '📅 Your upcoming leaves and cancellation options will be shown here.',
+        'check_balance': '📊 Your current leave balance and usage will be displayed here.',
+        'teammates_on_leave': '👥 Your teammates currently on leave will be listed here.',
+        'see_policy': '📋 Complete leave policy information will be shown here.',
+        'see_holidays': '🎉 Upcoming company holidays will be displayed here.',
+        'clear_pending': '✅ Clear all your pending leave requests feature coming soon.',
+        'view_more': '⭐ More Timeloo features and options will be available here.',
+        'talk_to_us': '💬 Contact support and feedback options coming soon.'
       };
 
-      const responseText = actionResponses[action.action_id] || 'Feature coming soon!';
+      const responseText = actionResponses[action.action_id] || 'Feature coming soon! 🚀';
       
       return new Response(
         JSON.stringify({
