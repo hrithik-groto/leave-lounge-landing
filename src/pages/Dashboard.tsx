@@ -17,6 +17,7 @@ import NotificationBell from '@/components/NotificationBell';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import LeaveCalendar from '@/components/ui/leave-calendar';
 import { useLeaveApplication } from '@/hooks/useLeaveApplication';
+import { useLeaveNotifications } from '@/hooks/useLeaveNotifications';
 
 const Dashboard = () => {
   const { user, isLoaded } = useUser();
@@ -39,6 +40,15 @@ const Dashboard = () => {
 
   // Check if current user is admin
   const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+
+  // Enable real-time leave notifications
+  useLeaveNotifications({
+    userId: user?.id,
+    onLeaveUpdated: () => {
+      fetchLeaveApplications();
+      calculateLeaveBalance();
+    },
+  });
 
   useEffect(() => {
     if (user && isLoaded) {
@@ -182,6 +192,32 @@ const Dashboard = () => {
           message: `${user.fullName || user.firstName} has applied for leave from ${format(selectedDate, 'MMM dd')} to ${format(endDate, 'MMM dd, yyyy')} (${leaveDays} days)`,
           type: 'info'
         });
+
+      // Send Slack notification to admin
+      try {
+        await supabase.functions.invoke('slack-notify', {
+          body: {
+            leaveApplication: {
+              user_id: user.id,
+              start_date: format(selectedDate, 'yyyy-MM-dd'),
+              end_date: format(endDate, 'yyyy-MM-dd'),
+              reason: reason || 'No reason provided',
+              status: 'pending',
+              applied_at: new Date().toISOString(),
+              leave_type_id: null, // Default leave type
+              is_half_day: false,
+              leave_time_start: null,
+              leave_time_end: null,
+            },
+            isTest: false,
+            isApprovalUpdate: false,
+            sendToUser: false,
+          },
+        });
+      } catch (slackError) {
+        console.error('Failed to send Slack notification:', slackError);
+        // Don't fail the leave application if Slack fails
+      }
 
       toast({
         title: "Success",

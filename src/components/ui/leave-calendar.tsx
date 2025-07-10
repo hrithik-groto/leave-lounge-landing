@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Columns3, Grid, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, addMonths, subMonths, isAfter, isBefore, startOfDay } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import LeaveTooltip from './leave-tooltip';
 
 export type LeaveInfo = {
   id: string;
@@ -31,7 +32,7 @@ export type DayType = {
 interface DayProps {
   classNames: string;
   day: DayType;
-  onHover: (day: string | null, leaveCount: number) => void;
+  onHover: (day: string | null, leaveCount: number, leaves: LeaveInfo[], date: Date | null) => void;
   onClick: (date: Date) => void;
   userHasLeaveOnDate?: boolean;
   isDisabled?: boolean;
@@ -40,31 +41,34 @@ interface DayProps {
 const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLeaveOnDate, isDisabled }) => {
   const [isHovered, setIsHovered] = useState(false);
   const approvedLeaveCount = day.leaveInfo?.filter(leave => leave.status === 'approved').length || 0;
+  const totalLeaveCount = day.leaveInfo?.length || 0;
   const isPastDate = isBefore(day.date, startOfDay(new Date()));
   const canClick = day.isCurrentMonth && !isPastDate && !userHasLeaveOnDate && !isDisabled;
   
   return (
     <motion.div
       className={`relative flex items-center justify-center py-1 transition-all duration-200 ${classNames} ${
-        canClick ? 'cursor-pointer hover:bg-accent/50' : 'cursor-not-allowed opacity-50'
-      } ${userHasLeaveOnDate ? 'ring-2 ring-orange-400 bg-orange-50' : ''} ${
-        isPastDate ? 'bg-muted/30' : ''
-      }`}
+        canClick ? 'cursor-pointer hover:bg-accent/50' : isPastDate ? 'cursor-not-allowed opacity-50 bg-muted/50' : 'cursor-default'
+      } ${userHasLeaveOnDate ? 'ring-2 ring-orange-400 bg-orange-50 dark:bg-orange-950/20' : ''}`}
       style={{ height: '4rem', borderRadius: 16 }}
       onMouseEnter={() => {
         setIsHovered(true);
-        onHover(day.day, approvedLeaveCount);
+        onHover(day.day, totalLeaveCount, day.leaveInfo || [], day.date);
       }}
       onMouseLeave={() => {
         setIsHovered(false);
-        onHover(null, 0);
+        onHover(null, 0, [], null);
       }}
       onClick={() => canClick && onClick(day.date)}
       id={`day-${day.day}`}
     >
       <motion.div className="flex flex-col items-center justify-center">
-        <span className={`text-sm ${day.isCurrentMonth ? 'text-foreground' : 'text-muted-foreground'} ${
-          isPastDate ? 'line-through opacity-40' : ''
+        <span className={`text-sm font-medium ${
+          day.isCurrentMonth 
+            ? isPastDate 
+              ? 'text-muted-foreground line-through' 
+              : 'text-foreground' 
+            : 'text-muted-foreground opacity-60'
         }`}>
           {day.day}
         </span>
@@ -73,25 +77,29 @@ const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLea
         )}
       </motion.div>
       
-      {approvedLeaveCount > 0 && (
+      {totalLeaveCount > 0 && (
         <motion.div
-          className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-primary p-1 text-[10px] font-bold text-primary-foreground"
+          className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-primary p-1 text-[10px] font-bold text-primary-foreground shadow-sm"
           layoutId={`day-${day.day}-leave-count`}
           style={{ borderRadius: 999 }}
+          whileHover={{ scale: 1.1 }}
         >
-          {approvedLeaveCount}
+          {totalLeaveCount}
         </motion.div>
       )}
 
       <AnimatePresence>
-        {approvedLeaveCount > 0 && isHovered && (
+        {totalLeaveCount > 0 && isHovered && (
           <div className="absolute inset-0 flex size-full items-center justify-center">
             <motion.div
-              className="flex size-10 items-center justify-center bg-primary p-1 text-xs font-bold text-primary-foreground"
+              className="flex size-10 items-center justify-center bg-primary p-1 text-xs font-bold text-primary-foreground shadow-md"
               layoutId={`day-${day.day}-leave-count`}
               style={{ borderRadius: 999 }}
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
             >
-              {approvedLeaveCount}
+              {totalLeaveCount}
             </motion.div>
           </div>
         )}
@@ -102,7 +110,7 @@ const Day: React.FC<DayProps> = ({ classNames, day, onHover, onClick, userHasLea
 
 const CalendarGrid: React.FC<{ 
   days: DayType[];
-  onHover: (day: string | null, leaveCount: number) => void;
+  onHover: (day: string | null, leaveCount: number, leaves: LeaveInfo[], date: Date | null) => void;
   onDayClick: (date: Date) => void;
   userLeaves: LeaveInfo[];
   currentUserId: string | undefined;
@@ -144,15 +152,50 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
     const [moreView, setMoreView] = useState(false);
     const [hoveredDay, setHoveredDay] = useState<string | null>(null);
     const [hoveredLeaveCount, setHoveredLeaveCount] = useState(0);
+    const [hoveredLeaves, setHoveredLeaves] = useState<LeaveInfo[]>([]);
+    const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
+    const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+    const [showTooltip, setShowTooltip] = useState(false);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [leaveData, setLeaveData] = useState<LeaveInfo[]>([]);
     const [userLeaves, setUserLeaves] = useState<LeaveInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
+    const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const handleDayHover = (day: string | null, leaveCount: number) => {
+    const handleDayHover = (day: string | null, leaveCount: number, leaves: LeaveInfo[], date: Date | null) => {
       setHoveredDay(day);
       setHoveredLeaveCount(leaveCount);
+      setHoveredLeaves(leaves);
+      setHoveredDate(date);
+      
+      if (day && leaveCount > 0 && date) {
+        // Calculate tooltip position
+        const dayElement = document.getElementById(`day-${day}`);
+        if (dayElement) {
+          const rect = dayElement.getBoundingClientRect();
+          setTooltipPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top - 10
+          });
+          
+          // Clear any existing timeout
+          if (tooltipTimeoutRef.current) {
+            clearTimeout(tooltipTimeoutRef.current);
+          }
+          
+          // Show tooltip after a brief delay
+          tooltipTimeoutRef.current = setTimeout(() => {
+            setShowTooltip(true);
+          }, 300);
+        }
+      } else {
+        // Hide tooltip immediately
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+        }
+        setShowTooltip(false);
+      }
     };
 
     const handleDayClick = (date: Date) => {
@@ -252,32 +295,36 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
           const allLeavesData = allLeaves || [];
           const userLeavesData = userLeavesQuery?.data || [];
 
-          if (allLeavesData.length === 0) {
-            setLeaveData([]);
-            setUserLeaves([]);
-            return;
-          }
-
-          // Get user profiles
+          // Get user profiles for all users in the data
           const userIds = [...new Set(allLeavesData.map(leave => leave.user_id))];
-          const { data: profiles, error: profilesError } = await supabase
-            .from('profiles')
-            .select('id, name, email')
-            .in('id', userIds);
+          let profiles = [];
+          if (userIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, name, email')
+              .in('id', userIds);
 
-          if (profilesError) {
-            console.error('Error fetching profiles:', profilesError);
+            if (profilesError) {
+              console.error('Error fetching profiles:', profilesError);
+            } else {
+              profiles = profilesData || [];
+            }
           }
 
           // Get leave types
           const leaveTypeIds = [...new Set(allLeavesData.map(leave => leave.leave_type_id).filter(Boolean))];
-          const { data: leaveTypes, error: leaveTypesError } = await supabase
-            .from('leave_types')
-            .select('id, label')
-            .in('id', leaveTypeIds);
+          let leaveTypes = [];
+          if (leaveTypeIds.length > 0) {
+            const { data: leaveTypesData, error: leaveTypesError } = await supabase
+              .from('leave_types')
+              .select('id, label')
+              .in('id', leaveTypeIds);
 
-          if (leaveTypesError) {
-            console.error('Error fetching leave types:', leaveTypesError);
+            if (leaveTypesError) {
+              console.error('Error fetching leave types:', leaveTypesError);
+            } else {
+              leaveTypes = leaveTypesData || [];
+            }
           }
 
           // Transform all leaves data
@@ -289,7 +336,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
               id: leave.id,
               user_name: profile?.name || 'Unknown User',
               user_email: profile?.email || '',
-              leave_type: leaveType?.label || 'Unknown',
+              leave_type: leaveType?.label || 'Leave',
               reason: leave.reason || '',
               start_date: leave.start_date,
               end_date: leave.end_date,
@@ -309,7 +356,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
               id: leave.id,
               user_name: profile?.name || 'Unknown User',
               user_email: profile?.email || '',
-              leave_type: leaveType?.label || 'Unknown',
+              leave_type: leaveType?.label || 'Leave',
               reason: leave.reason || '',
               start_date: leave.start_date,
               end_date: leave.end_date,
@@ -330,6 +377,99 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
       };
 
       fetchLeaveData();
+    }, [currentDate, currentUserId]);
+
+    // Real-time updates
+    useEffect(() => {
+      const channel = supabase
+        .channel('leave_updates')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leave_applied_users'
+          },
+          (payload) => {
+            console.log('Real-time leave update:', payload);
+            // Debounce the updates to prevent UI thrashing
+            setTimeout(() => {
+              // Re-fetch data when there's a change
+              const refetchData = async () => {
+                try {
+                  const { data: allLeaves, error: allLeavesError } = await supabase
+                    .from('leave_applied_users')
+                    .select(`
+                      id,
+                      user_id,
+                      start_date,
+                      end_date,
+                      reason,
+                      status,
+                      is_half_day,
+                      leave_time_start,
+                      leave_time_end,
+                      leave_type_id
+                    `)
+                    .gte('end_date', format(startOfMonth(currentDate), 'yyyy-MM-dd'))
+                    .lte('start_date', format(endOfMonth(currentDate), 'yyyy-MM-dd'));
+
+                  if (!allLeavesError && allLeaves) {
+                    // Get profiles and leave types for the updated data
+                    const userIds = [...new Set(allLeaves.map(leave => leave.user_id))];
+                    const leaveTypeIds = [...new Set(allLeaves.map(leave => leave.leave_type_id).filter(Boolean))];
+
+                    const [profilesResult, leaveTypesResult] = await Promise.all([
+                      userIds.length > 0 ? supabase.from('profiles').select('id, name, email').in('id', userIds) : { data: [], error: null },
+                      leaveTypeIds.length > 0 ? supabase.from('leave_types').select('id, label').in('id', leaveTypeIds) : { data: [], error: null }
+                    ]);
+
+                    const profiles = profilesResult.data || [];
+                    const leaveTypes = leaveTypesResult.data || [];
+
+                    const transformedLeaves: LeaveInfo[] = allLeaves.map(leave => {
+                      const profile = profiles?.find(p => p.id === leave.user_id);
+                      const leaveType = leaveTypes?.find(lt => lt.id === leave.leave_type_id);
+                      
+                      return {
+                        id: leave.id,
+                        user_name: profile?.name || 'Unknown User',
+                        user_email: profile?.email || '',
+                        leave_type: leaveType?.label || 'Leave',
+                        reason: leave.reason || '',
+                        start_date: leave.start_date,
+                        end_date: leave.end_date,
+                        status: leave.status || 'pending',
+                        is_half_day: leave.is_half_day || false,
+                        leave_time_start: leave.leave_time_start,
+                        leave_time_end: leave.leave_time_end,
+                      };
+                    });
+
+                    setLeaveData(transformedLeaves);
+
+                    // Update user leaves if current user is involved
+                    if (currentUserId) {
+                      const userSpecificLeaves = transformedLeaves.filter(leave => 
+                        leave.user_name && ['approved', 'pending'].includes(leave.status)
+                      );
+                      setUserLeaves(userSpecificLeaves.filter(leave => leave.user_email && leave.user_email.includes(currentUserId)));
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error in real-time refetch:', error);
+                }
+              };
+
+              refetchData();
+            }, 500); // 500ms debounce
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }, [currentDate, currentUserId]);
 
     // Generate calendar days
@@ -363,7 +503,7 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
         const isCurrentMonth = date.getMonth() === currentDate.getMonth();
         const isWeekend = getDay(date) === 0 || getDay(date) === 6;
         
-        // Find approved leaves for this date (for display count)
+        // Find all leaves for this date (approved and pending)
         const dayLeaves = leaveData.filter(leave => {
           const leaveStart = new Date(leave.start_date);
           const leaveEnd = new Date(leave.end_date);
@@ -589,6 +729,14 @@ const LeaveCalendar = React.forwardRef<HTMLDivElement, LeaveCalendarProps>(
             </motion.div>
           )}
         </motion.div>
+        
+        {/* Tooltip */}
+        <LeaveTooltip
+          isVisible={showTooltip}
+          position={tooltipPosition}
+          leaves={hoveredLeaves}
+          date={hoveredDate}
+        />
       </AnimatePresence>
     );
   }

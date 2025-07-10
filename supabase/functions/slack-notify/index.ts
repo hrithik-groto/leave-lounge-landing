@@ -186,25 +186,60 @@ serve(async (req) => {
 
     console.log('Sending message to Slack...');
 
-    // Send to Slack channel (webhook)
-    const slackResponse = await fetch(slackWebhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(slackMessage),
-    });
+    // Only send to admin for new applications, or to user for approvals/rejections
+    if (!isApprovalUpdate) {
+      // Send to admin only (replace with your actual admin Slack user ID)
+      const adminSlackUserId = 'U0123456789'; // Replace with actual admin Slack user ID
+      
+      try {
+        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+        if (botToken) {
+          // Send DM to admin
+          const adminResponse = await fetch('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${botToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              channel: adminSlackUserId,
+              ...slackMessage,
+            }),
+          });
 
-    if (!slackResponse.ok) {
-      const errorText = await slackResponse.text();
-      console.error('Slack API error:', errorText);
-      throw new Error(`Slack API error: ${slackResponse.status} - ${errorText}`);
-    }
+          if (adminResponse.ok) {
+            console.log('Successfully sent Slack notification to admin');
+          } else {
+            const adminError = await adminResponse.text();
+            console.error('Failed to send admin notification:', adminError);
+            // Fallback to webhook if DM fails
+            throw new Error('Admin DM failed, using webhook fallback');
+          }
+        } else {
+          throw new Error('SLACK_BOT_TOKEN not configured, using webhook fallback');
+        }
+      } catch (adminError) {
+        console.error('Error sending admin DM, falling back to webhook:', adminError);
+        
+        // Fallback to webhook
+        const slackResponse = await fetch(slackWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(slackMessage),
+        });
 
-    console.log('Successfully sent Slack channel notification');
+        if (!slackResponse.ok) {
+          const errorText = await slackResponse.text();
+          console.error('Slack webhook error:', errorText);
+          throw new Error(`Slack webhook error: ${slackResponse.status} - ${errorText}`);
+        }
 
-    // Send individual DM if requested and user has Slack integration
-    if (sendToUser) {
+        console.log('Successfully sent Slack channel notification (fallback)');
+      }
+    } else if (sendToUser || isApprovalUpdate) {
+      // Send to the user who applied for leave (for approval/rejection updates)
       try {
         const { data: slackIntegration } = await supabaseClient
           .from('user_slack_integrations')
@@ -212,7 +247,7 @@ serve(async (req) => {
           .eq('user_id', leaveApplication.user_id)
           .single();
 
-        if (slackIntegration?.access_token) {
+        if (slackIntegration?.slack_user_id) {
           const botToken = Deno.env.get('SLACK_BOT_TOKEN');
           if (botToken) {
             // Send DM to user
@@ -229,16 +264,18 @@ serve(async (req) => {
             });
 
             if (dmResponse.ok) {
-              console.log('Successfully sent individual Slack DM');
+              console.log('Successfully sent Slack notification to user');
             } else {
               const dmError = await dmResponse.text();
-              console.error('Failed to send individual DM:', dmError);
+              console.error('Failed to send user notification:', dmError);
             }
           }
+        } else {
+          console.log('User does not have Slack integration set up');
         }
-      } catch (dmError) {
-        console.error('Error sending individual DM:', dmError);
-        // Don't fail the main request if DM fails
+      } catch (userError) {
+        console.error('Error sending user notification:', userError);
+        // Don't fail the main request if user DM fails
       }
     }
 
