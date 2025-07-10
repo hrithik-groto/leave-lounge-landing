@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, Calendar, CheckCircle, XCircle, Plus, Sparkles, Zap } from 'lucide-react';
+import { Users, Calendar, CheckCircle, XCircle, Plus, Sparkles, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -28,6 +28,8 @@ const AdminDashboard = () => {
   const [additionalLeaves, setAdditionalLeaves] = useState('');
   const [isAddingLeaves, setIsAddingLeaves] = useState(false);
   const [processingApplications, setProcessingApplications] = useState(new Set());
+  const [currentAdminPage, setCurrentAdminPage] = useState(1);
+  const [applicationsPerPage] = useState(10);
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -623,8 +625,14 @@ const AdminDashboard = () => {
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {leaveApplications.map((application) => (
+                 <TableBody>
+                  {(() => {
+                    const indexOfLastApp = currentAdminPage * applicationsPerPage;
+                    const indexOfFirstApp = indexOfLastApp - applicationsPerPage;
+                    const currentApps = leaveApplications.slice(indexOfFirstApp, indexOfLastApp);
+                    const totalPages = Math.ceil(leaveApplications.length / applicationsPerPage);
+
+                    return currentApps.map((application) => (
                     <TableRow key={application.id} className="hover:bg-gray-50 transition-colors duration-200">
                       <TableCell className="font-medium">
                         {application.profiles?.name || 'Unknown User'}
@@ -690,9 +698,41 @@ const AdminDashboard = () => {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ));
+                  })()}
                 </TableBody>
               </Table>
+              
+              {/* Pagination Controls */}
+              {(() => {
+                const totalPages = Math.ceil(leaveApplications.length / applicationsPerPage);
+                return totalPages > 1 && (
+                  <div className="flex justify-center items-center space-x-2 mt-4 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentAdminPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentAdminPage === 1}
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Page {currentAdminPage} of {totalPages} ({leaveApplications.length} total applications)
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentAdminPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentAdminPage === totalPages}
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                );
+              })()}
+              
               {leaveApplications.length === 0 && (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No leave applications found</p>

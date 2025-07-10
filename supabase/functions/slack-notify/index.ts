@@ -186,22 +186,34 @@ serve(async (req) => {
 
     console.log('Sending message to Slack...');
 
-    // Send to Slack channel (webhook)
-    const slackResponse = await fetch(slackWebhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(slackMessage),
-    });
+    // Send notification only to admin via DM instead of public channel
+    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    const adminSlackUserId = 'U0123456789'; // Replace with actual admin Slack user ID
 
-    if (!slackResponse.ok) {
-      const errorText = await slackResponse.text();
-      console.error('Slack API error:', errorText);
-      throw new Error(`Slack API error: ${slackResponse.status} - ${errorText}`);
+    if (botToken && adminSlackUserId) {
+      // Send DM to admin only
+      const adminDmResponse = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${botToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: adminSlackUserId,
+          ...slackMessage,
+        }),
+      });
+
+      if (!adminDmResponse.ok) {
+        const errorText = await adminDmResponse.text();
+        console.error('Admin Slack DM API error:', errorText);
+        throw new Error(`Admin Slack DM API error: ${adminDmResponse.status} - ${errorText}`);
+      }
+
+      console.log('Successfully sent admin-only Slack DM notification');
+    } else {
+      console.warn('Bot token or admin Slack user ID not configured for admin DM');
     }
-
-    console.log('Successfully sent Slack channel notification');
 
     // Send individual DM if requested and user has Slack integration
     if (sendToUser) {
