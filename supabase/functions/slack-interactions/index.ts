@@ -194,9 +194,13 @@ serve(async (req) => {
       
       const leaveTypeId = values.leave_type.leave_type_select.selected_option?.value;
       
-      // Get date values directly from the input blocks
-      const actualStartDate = values.start_date?.start_date_picker?.selected_date;
-      const actualEndDate = values.end_date?.end_date_picker?.selected_date;
+      // Get date values from the new datetime structure
+      const actualStartDate = values.start_datetime?.start_date_picker?.selected_date;
+      const actualEndDate = values.end_datetime?.end_date_picker?.selected_date;
+      
+      // Get time selections for future use
+      const startTime = values.start_datetime?.start_time_select?.selected_option?.value || 'start_of_day';
+      const endTime = values.end_datetime?.end_time_select?.selected_option?.value || 'end_of_day';
       
       const reason = values.reason?.reason_input?.value || '';
 
@@ -204,6 +208,8 @@ serve(async (req) => {
         leaveTypeId,
         actualStartDate,
         actualEndDate,
+        startTime,
+        endTime,
         reason,
         fullValues: JSON.stringify(values)
       });
@@ -214,8 +220,8 @@ serve(async (req) => {
             response_action: 'errors',
             errors: {
               leave_type: !leaveTypeId ? 'Please select a leave type' : undefined,
-              start_date: !actualStartDate ? 'Please select a start date' : undefined,
-              end_date: !actualEndDate ? 'Please select an end date' : undefined,
+              start_datetime: !actualStartDate ? 'Please select a start date' : undefined,
+              end_datetime: !actualEndDate ? 'Please select an end date' : undefined,
             },
           }),
           {
@@ -337,12 +343,18 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
     .select('id, label, color')
     .eq('is_active', true);
 
+  // Get user's leave balance
+  const { data: balanceData } = await supabaseClient
+    .rpc('get_total_remaining_leaves', { p_user_id: userId });
+
+  const remainingDays = balanceData?.total_remaining_days || 0;
+
   const modal = {
     type: 'modal',
     callback_id: 'leave_application_modal',
     title: {
       type: 'plain_text',
-      text: 'Apply for Leave',
+      text: '🌿 Apply for Leave',
     },
     submit: {
       type: 'plain_text',
@@ -355,6 +367,16 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
     private_metadata: userId,
     blocks: [
       {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `🌱 You have *${remainingDays} days* remaining in this cycle`
+        }
+      },
+      {
+        type: 'divider'
+      },
+      {
         type: 'input',
         block_id: 'leave_type',
         element: {
@@ -362,12 +384,12 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           action_id: 'leave_type_select',
           placeholder: {
             type: 'plain_text',
-            text: 'Select a leave type',
+            text: '🍃 Select a leave type',
           },
           options: (leaveTypes || []).map((type: any) => ({
             text: {
               type: 'plain_text',
-              text: type.label,
+              text: `${getLeaveTypeIcon(type.label)} ${type.label}`,
             },
             value: type.id,
           })),
@@ -378,38 +400,100 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
         },
       },
       {
-        type: 'input',
-        block_id: 'start_date',
-        element: {
-          type: 'datepicker',
-          action_id: 'start_date_picker',
-          placeholder: {
-            type: 'plain_text',
-            text: 'Select start date',
-          },
-          initial_date: new Date().toISOString().split('T')[0]
-        },
-        label: {
-          type: 'plain_text',
-          text: 'Start Date',
-        },
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Start Date & Time*'
+        }
       },
       {
-        type: 'input',
-        block_id: 'end_date',
-        element: {
-          type: 'datepicker',
-          action_id: 'end_date_picker',
-          placeholder: {
-            type: 'plain_text',
-            text: 'Select end date',
+        type: 'actions',
+        block_id: 'start_datetime',
+        elements: [
+          {
+            type: 'datepicker',
+            action_id: 'start_date_picker',
+            placeholder: {
+              type: 'plain_text',
+              text: 'Today',
+            },
+            initial_date: new Date().toISOString().split('T')[0]
           },
-          initial_date: new Date().toISOString().split('T')[0]
-        },
-        label: {
-          type: 'plain_text',
-          text: 'End Date',
-        },
+          {
+            type: 'static_select',
+            action_id: 'start_time_select',
+            placeholder: {
+              type: 'plain_text',
+              text: 'Start of day',
+            },
+            options: [
+              {
+                text: { type: 'plain_text', text: 'Start of day (9:00 AM)' },
+                value: 'start_of_day'
+              },
+              {
+                text: { type: 'plain_text', text: 'After lunch (1:00 PM)' },
+                value: 'after_lunch'
+              },
+              {
+                text: { type: 'plain_text', text: 'Custom time' },
+                value: 'custom'
+              }
+            ],
+            initial_option: {
+              text: { type: 'plain_text', text: 'Start of day (9:00 AM)' },
+              value: 'start_of_day'
+            }
+          }
+        ]
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*End Date & Time*'
+        }
+      },
+      {
+        type: 'actions',
+        block_id: 'end_datetime',
+        elements: [
+          {
+            type: 'datepicker',
+            action_id: 'end_date_picker',
+            placeholder: {
+              type: 'plain_text',
+              text: 'Today',
+            },
+            initial_date: new Date().toISOString().split('T')[0]
+          },
+          {
+            type: 'static_select',
+            action_id: 'end_time_select',
+            placeholder: {
+              type: 'plain_text',
+              text: 'End of day',
+            },
+            options: [
+              {
+                text: { type: 'plain_text', text: 'End of day (6:00 PM)' },
+                value: 'end_of_day'
+              },
+              {
+                text: { type: 'plain_text', text: 'Before lunch (12:00 PM)' },
+                value: 'before_lunch'
+              },
+              {
+                text: { type: 'plain_text', text: 'Custom time' },
+                value: 'custom'
+              }
+            ],
+            initial_option: {
+              text: { type: 'plain_text', text: 'End of day (6:00 PM)' },
+              value: 'end_of_day'
+            }
+          }
+        ]
       },
       {
         type: 'input',
@@ -420,7 +504,7 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           multiline: true,
           placeholder: {
             type: 'plain_text',
-            text: 'Add a reason (optional)',
+            text: '✏️ Add a reason (optional)',
           },
         },
         label: {
