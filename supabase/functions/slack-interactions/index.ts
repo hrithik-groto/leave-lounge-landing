@@ -519,6 +519,7 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
   // Open modal using Slack API
   const botToken = Deno.env.get('SLACK_BOT_TOKEN');
   console.log('Bot token available:', botToken ? 'Yes' : 'No');
+  console.log('Bot token preview:', botToken ? `${botToken.substring(0, 10)}...` : 'Not found');
   
   if (!botToken) {
     console.error('SLACK_BOT_TOKEN not found in environment variables');
@@ -533,9 +534,51 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
       }
     );
   }
+
+  // Validate that we have a trigger_id
+  if (!payload.trigger_id) {
+    console.error('No trigger_id provided in payload');
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Invalid interaction. Please try the command again.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
+  }
   
   try {
     console.log('Opening modal with trigger_id:', payload.trigger_id);
+    
+    // Test token validity first with a simple API call
+    const testResponse = await fetch('https://slack.com/api/auth.test', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const testData = await testResponse.json();
+    console.log('Token test response:', JSON.stringify(testData, null, 2));
+    
+    if (!testData.ok) {
+      console.error('Bot token validation failed:', testData.error);
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: `❌ Authentication failed: ${testData.error}. Please contact your administrator.`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
     const modalResponse = await fetch('https://slack.com/api/views.open', {
       method: 'POST',
       headers: {
