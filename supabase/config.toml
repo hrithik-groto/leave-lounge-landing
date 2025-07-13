@@ -63,3 +63,6 @@ verify_jwt = false
 
 [functions.slack-daily-notifications]
 verify_jwt = false
+
+[functions.slack-admin-actions]
+verify_jwt = false

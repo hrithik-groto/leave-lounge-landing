@@ -13,9 +13,10 @@ import NotificationBell from '@/components/NotificationBell';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
-import LeaveApplicationsList from '@/components/LeaveApplicationsList';
+import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
 import SlackOAuthButton from '@/components/SlackOAuthButton';
 import TimelooMascot from '@/components/TimelooMascot';
+import TestNotificationButton from '@/components/TestNotificationButton';
 import confetti from 'canvas-confetti';
 
 const Dashboard = () => {
@@ -221,6 +222,7 @@ const Dashboard = () => {
         </div>
         <div className="flex items-center space-x-4">
           <SlackOAuthButton />
+          <TestNotificationButton />
           <NotificationBell />
           <span className="text-sm text-gray-600">Welcome, {user?.firstName}!</span>
           <UserButton afterSignOutUrl="/" />
@@ -478,11 +480,10 @@ const Dashboard = () => {
         {/* Enhanced Calendar Section */}
         <EnhancedCalendar ref={calendarRef} onRefresh={handleLeaveSuccess} />
 
-        {/* Leave Applications Section with Pagination */}
-        <LeaveApplicationsList
+        {/* Leave Applications Section with Tabs */}
+        <TabbedLeaveApplications
           applications={leaveApplications}
           onRevert={handleRevertLeave}
-          title="Your Leave Applications"
         />
       </div>
 
