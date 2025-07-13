@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Clock, Calendar, User } from 'lucide-react';
+import { formatToIST } from '@/lib/timezone';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -168,7 +169,7 @@ const LeaveApplicationsList: React.FC<LeaveApplicationsListProps> = ({
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center space-x-1">
                       <Clock className="h-3 w-3" />
-                      <span>Applied: {format(new Date(application.applied_at), 'MMM dd, yyyy')}</span>
+                      <span>Applied: {formatToIST(application.applied_at, 'MMM dd, yyyy HH:mm')}</span>
                     </div>
                     <span className="text-blue-600 font-medium">
                       Duration: {formatDuration(application)}

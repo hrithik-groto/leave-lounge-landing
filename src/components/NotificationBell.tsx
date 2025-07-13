@@ -9,6 +9,7 @@ import { useUser } from '@clerk/clerk-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { formatToIST } from '@/lib/timezone';
 
 const NotificationBell = () => {
   const { user } = useUser();
@@ -271,7 +272,7 @@ const NotificationBell = () => {
                         </p>
                         <p className="text-xs text-gray-500 mt-2 flex items-center">
                           <Calendar className="h-3 w-3 mr-1" />
-                          {format(new Date(notification.created_at), 'MMM dd, HH:mm')}
+                          {formatToIST(notification.created_at, 'MMM dd, HH:mm')}
                         </p>
                       </div>
                       {!notification.is_read && (
