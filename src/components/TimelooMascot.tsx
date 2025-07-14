@@ -3,9 +3,11 @@ import React, { useState, useEffect } from 'react';
 interface TimelooMascotProps {
   shouldWave?: boolean;
   onWaveComplete?: () => void;
+  showMessage?: boolean;
+  message?: string;
 }
 
-const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWaveComplete }) => {
+const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWaveComplete, showMessage = false, message = "applied! 🎉 💙" }) => {
   const [isWaving, setIsWaving] = useState(false);
   const [eyesBlink, setEyesBlink] = useState(false);
 
@@ -32,7 +34,7 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
   }, [isWaving]);
 
   return (
-    <div className="fixed bottom-6 left-6 z-50 pointer-events-none">
+    <div className="fixed bottom-6 left-6 z-50 pointer-events-none flex items-end gap-4">
       <div className={`transition-all duration-500 ${isWaving ? 'animate-bounce' : ''}`}>
         {/* Mascot Body */}
         <div className="relative">
@@ -89,6 +91,17 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
           )}
         </div>
       </div>
+      
+      {/* Message on the right side */}
+      {showMessage && (
+        <div className="mb-8 animate-fade-in">
+          <div className="bg-white rounded-lg p-3 shadow-lg border border-purple-200 max-w-xs">
+            <div className="text-sm font-medium text-purple-700">
+              {message}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -514,6 +514,14 @@ const Dashboard = () => {
           {currentPage === 'policies' && renderPolicies()}
         </div>
       </div>
+      
+      {/* Timeloo Mascot */}
+      <TimelooMascot 
+        shouldWave={shouldMascotWave} 
+        onWaveComplete={() => setShouldMascotWave(false)}
+        showMessage={true}
+        message="applied! 🎉 💙"
+      />
     </div>
   );
 };

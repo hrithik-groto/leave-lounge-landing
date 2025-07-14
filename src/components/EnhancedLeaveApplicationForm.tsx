@@ -366,7 +366,11 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                     mode="single"
                     selected={startDate}
                     onSelect={setStartDate}
-                    disabled={(date) => date < new Date()}
+                    disabled={(date) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return date < today;
+                    }}
                     initialFocus
                     className="pointer-events-auto"
                   />
@@ -395,7 +399,11 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                       mode="single"
                       selected={startDate}
                       onSelect={setStartDate}
-                      disabled={(date) => date < new Date()}
+                      disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return date < today;
+                      }}
                       initialFocus
                       className="pointer-events-auto"
                     />
@@ -423,7 +431,11 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                       mode="single"
                       selected={endDate}
                       onSelect={setEndDate}
-                      disabled={(date) => date < new Date() || (startDate && date < startDate)}
+                      disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return date < today || (startDate && date < startDate);
+                      }}
                       initialFocus
                       className="pointer-events-auto"
                     />
