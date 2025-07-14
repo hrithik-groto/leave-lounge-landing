@@ -520,7 +520,7 @@ const Dashboard = () => {
         shouldWave={shouldMascotWave} 
         onWaveComplete={() => setShouldMascotWave(false)}
         showMessage={true}
-        message="applied! 🎉 💙"
+        message={`Welcome ${user?.firstName || 'User'}!`}
       />
     </div>
   );

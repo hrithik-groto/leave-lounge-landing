@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, Calendar, CheckCircle, XCircle, Plus, Sparkles, Zap } from 'lucide-react';
+import { Users, Calendar, CheckCircle, XCircle, Plus, Sparkles, Zap, Bell } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -29,6 +29,7 @@ const AdminDashboard = () => {
   const [additionalLeaves, setAdditionalLeaves] = useState('');
   const [isAddingLeaves, setIsAddingLeaves] = useState(false);
   const [processingApplications, setProcessingApplications] = useState<Set<string>>(new Set());
+  const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -408,6 +409,35 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleSendTestNotification = async () => {
+    setIsSendingTestNotification(true);
+    try {
+      const { error } = await supabase.functions.invoke('slack-daily-notifications', {
+        body: { trigger: 'manual_test' }
+      });
+
+      if (error) {
+        console.error('Error sending test notification:', error);
+        throw error;
+      }
+
+      toast({
+        title: "🚀 Test Notification Sent!",
+        description: "Daily notification has been sent to the Slack channel successfully!",
+        className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+      });
+    } catch (error) {
+      console.error('Error sending test notification:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send test notification",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingTestNotification(false);
+    }
+  };
+
   if (!isLoaded) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -452,6 +482,23 @@ const AdminDashboard = () => {
             </div>
             
             <div className="flex space-x-4">
+              <Button 
+                onClick={handleSendTestNotification}
+                disabled={isSendingTestNotification}
+                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                {isSendingTestNotification ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-4 h-4 mr-2" />
+                    Test Slack Notification
+                  </>
+                )}
+              </Button>
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-300">
