@@ -230,9 +230,9 @@ const Dashboard = () => {
   );
 
   const renderLeaveTypes = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Leave Types</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="space-y-6 px-4 sm:px-0">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Types</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center space-x-2">
@@ -282,8 +282,8 @@ const Dashboard = () => {
   );
 
   const renderLeavesRemaining = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Leave Balance</h2>
+    <div className="space-y-6 px-4 sm:px-0">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Balance</h2>
       <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
         <CardContent className="p-6">
           <div className="text-center">
@@ -308,7 +308,7 @@ const Dashboard = () => {
         </Alert>
       )}
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Leave History</CardTitle>
@@ -360,9 +360,9 @@ const Dashboard = () => {
   );
 
   const renderPolicies = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Leave Policies</h2>
-      <div className="space-y-6">
+    <div className="space-y-6 px-4 sm:px-0">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Policies</h2>
+      <div className="space-y-4 sm:space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>Monthly Leave Entitlements</CardTitle>
@@ -502,7 +502,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 px-4 sm:px-0">
       {renderNavbar()}
       <div className="pt-6 px-4">
         <div className="max-w-7xl mx-auto">
