@@ -95,7 +95,7 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
       {/* Message on the right side */}
       {showMessage && (
         <div className="mb-8 animate-fade-in">
-          <div className="bg-white rounded-lg p-3 shadow-lg border border-purple-200 max-w-xs">
+          <div className="bg-white rounded-lg p-3 shadow-lg border border-purple-200 max-w-xs ml-4">
             <div className="text-sm font-medium text-purple-700">
               {message}
             </div>
