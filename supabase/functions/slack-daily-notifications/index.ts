@@ -29,6 +29,10 @@ Deno.serve(async (req) => {
     const botToken = Deno.env.get('SLACK_BOT_TOKEN');
     const allUsersChannelId = Deno.env.get('SLACK_ALL_USERS_CHANNEL_ID');
 
+    console.log('🔑 Checking environment variables...');
+    console.log('Bot token exists:', !!botToken);
+    console.log('Channel ID exists:', !!allUsersChannelId);
+
     if (!botToken) {
       console.error('❌ SLACK_BOT_TOKEN not found');
       return new Response(
@@ -41,6 +45,15 @@ Deno.serve(async (req) => {
       console.error('❌ SLACK_ALL_USERS_CHANNEL_ID not found');
       return new Response(
         JSON.stringify({ error: 'All users channel ID not configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    // Validate bot token format
+    if (!botToken.startsWith('xoxb-')) {
+      console.error('❌ Invalid bot token format - should start with xoxb-');
+      return new Response(
+        JSON.stringify({ error: 'Invalid bot token format' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
@@ -213,24 +226,77 @@ Deno.serve(async (req) => {
       };
     }
 
-    // Send message to Slack
+    // Send message to Slack with retry logic
     console.log('📤 Sending daily notification to Slack');
-    const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(message),
-    });
+    
+    let slackResult;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      attempts++;
+      console.log(`📡 Attempt ${attempts}/${maxAttempts} to send Slack message`);
+      
+      try {
+        const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(message),
+        });
 
-    const slackResult = await slackResponse.json();
-    console.log('📬 Slack response:', JSON.stringify(slackResult, null, 2));
+        if (!slackResponse.ok) {
+          throw new Error(`HTTP ${slackResponse.status}: ${slackResponse.statusText}`);
+        }
 
-    if (!slackResult.ok) {
-      console.error('❌ Failed to send Slack message:', slackResult.error);
+        slackResult = await slackResponse.json();
+        console.log('📬 Slack response:', JSON.stringify(slackResult, null, 2));
+        
+        if (slackResult.ok) {
+          break; // Success, exit retry loop
+        } else {
+          console.warn(`⚠️ Slack API error (attempt ${attempts}):`, slackResult.error);
+          if (attempts < maxAttempts && slackResult.error !== 'invalid_auth' && slackResult.error !== 'channel_not_found') {
+            // Wait before retry (except for auth/channel errors which won't be fixed by retry)
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+            continue;
+          }
+        }
+      } catch (fetchError) {
+        console.error(`❌ Network error (attempt ${attempts}):`, fetchError.message);
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+          continue;
+        }
+        throw fetchError;
+      }
+    }
+
+    if (!slackResult || !slackResult.ok) {
+      const errorMsg = slackResult?.error || 'Unknown error';
+      console.error('❌ Failed to send Slack message after all attempts:', errorMsg);
+      
+      // Provide specific error messages for common issues
+      let userFriendlyError = errorMsg;
+      switch (errorMsg) {
+        case 'invalid_auth':
+          userFriendlyError = 'Invalid Slack bot token. Please check your SLACK_BOT_TOKEN secret.';
+          break;
+        case 'channel_not_found':
+          userFriendlyError = 'Slack channel not found. Please check your SLACK_ALL_USERS_CHANNEL_ID secret.';
+          break;
+        case 'not_in_channel':
+          userFriendlyError = 'Bot is not in the specified channel. Please add the bot to the channel.';
+          break;
+        case 'missing_scope':
+          userFriendlyError = 'Bot missing required permissions. Please add chat:write scope to your bot.';
+          break;
+      }
+      
       return new Response(
-        JSON.stringify({ error: `Slack error: ${slackResult.error}` }),
+        JSON.stringify({ error: `Slack error: ${userFriendlyError}` }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
