@@ -62,24 +62,56 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch approved leaves for today
-    const { data: leaves, error: leavesError } = await supabaseClient
+    // Fetch approved leaves for today with fallback approach
+    console.log('🔍 Fetching leaves for date:', today);
+    
+    // First, get basic leave data
+    const { data: basicLeaves, error: basicLeavesError } = await supabaseClient
       .from('leave_applied_users')
-      .select(`
-        *,
-        profiles(name),
-        leave_types(label, color)
-      `)
+      .select('*')
       .eq('status', 'approved')
       .lte('start_date', today)
       .gte('end_date', today);
 
-    if (leavesError) {
-      console.error('❌ Error fetching leaves:', leavesError);
+    if (basicLeavesError) {
+      console.error('❌ Error fetching basic leaves:', basicLeavesError);
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch leaves' }),
+        JSON.stringify({ error: 'Failed to fetch leaves data' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
+    }
+
+    console.log(`📋 Found ${basicLeaves?.length || 0} basic leave records`);
+
+    // Enhanced leaves with user and leave type data
+    const leaves = [];
+    
+    if (basicLeaves && basicLeaves.length > 0) {
+      for (const leave of basicLeaves) {
+        const enhancedLeave = { ...leave };
+        
+        // Get user profile
+        if (leave.user_id) {
+          const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('name')
+            .eq('id', leave.user_id)
+            .single();
+          enhancedLeave.profiles = profile;
+        }
+        
+        // Get leave type
+        if (leave.leave_type_id) {
+          const { data: leaveType } = await supabaseClient
+            .from('leave_types')
+            .select('label, color')
+            .eq('id', leave.leave_type_id)
+            .single();
+          enhancedLeave.leave_types = leaveType;
+        }
+        
+        leaves.push(enhancedLeave);
+      }
     }
 
     console.log(`📋 Found ${leaves?.length || 0} approved leaves for today`);
