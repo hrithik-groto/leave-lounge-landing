@@ -724,6 +724,7 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
   } catch (error) {
@@ -735,6 +736,7 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
   }
@@ -746,6 +748,7 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
@@ -795,6 +798,7 @@ async function handleTeammatesLeave(supabaseClient: any, payload: any, userId: s
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
@@ -930,6 +934,7 @@ async function handleViewHolidays(supabaseClient: any, payload: any, userId: str
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
@@ -967,6 +972,7 @@ async function handleLeavePolicy(supabaseClient: any, payload: any, userId: stri
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
@@ -1165,6 +1171,7 @@ async function handleClearPending(supabaseClient: any, payload: any, userId: str
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
   }
@@ -1235,6 +1242,7 @@ async function handleViewMore(supabaseClient: any, payload: any, userId: string)
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
@@ -1276,15 +1284,16 @@ async function handleTalkToUs(supabaseClient: any, payload: any, userId: string)
     }
   ];
 
-  return new Response(
-    JSON.stringify({
-      response_type: 'ephemeral',
-      blocks: blocks,
-    }),
-    {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    }
-  );
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        blocks: blocks,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
 }
 
 // Admin handler functions
@@ -1309,6 +1318,7 @@ async function handleAdminReviewRequests(supabaseClient: any, payload: any, user
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
   }
@@ -1382,6 +1392,7 @@ async function handleAdminReviewRequests(supabaseClient: any, payload: any, user
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
@@ -1442,6 +1453,7 @@ async function handleAdminTeamOverview(supabaseClient: any, payload: any, userId
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
