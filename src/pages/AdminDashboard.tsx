@@ -190,33 +190,7 @@ const AdminDashboard = () => {
         // Don't throw here as the main action succeeded
       }
 
-      // Send Slack notification for approval
-      try {
-        const application = leaveApplications.find(app => app.id === applicationId);
-        if (application) {
-          console.log('Sending Slack notification for approval:', application);
-          const { error: slackError } = await supabase.functions.invoke('slack-notify', {
-            body: {
-              leaveApplication: {
-                ...application,
-                status: 'approved',
-                approved_by: user?.id,
-                approved_at: new Date().toISOString()
-              },
-              isApprovalUpdate: true,
-              sendToUser: true
-            }
-          });
-
-          if (slackError) {
-            console.error('Error sending Slack approval notification:', slackError);
-          } else {
-            console.log('Slack approval notification sent successfully');
-          }
-        }
-      } catch (slackError) {
-        console.error('Failed to send Slack approval notification:', slackError);
-      }
+      // Note: Personal Slack notification is now handled automatically by database trigger
 
       // Show success toast
       toast({
@@ -277,33 +251,7 @@ const AdminDashboard = () => {
         // Don't throw here as the main action succeeded
       }
 
-      // Send Slack notification for rejection
-      try {
-        const application = leaveApplications.find(app => app.id === applicationId);
-        if (application) {
-          console.log('Sending Slack notification for rejection:', application);
-          const { error: slackError } = await supabase.functions.invoke('slack-notify', {
-            body: {
-              leaveApplication: {
-                ...application,
-                status: 'rejected',
-                approved_by: user?.id,
-                approved_at: new Date().toISOString()
-              },
-              isApprovalUpdate: true,
-              sendToUser: true
-            }
-          });
-
-          if (slackError) {
-            console.error('Error sending Slack rejection notification:', slackError);
-          } else {
-            console.log('Slack rejection notification sent successfully');
-          }
-        }
-      } catch (slackError) {
-        console.error('Failed to send Slack rejection notification:', slackError);
-      }
+      // Note: Personal Slack notification is now handled automatically by database trigger
 
       // Show rejection toast
       toast({
