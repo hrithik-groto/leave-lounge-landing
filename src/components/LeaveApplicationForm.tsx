@@ -333,17 +333,18 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
       {/* Reason Textarea */}
       <div className="grid gap-2">
-        <Label htmlFor="reason">Reason for Leave</Label>
+        <Label htmlFor="reason">Reason for Leave <span className="text-red-500">*</span></Label>
         <Textarea
           id="reason"
           placeholder="Explain why you need time off..."
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          required
         />
       </div>
 
       {/* Submit Button */}
-      <Button disabled={isSubmitting} className="bg-blue-500 text-white font-semibold py-3 rounded-md hover:bg-blue-700 transition-colors duration-300">
+      <Button disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-md transition-colors duration-300">
         {isSubmitting ? 'Submitting...' : 'Submit Application'}
       </Button>
     </form>

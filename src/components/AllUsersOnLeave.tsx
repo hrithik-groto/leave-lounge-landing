@@ -35,12 +35,11 @@ const AllUsersOnLeave = () => {
   const fetchAllLeaveApplications = async () => {
     try {
       setLoading(true);
-      console.log('Fetching all approved leave applications...');
+      console.log('Fetching users currently on leave...');
       
-      // Get a wider date range to show all relevant approved leaves
+      // Get today's date for filtering current leaves
       const today = new Date();
-      const startDate = new Date(today.getFullYear() - 1, 0, 1); // Start of last year
-      const endDate = new Date(today.getFullYear() + 1, 11, 31); // End of next year
+      const todayString = today.toISOString().split('T')[0];
 
       const { data, error } = await supabase
         .from('leave_applied_users')
@@ -50,15 +49,23 @@ const AllUsersOnLeave = () => {
           leave_types:leave_type_id (label, color)
         `)
         .eq('status', 'approved')
-        .gte('end_date', startDate.toISOString().split('T')[0])
-        .lte('start_date', endDate.toISOString().split('T')[0])
+        .lte('start_date', todayString)  // Leave started today or before
+        .gte('end_date', todayString)    // Leave ends today or after
         .order('start_date', { ascending: false });
 
       if (error) {
-        console.error('Error fetching all leave applications:', error);
+        console.error('Error fetching current leave applications:', error);
       } else {
-        console.log('Approved leaves fetched:', data);
-        setAllLeaveApplications((data as any) || []);
+        console.log('Current leaves fetched:', data);
+        // Filter to show only users currently on leave (today falls within their leave period)
+        const currentLeaves = (data as any)?.filter((leave: LeaveApplication) => {
+          const startDate = new Date(leave.start_date);
+          const endDate = new Date(leave.end_date);
+          const today = new Date();
+          return isWithinInterval(today, { start: startOfDay(startDate), end: endOfDay(endDate) });
+        }) || [];
+        console.log('Filtered current leaves:', currentLeaves);
+        setAllLeaveApplications(currentLeaves);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -133,7 +140,7 @@ const AllUsersOnLeave = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <User className="w-5 h-5" />
-          All Users on Leave
+          Users on Leave Today
           <Badge variant="secondary" className="ml-2">
             {allLeaveApplications.length}
           </Badge>
@@ -143,7 +150,7 @@ const AllUsersOnLeave = () => {
         {allLeaveApplications.length === 0 ? (
           <div className="text-center py-8">
             <CalendarDays className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No users on leave</p>
+            <p className="text-gray-500">No users on leave today</p>
           </div>
         ) : (
           <div className="space-y-4">

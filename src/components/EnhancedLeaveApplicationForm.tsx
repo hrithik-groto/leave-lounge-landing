@@ -489,21 +489,22 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
 
           {/* Reason Textarea */}
           <div className="space-y-2">
-            <Label htmlFor="reason">Reason for Leave</Label>
+            <Label htmlFor="reason">Reason for Leave <span className="text-red-500">*</span></Label>
             <Textarea
               id="reason"
               placeholder="Explain why you need time off..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={4}
+              required
             />
           </div>
 
           {/* Submit Button */}
           <Button 
             type="submit" 
-            disabled={isSubmitting} 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-md transition-colors duration-300"
+            disabled={isSubmitting || !selectedLeaveType || !reason.trim() || !startDate}
+            className="w-full bg-primary hover:bg-primary/90"
           >
             {isSubmitting ? 'Submitting...' : 'Submit Application'}
           </Button>
