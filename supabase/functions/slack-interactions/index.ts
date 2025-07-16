@@ -294,12 +294,22 @@ serve(async (req) => {
           .single();
 
         if (leaveApplication) {
-          await supabaseClient.functions.invoke('slack-notify', {
+          console.log('📤 Sending Slack admin channel notification for new leave application');
+          
+          // Send notification to admin channel (webhook)
+          const adminChannelResponse = await supabaseClient.functions.invoke('slack-notify', {
             body: {
               leaveApplication: leaveApplication,
-              isTest: false
+              isTest: false,
+              sendToAdminChannel: true
             }
           });
+
+          if (adminChannelResponse.error) {
+            console.error('Failed to send admin channel notification:', adminChannelResponse.error);
+          } else {
+            console.log('✅ Admin channel notification sent successfully');
+          }
           
           // Create notification for admin in webapp
           await supabaseClient
@@ -631,23 +641,31 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
 
 async function handleCheckBalance(supabaseClient: any, payload: any, userId: string) {
   try {
-    // Use the database function to get accurate balance data
-    const { data: balanceData } = await supabaseClient
-      .rpc('get_total_remaining_leaves', { p_user_id: userId });
-
+    // Get detailed leave balance information
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('name')
       .eq('id', userId)
       .single();
 
-    const userName = profile?.name || 'there';
-    
-    if (!balanceData) {
+    const userName = profile?.name || 'User';
+
+    // Get all leave types and their individual balances
+    const { data: leaveTypes } = await supabaseClient
+      .from('leave_types')
+      .select(`
+        id, 
+        label, 
+        color,
+        leave_policies (annual_allowance)
+      `)
+      .eq('is_active', true);
+
+    if (!leaveTypes || leaveTypes.length === 0) {
       return new Response(
         JSON.stringify({
           response_type: 'ephemeral',
-          text: '⚠️ No leave balance data available. Please contact HR to initialize your leave balances.',
+          text: '⚠️ No leave types configured. Please contact HR.',
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -655,41 +673,84 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
       );
     }
 
-    const totalRemaining = balanceData.total_remaining_days || 0;
-    const paidLeaveRemaining = balanceData.paid_leave_remaining || 0;
-    const wfhRemaining = balanceData.wfh_remaining || 0;
-    const shortLeaveRemaining = balanceData.short_leave_remaining || 0;
+    // Calculate used leave for each type
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    
+    let totalRemainingDays = 0;
+    let deductibleLeaves = [];
+    let nonDeductibleLeaves = [];
+
+    for (const leaveType of leaveTypes) {
+      const { data: balanceData } = await supabaseClient
+        .rpc('get_monthly_leave_balance', { 
+          p_user_id: userId, 
+          p_leave_type_id: leaveType.id,
+          p_month: currentMonth,
+          p_year: currentYear
+        });
+
+      if (balanceData) {
+        const allowance = balanceData.monthly_allowance || 0;
+        const used = balanceData.used_this_month || 0;
+        const remaining = balanceData.remaining_this_month || 0;
+        
+        totalRemainingDays += remaining;
+
+        const leaveInfo = {
+          label: leaveType.label,
+          icon: getLeaveTypeIcon(leaveType.label),
+          used: used,
+          remaining: remaining,
+          allowance: allowance
+        };
+
+        // Categorize leaves based on type
+        if (leaveType.label.includes('Additional') || leaveType.label.includes('Comp') || leaveType.label.includes('Special')) {
+          nonDeductibleLeaves.push(leaveInfo);
+        } else {
+          deductibleLeaves.push(leaveInfo);
+        }
+      }
+    }
 
     let balanceBlocks = [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `👋 Hey ${userName}! You have *${totalRemaining.toFixed(1)} days* remaining in this cycle 🌴`
+          text: `You have *${totalRemainingDays.toFixed(2)} days* of leave balance remaining.\n\nHere's a breakdown of your leaves this cycle:`
         }
       },
       {
         type: 'divider'
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "*📊 Your Leave Balance Breakdown:*"
-        }
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `🌴 *Paid Leave:* ${paidLeaveRemaining.toFixed(1)} days remaining\n🏠 *Work From Home:* ${wfhRemaining.toFixed(1)} days remaining\n⏰ *Short Leave:* ${shortLeaveRemaining.toFixed(0)} hours remaining`
-        }
       }
     ];
 
-    // Add usage summary if any leave has been used
-    const totalUsed = balanceData.total_used_days || 0;
-    if (totalUsed > 0) {
+    // Add deductible leave types
+    if (deductibleLeaves.length > 0) {
+      balanceBlocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Deductible leave-types:*'
+        }
+      });
+
+      deductibleLeaves.forEach(leave => {
+        const leaveText = `${leave.icon} *${leave.label}:* ${leave.used.toFixed(2)} applied, ${leave.remaining.toFixed(2)} remaining`;
+        balanceBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `• ${leaveText}`
+          }
+        });
+      });
+    }
+
+    // Add non-deductible leave types if any
+    if (nonDeductibleLeaves.length > 0) {
       balanceBlocks.push(
         {
           type: 'divider'
@@ -698,24 +759,22 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Used This Month:* ${totalUsed.toFixed(1)} days total`
+            text: '*Non-deductible leave-types:*'
           }
         }
       );
-    }
 
-    // Add helpful tip
-    balanceBlocks.push(
-      {
-        type: 'context',
-        elements: [
-          {
+      nonDeductibleLeaves.forEach(leave => {
+        const leaveText = `${leave.icon} *${leave.label}:* ${leave.used.toFixed(2)} applied`;
+        balanceBlocks.push({
+          type: 'section',
+          text: {
             type: 'mrkdwn',
-            text: '💡 Tip: Plan your leaves in advance and track your balance regularly!'
+            text: `• ${leaveText}`
           }
-        ]
-      }
-    );
+        });
+      });
+    }
 
     return new Response(
       JSON.stringify({
@@ -740,17 +799,6 @@ async function handleCheckBalance(supabaseClient: any, payload: any, userId: str
       }
     );
   }
-
-  return new Response(
-    JSON.stringify({
-      response_type: 'ephemeral',
-      blocks: balanceBlocks,
-    }),
-    {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
-    }
-  );
 }
 
 function getLeaveTypeIcon(leaveType: string): string {
@@ -768,39 +816,96 @@ function getLeaveTypeIcon(leaveType: string): string {
 }
 
 async function handleTeammatesLeave(supabaseClient: any, payload: any, userId: string) {
-  const today = new Date().toISOString().split('T')[0];
-  
-  const { data: teammatesOnLeave } = await supabaseClient
-    .from('leave_applied_users')
-    .select(`
-      *,
-      profiles (name),
-      leave_types (label, color)
-    `)
-    .eq('status', 'approved')
-    .lte('start_date', today)
-    .gte('end_date', today);
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { data: teammatesOnLeave } = await supabaseClient
+      .from('leave_applied_users')
+      .select(`
+        *,
+        profiles (name),
+        leave_types (label, color)
+      `)
+      .eq('status', 'approved')
+      .lte('start_date', today)
+      .gte('end_date', today);
 
-  let leaveText = '*👥 Teammates on Leave Today*\n\n';
-  
-  if (teammatesOnLeave && teammatesOnLeave.length > 0) {
-    teammatesOnLeave.forEach((leave: any) => {
-      leaveText += `• *${leave.profiles?.name || 'Unknown'}* - ${leave.leave_types.label} (until ${leave.end_date})\n`;
-    });
-  } else {
-    leaveText += 'No teammates on leave today! 🎉';
-  }
+    let blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${teammatesOnLeave?.length || 0} people are on leave today* 🌴`
+        }
+      },
+      {
+        type: 'divider'
+      }
+    ];
 
-  return new Response(
-    JSON.stringify({
-      response_type: 'ephemeral',
-      text: leaveText,
-    }),
-    {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
+    if (teammatesOnLeave && teammatesOnLeave.length > 0) {
+      // Group by company/team
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '👆 *GROTO*'
+        }
+      });
+
+      teammatesOnLeave.forEach((leave: any) => {
+        // Determine if it's a half day leave
+        let leaveType = '';
+        if (leave.is_half_day) {
+          leaveType = leave.leave_time_start < '12:00' ? 'First Half' : 'Second Half';
+        } else {
+          leaveType = 'Full Day';
+        }
+
+        // Add status indicator if pending
+        const statusIndicator = leave.status === 'pending' ? ' - (pending approval)' : '';
+        
+        blocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `• *${leave.profiles?.name || 'Unknown'}* - ${leaveType}${statusIndicator}`
+          }
+        });
+      });
+    } else {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: 'No teammates on leave today! 🎉\n\nEveryone is available and ready to work!'
+        }
+      });
     }
-  );
+
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        blocks: blocks,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
+  } catch (error) {
+    console.error('Error fetching teammates leave:', error);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to fetch teammates leave information. Please try again or contact support.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
+  }
 }
 
 async function handleViewUpcoming(supabaseClient: any, payload: any, userId: string) {

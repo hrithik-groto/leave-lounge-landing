@@ -20,7 +20,7 @@ serve(async (req) => {
     );
 
     const requestBody = await req.json();
-    const { leaveApplication, isTest, checkConfig, isApprovalUpdate, sendToUser } = requestBody;
+    const { leaveApplication, isTest, checkConfig, isApprovalUpdate, sendToUser, sendToAdminChannel, sendToAllUsersChannel } = requestBody;
 
     // Handle configuration check
     if (checkConfig) {
@@ -178,30 +178,67 @@ serve(async (req) => {
       }
     );
 
-    // Get Slack webhook URL from environment
-    const slackWebhookUrl = Deno.env.get('SLACK_WEBHOOK_URL');
-    if (!slackWebhookUrl) {
-      throw new Error('SLACK_WEBHOOK_URL not configured');
+    // Send to appropriate Slack channels
+    let channelResults = [];
+
+    // Send to admin channel for new applications or if explicitly requested
+    if (!isApprovalUpdate || sendToAdminChannel) {
+      const adminWebhookUrl = Deno.env.get('SLACK_WEBHOOK_URL');
+      if (adminWebhookUrl) {
+        console.log('Sending message to admin Slack channel...');
+        
+        const adminResponse = await fetch(adminWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(slackMessage),
+        });
+
+        if (!adminResponse.ok) {
+          const errorText = await adminResponse.text();
+          console.error('Admin Slack API error:', errorText);
+          channelResults.push({ channel: 'admin', success: false, error: errorText });
+        } else {
+          console.log('✅ Successfully sent Slack admin channel notification');
+          channelResults.push({ channel: 'admin', success: true });
+        }
+      }
     }
 
-    console.log('Sending message to Slack...');
+    // Send to all users channel for approved/rejected leaves
+    if (isApprovalUpdate || sendToAllUsersChannel) {
+      const allUsersChannelId = Deno.env.get('SLACK_ALL_USERS_CHANNEL_ID');
+      const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+      
+      if (allUsersChannelId && botToken && (isApproved || isRejected)) {
+        console.log('Sending message to all users Slack channel...');
+        
+        const allUsersResponse = await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: allUsersChannelId,
+            ...slackMessage,
+          }),
+        });
 
-    // Send to Slack channel (webhook)
-    const slackResponse = await fetch(slackWebhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(slackMessage),
-    });
-
-    if (!slackResponse.ok) {
-      const errorText = await slackResponse.text();
-      console.error('Slack API error:', errorText);
-      throw new Error(`Slack API error: ${slackResponse.status} - ${errorText}`);
+        const allUsersData = await allUsersResponse.json();
+        
+        if (!allUsersData.ok) {
+          console.error('All users channel Slack API error:', allUsersData.error);
+          channelResults.push({ channel: 'all_users', success: false, error: allUsersData.error });
+        } else {
+          console.log('✅ Successfully sent Slack all users channel notification');
+          channelResults.push({ channel: 'all_users', success: true });
+        }
+      }
     }
 
-    console.log('Successfully sent Slack channel notification');
+    console.log('Channel notification results:', channelResults);
 
     // Send individual DM if requested and user has Slack integration
     if (sendToUser) {

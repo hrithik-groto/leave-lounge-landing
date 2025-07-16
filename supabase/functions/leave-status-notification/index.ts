@@ -79,6 +79,28 @@ Deno.serve(async (req) => {
     // Send Slack personal notification
     await sendSlackPersonalNotification(supabase, leaveRequest, new_status);
 
+    // Send Slack channel notification to all users for approved/rejected leaves
+    if (new_status === 'approved' || new_status === 'rejected') {
+      try {
+        const { error: slackError } = await supabase.functions.invoke('slack-notify', {
+          body: {
+            leaveApplication: leaveRequest,
+            isApprovalUpdate: true,
+            sendToUser: false, // Don't send personal DM here, as we handle it above
+            sendToAllUsersChannel: true // Send to all users channel for status updates
+          }
+        });
+
+        if (slackError) {
+          console.error('❌ Failed to send Slack channel notification:', slackError);
+        } else {
+          console.log('✅ Slack channel notification sent successfully');
+        }
+      } catch (error) {
+        console.error('❌ Error calling slack-notify function:', error);
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
