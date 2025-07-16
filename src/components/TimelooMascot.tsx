@@ -73,7 +73,7 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
 
           {/* Speech bubble when waving */}
           {isWaving && (
-            <div className="absolute -top-8 -left-16 bg-white rounded-lg p-2 shadow-lg animate-fade-in border border-purple-200">
+            <div className="absolute -top-8 -right-16 bg-white rounded-lg p-2 shadow-lg animate-fade-in border border-purple-200">
               <div className="text-xs font-medium text-purple-700 whitespace-nowrap">
                 Leave applied! 🎉
               </div>
