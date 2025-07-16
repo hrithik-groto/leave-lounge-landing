@@ -1461,6 +1461,8 @@ async function handleAdminTeamOverview(supabaseClient: any, payload: any, userId
 async function handleApproveLeave(supabaseClient: any, payload: any, leaveRequestId: string) {
   const adminUserId = payload.user.id;
   
+  console.log(`🔄 Processing leave approval for request ID: ${leaveRequestId} by admin: ${adminUserId}`);
+  
   // Update leave status to approved
   const { error: updateError } = await supabaseClient
     .from('leave_applied_users')
@@ -1472,7 +1474,7 @@ async function handleApproveLeave(supabaseClient: any, payload: any, leaveReques
     .eq('id', leaveRequestId);
 
   if (updateError) {
-    console.error('Error approving leave:', updateError);
+    console.error('❌ Error approving leave:', updateError);
     return new Response(
       JSON.stringify({
         response_type: 'ephemeral',
@@ -1480,12 +1482,13 @@ async function handleApproveLeave(supabaseClient: any, payload: any, leaveReques
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
   }
 
   // Get the updated leave request for notifications
-  const { data: leaveRequest } = await supabaseClient
+  const { data: leaveRequest, error: fetchError } = await supabaseClient
     .from('leave_applied_users')
     .select(`
       *,
@@ -1495,9 +1498,25 @@ async function handleApproveLeave(supabaseClient: any, payload: any, leaveReques
     .eq('id', leaveRequestId)
     .single();
 
-  if (leaveRequest) {
-    // Send notification to the user
-    await supabaseClient
+  if (fetchError || !leaveRequest) {
+    console.error('❌ Error fetching leave request details:', fetchError);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '✅ Leave approved, but failed to send notifications. User will see the approval in the dashboard.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
+  }
+
+  console.log(`📋 Processing notifications for user: ${leaveRequest.user_id} (${leaveRequest.profiles?.name})`);
+
+  // Send in-app notification to the user
+  try {
+    const { error: notificationError } = await supabaseClient
       .from('notifications')
       .insert({
         user_id: leaveRequest.user_id,
@@ -1505,47 +1524,36 @@ async function handleApproveLeave(supabaseClient: any, payload: any, leaveReques
         type: 'leave_approved'
       });
 
-    // Send Slack notification if user has Slack integration
-    try {
-      const { data: slackIntegration } = await supabaseClient
-        .from('user_slack_integrations')
-        .select('*')
-        .eq('user_id', leaveRequest.user_id)
-        .single();
-
-      if (slackIntegration) {
-        // Send direct message to user
-        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-        await fetch('https://slack.com/api/chat.postMessage', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${botToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            channel: slackIntegration.slack_user_id,
-            text: `🎉 *Leave Request Approved!*\n\nYour ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been approved by your manager!\n\nEnjoy your time off! 🏖️`,
-          }),
-        });
-      }
-    } catch (error) {
-      console.error('Error sending Slack notification:', error);
+    if (notificationError) {
+      console.error('⚠️ Failed to create in-app notification:', notificationError);
+    } else {
+      console.log('✅ In-app notification created successfully');
     }
+  } catch (error) {
+    console.error('⚠️ Error creating in-app notification:', error);
   }
+
+  // Send Slack direct message notification
+  await sendSlackPersonalNotification(supabaseClient, leaveRequest, 'approved');
 
   return new Response(
     JSON.stringify({
       response_type: 'ephemeral',
-      text: `✅ *Leave Request Approved!*\n\nSuccessfully approved ${leaveRequest?.profiles?.name || 'user'}'s leave request. They will be notified immediately.`,
+      text: `✅ *Leave Request Approved!*\n\nSuccessfully approved ${leaveRequest?.profiles?.name || 'user'}'s leave request. They will be notified immediately via Slack and in-app notification.`,
       replace_original: true
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
 }
 
 async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequestId: string) {
+  const adminUserId = payload.user.id;
+  
+  console.log(`🔄 Processing leave rejection for request ID: ${leaveRequestId} by admin: ${adminUserId}`);
+  
   // Update leave status to rejected
   const { error: updateError } = await supabaseClient
     .from('leave_applied_users')
@@ -1557,7 +1565,7 @@ async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequest
     .eq('id', leaveRequestId);
 
   if (updateError) {
-    console.error('Error rejecting leave:', updateError);
+    console.error('❌ Error rejecting leave:', updateError);
     return new Response(
       JSON.stringify({
         response_type: 'ephemeral',
@@ -1565,12 +1573,13 @@ async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequest
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
       }
     );
   }
 
   // Get the updated leave request for notifications
-  const { data: leaveRequest } = await supabaseClient
+  const { data: leaveRequest, error: fetchError } = await supabaseClient
     .from('leave_applied_users')
     .select(`
       *,
@@ -1580,9 +1589,25 @@ async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequest
     .eq('id', leaveRequestId)
     .single();
 
-  if (leaveRequest) {
-    // Send notification to the user
-    await supabaseClient
+  if (fetchError || !leaveRequest) {
+    console.error('❌ Error fetching leave request details:', fetchError);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '✅ Leave rejected, but failed to send notifications. User will see the rejection in the dashboard.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
+  }
+
+  console.log(`📋 Processing rejection notifications for user: ${leaveRequest.user_id} (${leaveRequest.profiles?.name})`);
+
+  // Send in-app notification to the user
+  try {
+    const { error: notificationError } = await supabaseClient
       .from('notifications')
       .insert({
         user_id: leaveRequest.user_id,
@@ -1590,44 +1615,223 @@ async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequest
         type: 'leave_rejected'
       });
 
-    // Send Slack notification if user has Slack integration
-    try {
-      const { data: slackIntegration } = await supabaseClient
-        .from('user_slack_integrations')
-        .select('*')
-        .eq('user_id', leaveRequest.user_id)
-        .single();
-
-      if (slackIntegration) {
-        // Send direct message to user
-        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-        await fetch('https://slack.com/api/chat.postMessage', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${botToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            channel: slackIntegration.slack_user_id,
-            text: `❌ *Leave Request Update*\n\nYour ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been rejected.\n\nPlease contact your manager for more details.`,
-          }),
-        });
-      }
-    } catch (error) {
-      console.error('Error sending Slack notification:', error);
+    if (notificationError) {
+      console.error('⚠️ Failed to create in-app notification:', notificationError);
+    } else {
+      console.log('✅ In-app notification created successfully');
     }
+  } catch (error) {
+    console.error('⚠️ Error creating in-app notification:', error);
   }
+
+  // Send Slack direct message notification
+  await sendSlackPersonalNotification(supabaseClient, leaveRequest, 'rejected');
 
   return new Response(
     JSON.stringify({
       response_type: 'ephemeral',
-      text: `❌ *Leave Request Rejected*\n\nSuccessfully rejected ${leaveRequest?.profiles?.name || 'user'}'s leave request. They will be notified.`,
+      text: `❌ *Leave Request Rejected*\n\nSuccessfully rejected ${leaveRequest?.profiles?.name || 'user'}'s leave request. They will be notified via Slack and in-app notification.`,
       replace_original: true
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
     }
   );
+}
+
+// Helper function to send personal Slack notifications to users
+async function sendSlackPersonalNotification(supabaseClient: any, leaveRequest: any, action: 'approved' | 'rejected') {
+  try {
+    console.log(`📧 Sending Slack personal notification for ${action} leave to user: ${leaveRequest.user_id}`);
+    
+    // Check if user has Slack integration
+    const { data: slackIntegration, error: slackError } = await supabaseClient
+      .from('user_slack_integrations')
+      .select('slack_user_id, slack_team_id')
+      .eq('user_id', leaveRequest.user_id)
+      .single();
+
+    if (slackError || !slackIntegration) {
+      console.log(`⚠️ No Slack integration found for user ${leaveRequest.user_id}: ${slackError?.message || 'No integration'}`);
+      return;
+    }
+
+    console.log(`📱 Found Slack integration for user. Slack ID: ${slackIntegration.slack_user_id}`);
+
+    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    if (!botToken) {
+      console.error('❌ SLACK_BOT_TOKEN not found in environment variables');
+      return;
+    }
+
+    // Format the leave dates nicely
+    const startDate = new Date(leaveRequest.start_date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    
+    const endDate = new Date(leaveRequest.end_date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const dateRange = leaveRequest.start_date === leaveRequest.end_date ? startDate : `${startDate} to ${endDate}`;
+    
+    // Calculate leave duration
+    const start = new Date(leaveRequest.start_date);
+    const end = new Date(leaveRequest.end_date);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const duration = diffDays === 1 ? '1 day' : `${diffDays} days`;
+
+    let messageText, messageBlocks;
+
+    if (action === 'approved') {
+      messageText = `🎉 Great news! Your leave request has been approved!`;
+      messageBlocks = [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '🎉 Leave Request Approved!',
+            emoji: true
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `Your *${leaveRequest.leave_types?.label || 'leave'}* request has been approved by your manager! 🎊`
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*📅 Dates:*\n${dateRange}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*⏰ Duration:*\n${duration}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*📝 Type:*\n${leaveRequest.leave_types?.label || 'N/A'}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*💬 Reason:*\n${leaveRequest.reason || 'No reason provided'}`
+            }
+          ]
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '🏖️ *Enjoy your time off!* Remember to set up an out-of-office message and hand over any urgent tasks to your colleagues.'
+          }
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: '📱 You can view all your leave applications in the Timeloo dashboard.'
+            }
+          ]
+        }
+      ];
+    } else {
+      messageText = `❌ Your leave request has been rejected.`;
+      messageBlocks = [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '❌ Leave Request Update',
+            emoji: true
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `Your *${leaveRequest.leave_types?.label || 'leave'}* request has been rejected.`
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*📅 Requested Dates:*\n${dateRange}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*⏰ Duration:*\n${duration}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*📝 Type:*\n${leaveRequest.leave_types?.label || 'N/A'}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*💬 Reason:*\n${leaveRequest.reason || 'No reason provided'}`
+            }
+          ]
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '💬 *Need clarification?* Please reach out to your manager to understand the reason for rejection and discuss alternative dates if needed.'
+          }
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: '📱 You can submit a new leave request anytime through the Timeloo dashboard or by using `/leaves` command.'
+            }
+          ]
+        }
+      ];
+    }
+
+    // Send the Slack message
+    const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: slackIntegration.slack_user_id,
+        text: messageText,
+        blocks: messageBlocks
+      }),
+    });
+
+    const slackData = await slackResponse.json();
+    
+    if (!slackData.ok) {
+      console.error(`❌ Slack API error:`, slackData.error);
+      console.error('Response details:', slackData);
+    } else {
+      console.log(`✅ Successfully sent Slack personal notification for ${action} leave`);
+      console.log(`Message sent to user ${slackIntegration.slack_user_id} in channel ${slackData.channel}`);
+    }
+
+  } catch (error) {
+    console.error(`❌ Error sending Slack personal notification for ${action} leave:`, error);
+  }
 }
 
 async function handleCancelLeave(supabaseClient: any, payload: any, leaveRequestId: string) {
