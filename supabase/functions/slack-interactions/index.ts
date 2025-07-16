@@ -160,6 +160,9 @@ serve(async (req) => {
         case 'reject_leave':
           return await handleRejectLeave(supabaseClient, payload, userId);
         
+        case 'cancel_leave':
+          return await handleCancelLeave(supabaseClient, payload, userId);
+        
         case 'admin_action_overflow':
           // Handle overflow menu actions for admin approvals/rejections
           const selectedValue = action.selected_option?.value;
@@ -627,127 +630,113 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
 }
 
 async function handleCheckBalance(supabaseClient: any, payload: any, userId: string) {
-  const { data: balances } = await supabaseClient
-    .from('user_leave_balances')
-    .select(`
-      *,
-      leave_types (label, color)
-    `)
-    .eq('user_id', userId)
-    .eq('year', new Date().getFullYear());
+  try {
+    // Use the database function to get accurate balance data
+    const { data: balanceData } = await supabaseClient
+      .rpc('get_total_remaining_leaves', { p_user_id: userId });
 
-  const { data: profile } = await supabaseClient
-    .from('profiles')
-    .select('name')
-    .eq('id', userId)
-    .single();
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('name')
+      .eq('id', userId)
+      .single();
 
-  let totalDays = 0;
-  let balanceBlocks = [
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `You have *${totalDays} days* remaining in this cycle 🌴`
-      }
-    },
-    {
-      type: 'divider'
+    const userName = profile?.name || 'there';
+    
+    if (!balanceData) {
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: '⚠️ No leave balance data available. Please contact HR to initialize your leave balances.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
-  ];
 
-  if (balances && balances.length > 0) {
-    // Calculate total remaining days
-    balances.forEach((balance: any) => {
-      const available = (balance.allocated_days || 0) - (balance.used_days || 0);
-      totalDays += available;
-    });
+    const totalRemaining = balanceData.total_remaining_days || 0;
+    const paidLeaveRemaining = balanceData.paid_leave_remaining || 0;
+    const wfhRemaining = balanceData.wfh_remaining || 0;
+    const shortLeaveRemaining = balanceData.short_leave_remaining || 0;
 
-    // Update the total in the first block
-    balanceBlocks[0].text.text = `You have *${totalDays.toFixed(2)} days* remaining in this cycle 🌴`;
-
-    // Add detailed breakdown
-    balanceBlocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: "Here's a breakdown of your leaves this cycle:"
-      }
-    });
-
-    // Group by deductible and non-deductible
-    const deductibleLeaves: any[] = [];
-    const nonDeductibleLeaves: any[] = [];
-
-    balances.forEach((balance: any) => {
-      const applied = balance.used_days || 0;
-      const remaining = (balance.allocated_days || 0) - applied;
-      const leaveInfo = {
-        label: balance.leave_types.label,
-        applied: applied,
-        remaining: remaining,
-        icon: getLeaveTypeIcon(balance.leave_types.label)
-      };
-
-      // Simple classification - you can enhance this based on your leave types
-      if (balance.leave_types.label.toLowerCase().includes('additional') || 
-          balance.leave_types.label.toLowerCase().includes('comp') ||
-          balance.leave_types.label.toLowerCase().includes('special')) {
-        nonDeductibleLeaves.push(leaveInfo);
-      } else {
-        deductibleLeaves.push(leaveInfo);
-      }
-    });
-
-    // Add deductible leaves section
-    if (deductibleLeaves.length > 0) {
-      balanceBlocks.push({
+    let balanceBlocks = [
+      {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Deductible leave-types:*'
+          text: `👋 Hey ${userName}! You have *${totalRemaining.toFixed(1)} days* remaining in this cycle 🌴`
         }
-      });
-
-      deductibleLeaves.forEach(leave => {
-        balanceBlocks.push({
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `${leave.icon} *${leave.label}*: ${leave.applied.toFixed(2)} applied, ${leave.remaining.toFixed(2)} remaining`
-          }
-        });
-      });
-    }
-
-    // Add non-deductible leaves section
-    if (nonDeductibleLeaves.length > 0) {
-      balanceBlocks.push({
+      },
+      {
+        type: 'divider'
+      },
+      {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Non-deductible leave-types:*'
+          text: "*📊 Your Leave Balance Breakdown:*"
         }
-      });
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `🌴 *Paid Leave:* ${paidLeaveRemaining.toFixed(1)} days remaining\n🏠 *Work From Home:* ${wfhRemaining.toFixed(1)} days remaining\n⏰ *Short Leave:* ${shortLeaveRemaining.toFixed(0)} hours remaining`
+        }
+      }
+    ];
 
-      nonDeductibleLeaves.forEach(leave => {
-        balanceBlocks.push({
+    // Add usage summary if any leave has been used
+    const totalUsed = balanceData.total_used_days || 0;
+    if (totalUsed > 0) {
+      balanceBlocks.push(
+        {
+          type: 'divider'
+        },
+        {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `${leave.icon} *${leave.label}*: ${leave.applied.toFixed(2)} applied`
+            text: `📋 *Used This Month:* ${totalUsed.toFixed(1)} days total`
           }
-        });
-      });
+        }
+      );
     }
-  } else {
-    balanceBlocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: 'No leave balance information available. Please contact HR to set up your leave balances.'
+
+    // Add helpful tip
+    balanceBlocks.push(
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: '💡 Tip: Plan your leaves in advance and track your balance regularly!'
+          }
+        ]
       }
-    });
+    );
+
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        blocks: balanceBlocks,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (error) {
+    console.error('Error fetching leave balance:', error);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to fetch leave balance. Please try again or contact support.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   return new Response(
@@ -811,38 +800,105 @@ async function handleTeammatesLeave(supabaseClient: any, payload: any, userId: s
 }
 
 async function handleViewUpcoming(supabaseClient: any, payload: any, userId: string) {
-  const today = new Date().toISOString().split('T')[0];
-  
-  const { data: upcomingLeaves } = await supabaseClient
-    .from('leave_applied_users')
-    .select(`
-      *,
-      leave_types (label, color)
-    `)
-    .eq('user_id', userId)
-    .gte('start_date', today)
-    .order('start_date', { ascending: true });
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { data: upcomingLeaves } = await supabaseClient
+      .from('leave_applied_users')
+      .select(`
+        *,
+        leave_types (label, color)
+      `)
+      .eq('user_id', userId)
+      .gte('start_date', today)
+      .order('start_date', { ascending: true })
+      .limit(10);
 
-  let upcomingText = '*📋 Your Upcoming Leaves*\n\n';
-  
-  if (upcomingLeaves && upcomingLeaves.length > 0) {
-    upcomingLeaves.forEach((leave: any) => {
-      const statusEmoji = leave.status === 'approved' ? '✅' : leave.status === 'rejected' ? '❌' : '⏳';
-      upcomingText += `${statusEmoji} *${leave.leave_types.label}* - ${leave.start_date} to ${leave.end_date} (${leave.status})\n`;
-    });
-  } else {
-    upcomingText += 'No upcoming leaves scheduled.';
-  }
+    let blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*📋 Your Upcoming Leaves*'
+        }
+      },
+      {
+        type: 'divider'
+      }
+    ];
+    
+    if (upcomingLeaves && upcomingLeaves.length > 0) {
+      upcomingLeaves.forEach((leave: any, index: number) => {
+        const statusEmoji = leave.status === 'approved' ? '✅' : leave.status === 'rejected' ? '❌' : '⏳';
+        const days = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        let blockText = `${statusEmoji} *${leave.leave_types.label}*\n📅 ${leave.start_date} to ${leave.end_date} (${days} day${days > 1 ? 's' : ''})\n🏷️ Status: ${leave.status.charAt(0).toUpperCase() + leave.status.slice(1)}`;
+        
+        if (leave.reason) {
+          blockText += `\n📝 _${leave.reason}_`;
+        }
 
-  return new Response(
-    JSON.stringify({
-      response_type: 'ephemeral',
-      text: upcomingText,
-    }),
-    {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        const block: any = {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: blockText
+          }
+        };
+
+        // Add cancel option for pending leaves
+        if (leave.status === 'pending') {
+          block.accessory = {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🗑️ Cancel',
+            },
+            value: leave.id,
+            action_id: 'cancel_leave',
+            style: 'danger'
+          };
+        }
+
+        blocks.push(block);
+
+        if (index < upcomingLeaves.length - 1) {
+          blocks.push({
+            type: 'divider'
+          });
+        }
+      });
+    } else {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '🎯 No upcoming leaves scheduled.\n\nReady to plan your next break? Use the *Apply Leave* button!'
+        }
+      });
     }
-  );
+
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        blocks: blocks,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (error) {
+    console.error('Error fetching upcoming leaves:', error);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to fetch upcoming leaves. Please try again or contact support.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
 }
 
 async function handleViewHolidays(supabaseClient: any, payload: any, userId: string) {
@@ -916,48 +972,266 @@ async function handleLeavePolicy(supabaseClient: any, payload: any, userId: stri
 }
 
 async function handleClearPending(supabaseClient: any, payload: any, userId: string) {
-  const { data: pendingLeaves } = await supabaseClient
-    .from('leave_applied_users')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'pending');
+  try {
+    // Check if user is admin
+    const isAdmin = userId === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+    
+    if (isAdmin) {
+      // Admin can see all pending requests
+      const { data: pendingLeaves } = await supabaseClient
+        .from('leave_applied_users')
+        .select(`
+          *,
+          profiles (name, email),
+          leave_types (label, color)
+        `)
+        .eq('status', 'pending')
+        .order('applied_at', { ascending: false })
+        .limit(15);
 
-  let responseText = '';
-  
-  if (pendingLeaves && pendingLeaves.length > 0) {
-    responseText = `You have ${pendingLeaves.length} pending leave request(s). To cancel them, please visit the web app or contact your manager.`;
-  } else {
-    responseText = '✅ You have no pending leave requests to clear!';
-  }
+      if (!pendingLeaves || pendingLeaves.length === 0) {
+        return new Response(
+          JSON.stringify({
+            response_type: 'ephemeral',
+            text: '✅ *No pending leave requests to review!*\n\nAll caught up! 🎉',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
 
-  return new Response(
-    JSON.stringify({
-      response_type: 'ephemeral',
-      text: responseText,
-    }),
-    {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      let blocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `👑 *Admin Review Center*\n\n📋 *${pendingLeaves.length} Pending Request${pendingLeaves.length > 1 ? 's' : ''}*`
+          }
+        },
+        {
+          type: 'divider'
+        }
+      ];
+
+      pendingLeaves.forEach((request: any, index: number) => {
+        const days = Math.ceil((new Date(request.end_date).getTime() - new Date(request.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        blocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${request.profiles?.name || 'Unknown User'}*\n📅 ${request.start_date} to ${request.end_date} (${days} day${days > 1 ? 's' : ''})\n🏷️ ${request.leave_types?.label || 'Unknown Type'}${request.reason ? `\n📝 _${request.reason}_` : ''}`
+          },
+          accessory: {
+            type: 'overflow',
+            options: [
+              {
+                text: {
+                  type: 'plain_text',
+                  text: '✅ Approve',
+                },
+                value: `approve_${request.id}`
+              },
+              {
+                text: {
+                  type: 'plain_text',
+                  text: '❌ Reject',
+                },
+                value: `reject_${request.id}`
+              }
+            ],
+            action_id: 'admin_action_overflow'
+          }
+        });
+
+        if (index < pendingLeaves.length - 1) {
+          blocks.push({
+            type: 'divider'
+          });
+        }
+      });
+
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: '💡 Use the menu (⋯) to approve or reject requests'
+          }
+        ]
+      });
+
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          blocks: blocks,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    } else {
+      // Regular user can only see their own pending requests
+      const { data: pendingLeaves } = await supabaseClient
+        .from('leave_applied_users')
+        .select(`
+          *,
+          leave_types (label, color)
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .order('applied_at', { ascending: false });
+
+      if (!pendingLeaves || pendingLeaves.length === 0) {
+        return new Response(
+          JSON.stringify({
+            response_type: 'ephemeral',
+            text: '✅ You have no pending leave requests!\n\nAll your requests have been processed. 🎉',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      let blocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `📋 *Your Pending Requests*\n\nYou have ${pendingLeaves.length} pending request${pendingLeaves.length > 1 ? 's' : ''}`
+          }
+        },
+        {
+          type: 'divider'
+        }
+      ];
+
+      pendingLeaves.forEach((request: any, index: number) => {
+        const days = Math.ceil((new Date(request.end_date).getTime() - new Date(request.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        blocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `⏳ *${request.leave_types?.label || 'Leave'}*\n📅 ${request.start_date} to ${request.end_date} (${days} day${days > 1 ? 's' : ''})${request.reason ? `\n📝 _${request.reason}_` : ''}`
+          },
+          accessory: {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🗑️ Cancel',
+            },
+            value: request.id,
+            action_id: 'cancel_leave',
+            style: 'danger'
+          }
+        });
+
+        if (index < pendingLeaves.length - 1) {
+          blocks.push({
+            type: 'divider'
+          });
+        }
+      });
+
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: '💡 You can cancel pending requests using the Cancel button'
+          }
+        ]
+      });
+
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          blocks: blocks,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error fetching pending requests:', error);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to fetch pending requests. Please try again or contact support.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
 }
 
 async function handleViewMore(supabaseClient: any, payload: any, userId: string) {
-  const moreText = `*⭐ More Timeloo Features*
-
-🔔 Get real-time notifications for leave approvals
-📊 Track team leave patterns and analytics  
-📱 Mobile-friendly web app access
-🎯 Set leave reminders and notifications
-📈 Generate leave reports for managers
-🔄 Automated leave balance calculations
-💬 Chat with HR directly from Slack
-
-Visit the web app for full feature access!`;
+  const blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*⭐ Discover More Timeloo Features*'
+      }
+    },
+    {
+      type: 'divider'
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*🌐 Visit Our Website:*\n🔗 https://www.letsgroto.com/\n\n*Explore our full suite of workforce management tools!*'
+      }
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*📱 Web App Features:*\n🔔 Real-time notifications for leave approvals\n📊 Team leave analytics and insights\n📈 Generate detailed leave reports\n🎯 Set custom leave reminders\n🔄 Automated balance calculations\n📋 Advanced leave policy management'
+      }
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*💼 Enterprise Solutions:*\n• Multi-organization management\n• Custom approval workflows\n• Advanced reporting & analytics\n• API integrations\n• White-label solutions'
+      }
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🌐 Visit Website',
+          },
+          url: 'https://www.letsgroto.com/',
+          action_id: 'visit_website'
+        }
+      ]
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '✨ Transform your leave management experience with Timeloo!'
+        }
+      ]
+    }
+  ];
 
   return new Response(
     JSON.stringify({
       response_type: 'ephemeral',
-      text: moreText,
+      blocks: blocks,
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -966,19 +1240,46 @@ Visit the web app for full feature access!`;
 }
 
 async function handleTalkToUs(supabaseClient: any, payload: any, userId: string) {
-  const supportText = `*💬 Need Help?*
-
-For support and questions:
-• Visit our web app
-• Contact your HR team
-• Check the help documentation
-
-We're here to make leave management easier for you! 🎯`;
+  const blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*💬 Need Help? Talk to Us!*'
+      }
+    },
+    {
+      type: 'divider'
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '📧 *Email Support:*\n✉️ hello@letsgroto.com\n\n💼 *For urgent matters or technical support*'
+      }
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '🌐 *Other Ways to Reach Us:*\n• Visit our web app for more features\n• Check the help documentation\n• Contact your HR team for policy questions'
+      }
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '🎯 We\'re here to make leave management easier for you!'
+        }
+      ]
+    }
+  ];
 
   return new Response(
     JSON.stringify({
       response_type: 'ephemeral',
-      text: supportText,
+      blocks: blocks,
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1315,4 +1616,116 @@ async function handleRejectLeave(supabaseClient: any, payload: any, leaveRequest
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     }
   );
+}
+
+async function handleCancelLeave(supabaseClient: any, payload: any, leaveRequestId: string) {
+  try {
+    // Get the leave request to check ownership
+    const { data: leaveRequest } = await supabaseClient
+      .from('leave_applied_users')
+      .select(`
+        *,
+        profiles (name, email),
+        leave_types (label, color)
+      `)
+      .eq('id', leaveRequestId)
+      .single();
+
+    if (!leaveRequest) {
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: '❌ Leave request not found.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Check if the user owns this leave request
+    const slackUserId = payload.user.id;
+    const { data: userSlackIntegration } = await supabaseClient
+      .from('user_slack_integrations')
+      .select('user_id')
+      .eq('slack_user_id', slackUserId)
+      .single();
+
+    if (!userSlackIntegration || userSlackIntegration.user_id !== leaveRequest.user_id) {
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: '❌ You can only cancel your own leave requests.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Check if the leave is still pending
+    if (leaveRequest.status !== 'pending') {
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: `❌ Cannot cancel this leave request as it is already ${leaveRequest.status}.`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Cancel the leave request by updating status
+    const { error: updateError } = await supabaseClient
+      .from('leave_applied_users')
+      .update({
+        status: 'cancelled'
+      })
+      .eq('id', leaveRequestId);
+
+    if (updateError) {
+      console.error('Error cancelling leave:', updateError);
+      return new Response(
+        JSON.stringify({
+          response_type: 'ephemeral',
+          text: '❌ Failed to cancel leave request. Please try again.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Create notification for admin about cancellation
+    await supabaseClient
+      .from('notifications')
+      .insert({
+        user_id: 'user_2xwywE2Bl76vs7l68dhj6nIcCPV', // Admin user ID
+        message: `${leaveRequest.profiles?.name || 'User'} cancelled their ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date}`,
+        type: 'leave_cancelled'
+      });
+
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: `✅ *Leave Request Cancelled*\n\nYour ${leaveRequest.leave_types?.label} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been successfully cancelled.`,
+        replace_original: true
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (error) {
+    console.error('Error in handleCancelLeave:', error);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        text: '❌ Failed to cancel leave request. Please try again or contact support.',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
 }
