@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     // Fetch approved leaves for today with fallback approach
     console.log('🔍 Fetching leaves for date:', today);
     
-    // First, get basic leave data
+    // First, get basic leave data including applications from Slack
     const { data: basicLeaves, error: basicLeavesError } = await supabaseClient
       .from('leave_applied_users')
       .select('*')

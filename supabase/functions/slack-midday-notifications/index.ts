@@ -26,13 +26,13 @@ Deno.serve(async (req) => {
     );
 
     const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-    const allUsersChannelId = Deno.env.get('SLACK_ALL_USERS_CHANNEL_ID');
+    const channelId = 'C095J2588Q5'; // Second channel for real-time notifications
 
     console.log('🔑 Checking environment variables...');
     console.log('Bot token exists:', !!botToken);
-    console.log('Channel ID exists:', !!allUsersChannelId);
+    console.log('Channel ID:', channelId);
 
-    if (!botToken || !allUsersChannelId) {
+    if (!botToken) {
       console.error('❌ Missing required environment variables');
       return new Response(
         JSON.stringify({ error: 'Missing required environment variables' }),
@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
         `${formattedStartDate} - ${formattedEndDate}`;
 
       const message = {
-        channel: allUsersChannelId,
+        channel: channelId,
         text: `💫 ${userName} just applied for leave!`,
         blocks: [
           {
