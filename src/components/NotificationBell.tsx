@@ -95,12 +95,11 @@ const NotificationBell = () => {
       setIsLoading(true);
       console.log('Fetching leave notifications for user:', user.id);
       
-      // Only fetch leave-related notifications (pending, approved, rejected)
+      // Fetch all notifications for the current user, focusing on leave-related ones
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .in('type', ['info', 'success', 'error']) // info=pending, success=approved, error=rejected
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -112,9 +111,20 @@ const NotificationBell = () => {
           variant: "destructive"
         });
       } else {
-        console.log('Leave notifications fetched successfully:', data);
-        setNotifications(data || []);
-        const unread = data?.filter(n => !n.is_read).length || 0;
+        console.log('All notifications fetched successfully:', data);
+        // Filter for leave-related notifications on the client side
+        const leaveNotifications = data?.filter(notification => {
+          const message = notification.message.toLowerCase();
+          return message.includes('leave') || 
+                 message.includes('approved') || 
+                 message.includes('rejected') || 
+                 message.includes('pending') ||
+                 message.includes('application');
+        }) || [];
+        
+        console.log('Filtered leave notifications:', leaveNotifications);
+        setNotifications(leaveNotifications);
+        const unread = leaveNotifications.filter(n => !n.is_read).length;
         setUnreadCount(unread);
         console.log('Unread count:', unread);
       }

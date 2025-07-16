@@ -35,10 +35,12 @@ const AllUsersOnLeave = () => {
   const fetchAllLeaveApplications = async () => {
     try {
       setLoading(true);
+      console.log('Fetching all approved leave applications...');
       
+      // Get a wider date range to show all relevant approved leaves
       const today = new Date();
-      const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7); // Last 7 days
-      const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30); // Next 30 days
+      const startDate = new Date(today.getFullYear() - 1, 0, 1); // Start of last year
+      const endDate = new Date(today.getFullYear() + 1, 11, 31); // End of next year
 
       const { data, error } = await supabase
         .from('leave_applied_users')
@@ -50,11 +52,12 @@ const AllUsersOnLeave = () => {
         .eq('status', 'approved')
         .gte('end_date', startDate.toISOString().split('T')[0])
         .lte('start_date', endDate.toISOString().split('T')[0])
-        .order('start_date', { ascending: true });
+        .order('start_date', { ascending: false });
 
       if (error) {
         console.error('Error fetching all leave applications:', error);
       } else {
+        console.log('Approved leaves fetched:', data);
         setAllLeaveApplications((data as any) || []);
       }
     } catch (error) {
