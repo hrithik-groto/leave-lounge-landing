@@ -93,12 +93,14 @@ const NotificationBell = () => {
 
     try {
       setIsLoading(true);
-      console.log('Fetching notifications for user:', user.id);
+      console.log('Fetching leave notifications for user:', user.id);
       
+      // Only fetch leave-related notifications (pending, approved, rejected)
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
+        .in('type', ['info', 'success', 'error']) // info=pending, success=approved, error=rejected
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -110,7 +112,7 @@ const NotificationBell = () => {
           variant: "destructive"
         });
       } else {
-        console.log('Notifications fetched successfully:', data);
+        console.log('Leave notifications fetched successfully:', data);
         setNotifications(data || []);
         const unread = data?.filter(n => !n.is_read).length || 0;
         setUnreadCount(unread);
@@ -209,33 +211,6 @@ const NotificationBell = () => {
     return baseStyles;
   };
 
-  const createTestNotification = async () => {
-    if (!user) return;
-    
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: user.id,
-          message: 'This is a test notification to verify the system is working properly.',
-          type: 'info'
-        });
-
-      if (error) {
-        console.error('Error creating test notification:', error);
-        toast({
-          title: "Error",
-          description: "Failed to create test notification",
-          variant: "destructive"
-        });
-      } else {
-        console.log('Test notification created successfully');
-        fetchNotifications(); // Refresh notifications
-      }
-    } catch (error) {
-      console.error('Error creating test notification:', error);
-    }
-  };
 
   if (!user) {
     return null; // Don't render if user is not logged in
@@ -264,16 +239,6 @@ const NotificationBell = () => {
                 Notifications
               </CardTitle>
               <div className="flex gap-2">
-                {notifications.length === 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={createTestNotification}
-                    className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100 transition-colors duration-200"
-                  >
-                    Test
-                  </Button>
-                )}
                 {unreadCount > 0 && (
                   <Button
                     variant="ghost"
@@ -296,15 +261,8 @@ const NotificationBell = () => {
             ) : notifications.length === 0 ? (
               <div className="text-center py-8 px-4">
                 <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 mb-3">No notifications yet</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={createTestNotification}
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                >
-                  Create Test Notification
-                </Button>
+                <p className="text-gray-500">No leave notifications yet</p>
+                <p className="text-xs text-gray-400 mt-2">You'll see updates when you apply for leave</p>
               </div>
             ) : (
               <div className="space-y-2 p-4">

@@ -130,26 +130,19 @@ Deno.serve(async (req) => {
 
     console.log(`📋 Found ${leaves?.length || 0} approved leaves for today`);
 
-    // Create Slack message
+    // Create Slack message with personal tone
     let message;
     
     if (!leaves || leaves.length === 0) {
       message = {
         channel: allUsersChannelId,
-        text: `🏢 Daily Leave Status - ${todayFormatted}`,
+        text: `Morning, Groto family… - ${todayFormatted}`,
         blocks: [
-          {
-            type: 'header',
-            text: {
-              type: 'plain_text',
-              text: `🏢 Daily Leave Status - ${todayFormatted}`
-            }
-          },
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `✅ *Great news!* Everyone is in the office today! 🎉\n\n_Have a productive day ahead!_ 💪`
+              text: `Morning, Groto family…\n\n🎉 *All hands on deck today!* Everyone's here and ready to make magic happen. Let's crush those goals together! 💪✨`
             }
           },
           {
@@ -167,63 +160,41 @@ Deno.serve(async (req) => {
         ]
       };
     } else {
-      // Group leaves by type
-      const leavesByType = leaves.reduce((acc, leave) => {
-        const type = leave.leave_types?.label || 'Other';
-        if (!acc[type]) acc[type] = [];
-        acc[type].push(leave);
-        return acc;
-      }, {});
-
-      const leaveBlocks = [];
-      
-      // Add header
-      leaveBlocks.push({
-        type: 'header',
-        text: {
-          type: 'plain_text',
-          text: `🏢 Daily Leave Status - ${todayFormatted}`
-        }
-      });
-
-      leaveBlocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `📊 *${leaves.length} team member${leaves.length > 1 ? 's' : ''} on leave today:*`
-        }
-      });
-
-      // Add leave details by type
-      Object.entries(leavesByType).forEach(([type, typeLeaves]) => {
-        const names = typeLeaves.map(leave => leave.profiles?.name || 'Unknown').join(', ');
-        const emoji = getLeaveTypeEmoji(type);
+      // Create personalized leave message
+      const leaveDetails = leaves.map(leave => {
+        const name = leave.profiles?.name || 'Unknown';
+        const leaveType = leave.leave_types?.label || 'Leave';
+        const startDate = new Date(leave.start_date);
+        const endDate = new Date(leave.end_date);
+        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
         
-        leaveBlocks.push({
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `${emoji} *${type}*: ${names} (${typeLeaves.length})`
-          }
-        });
-      });
-
-      leaveBlocks.push({ type: 'divider' });
-      
-      leaveBlocks.push({
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: `📱 Powered by Timeloo • ${formatInTimeZone(new Date(), istTimezone, 'h:mm a')} IST`
-          }
-        ]
-      });
+        return `• *${name}* - ${leaveType}, ${daysDiff} day${daysDiff > 1 ? 's' : ''} on leave`;
+      }).join('\n');
 
       message = {
         channel: allUsersChannelId,
-        text: `🏢 Daily Leave Status - ${todayFormatted}`,
-        blocks: leaveBlocks
+        text: `Morning, Groto family… - ${todayFormatted}`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `Morning, Groto family…\n\nToday our circle's a little quieter and the coffee's a little colder—our dear friends are out recharging their batteries. Let's send warm thoughts their way:\n\n${leaveDetails}\n\nDrop a 💌 or a ☀️ in the thread to let them know we miss them and can't wait to have them back. 🥺✨`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `📱 Powered by Timeloo • ${formatInTimeZone(new Date(), istTimezone, 'h:mm a')} IST`
+              }
+            ]
+          }
+        ]
       };
     }
 
