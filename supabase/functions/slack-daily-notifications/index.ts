@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { formatInTimeZone } from 'https://esm.sh/date-fns-tz@3.0.0';
 import { format } from 'https://esm.sh/date-fns@3.6.0';
@@ -49,9 +50,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate bot token format
-    if (!botToken.startsWith('xoxb-')) {
-      console.error('❌ Invalid bot token format - should start with xoxb-');
+    // Validate bot token format - accept both xoxb- and xoxe.xoxb- formats
+    if (!botToken.startsWith('xoxb-') && !botToken.startsWith('xoxe.xoxb-')) {
+      console.error('❌ Invalid bot token format - should start with xoxb- or xoxe.xoxb-');
       return new Response(
         JSON.stringify({ error: 'Invalid bot token format' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }

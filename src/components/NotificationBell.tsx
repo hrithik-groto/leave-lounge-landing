@@ -17,6 +17,7 @@ const NotificationBell = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [newNotificationId, setNewNotificationId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -91,25 +92,15 @@ const NotificationBell = () => {
     if (!user) return;
 
     try {
+      setIsLoading(true);
       console.log('Fetching notifications for user:', user.id);
-      
-      // First, let's check all notifications to debug
-      const { data: allNotifications, error: allError } = await supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      console.log('All notifications in database:', allNotifications);
       
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(20);
-      
-      console.log('Filtered notifications for user:', data);
+        .limit(50);
 
       if (error) {
         console.error('Error fetching notifications:', error);
@@ -119,14 +110,21 @@ const NotificationBell = () => {
           variant: "destructive"
         });
       } else {
-        console.log('Notifications fetched:', data);
+        console.log('Notifications fetched successfully:', data);
         setNotifications(data || []);
         const unread = data?.filter(n => !n.is_read).length || 0;
         setUnreadCount(unread);
         console.log('Unread count:', unread);
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching notifications:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load notifications",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -137,7 +135,8 @@ const NotificationBell = () => {
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .eq('id', notificationId);
+        .eq('id', notificationId)
+        .eq('user_id', user?.id); // Additional security check
 
       if (error) {
         console.error('Error marking notification as read:', error);
@@ -148,7 +147,7 @@ const NotificationBell = () => {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error marking notification as read:', error);
     }
   };
 
@@ -169,7 +168,7 @@ const NotificationBell = () => {
         setUnreadCount(0);
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error marking all notifications as read:', error);
     }
   };
 
@@ -210,6 +209,34 @@ const NotificationBell = () => {
     return baseStyles;
   };
 
+  const createTestNotification = async () => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          message: 'This is a test notification to verify the system is working properly.',
+          type: 'info'
+        });
+
+      if (error) {
+        console.error('Error creating test notification:', error);
+        toast({
+          title: "Error",
+          description: "Failed to create test notification",
+          variant: "destructive"
+        });
+      } else {
+        console.log('Test notification created successfully');
+        fetchNotifications(); // Refresh notifications
+      }
+    } catch (error) {
+      console.error('Error creating test notification:', error);
+    }
+  };
+
   if (!user) {
     return null; // Don't render if user is not logged in
   }
@@ -236,23 +263,48 @@ const NotificationBell = () => {
               <CardTitle className="text-lg bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
                 Notifications
               </CardTitle>
-              {unreadCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={markAllAsRead}
-                  className="text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-100 transition-colors duration-200"
-                >
-                  Mark all read
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {notifications.length === 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={createTestNotification}
+                    className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100 transition-colors duration-200"
+                  >
+                    Test
+                  </Button>
+                )}
+                {unreadCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={markAllAsRead}
+                    className="text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-100 transition-colors duration-200"
+                  >
+                    Mark all read
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="max-h-96 overflow-y-auto p-0">
-            {notifications.length === 0 ? (
+            {isLoading ? (
+              <div className="text-center py-8 px-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3"></div>
+                <p className="text-gray-500">Loading notifications...</p>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="text-center py-8 px-4">
                 <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No notifications yet</p>
+                <p className="text-gray-500 mb-3">No notifications yet</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={createTestNotification}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                >
+                  Create Test Notification
+                </Button>
               </div>
             ) : (
               <div className="space-y-2 p-4">
