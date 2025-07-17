@@ -8,6 +8,7 @@ import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import TestNotifications from "./pages/TestNotifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,19 @@ const App = () => (
               <>
                 <SignedIn>
                   <AdminDashboard />
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            } 
+          />
+          <Route 
+            path="/test-notifications" 
+            element={
+              <>
+                <SignedIn>
+                  <TestNotifications />
                 </SignedIn>
                 <SignedOut>
                   <RedirectToSignIn />

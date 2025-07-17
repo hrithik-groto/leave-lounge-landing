@@ -183,35 +183,45 @@ serve(async (req) => {
 
     // Send to admin channel for new applications or if explicitly requested
     if (!isApprovalUpdate || sendToAdminChannel) {
-      const adminWebhookUrl = Deno.env.get('SLACK_WEBHOOK_URL');
-      if (adminWebhookUrl) {
+      const adminChannelId = 'C0920F0V7PW'; // Admin channel ID
+      const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+      
+      if (adminChannelId && botToken) {
         console.log('Sending message to admin Slack channel...');
         
-        const adminResponse = await fetch(adminWebhookUrl, {
+        const adminResponse = await fetch('https://slack.com/api/chat.postMessage', {
           method: 'POST',
           headers: {
+            'Authorization': `Bearer ${botToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(slackMessage),
+          body: JSON.stringify({
+            channel: adminChannelId,
+            ...slackMessage,
+          }),
         });
 
-        if (!adminResponse.ok) {
-          const errorText = await adminResponse.text();
-          console.error('Admin Slack API error:', errorText);
-          channelResults.push({ channel: 'admin', success: false, error: errorText });
+        const adminData = await adminResponse.json();
+        
+        if (!adminData.ok) {
+          console.error('Admin Slack API error:', adminData.error);
+          channelResults.push({ channel: 'admin', success: false, error: adminData.error });
         } else {
           console.log('✅ Successfully sent Slack admin channel notification');
           channelResults.push({ channel: 'admin', success: true });
         }
+      } else {
+        console.error('❌ Missing admin channel ID or bot token');
+        channelResults.push({ channel: 'admin', success: false, error: 'Missing admin channel ID or bot token' });
       }
     }
 
-    // Send to all users channel for approved/rejected leaves
-    if (isApprovalUpdate || sendToAllUsersChannel) {
-      const allUsersChannelId = Deno.env.get('SLACK_ALL_USERS_CHANNEL_ID');
+    // Send to all users channel for approved leaves or if explicitly requested
+    if (sendToAllUsersChannel || (isApprovalUpdate && isApproved)) {
+      const allUsersChannelId = 'C095J2588Q5'; // All users channel ID
       const botToken = Deno.env.get('SLACK_BOT_TOKEN');
       
-      if (allUsersChannelId && botToken && (isApproved || isRejected)) {
+      if (allUsersChannelId && botToken) {
         console.log('Sending message to all users Slack channel...');
         
         const allUsersResponse = await fetch('https://slack.com/api/chat.postMessage', {
@@ -235,6 +245,9 @@ serve(async (req) => {
           console.log('✅ Successfully sent Slack all users channel notification');
           channelResults.push({ channel: 'all_users', success: true });
         }
+      } else {
+        console.error('❌ Missing all users channel ID or bot token');
+        channelResults.push({ channel: 'all_users', success: false, error: 'Missing all users channel ID or bot token' });
       }
     }
 
