@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       .from('leave_applied_users')
       .select(`
         *,
-        profiles (name, email),
+        profiles!leave_applied_users_user_id_fkey (name, email),
         leave_types (label, color)
       `)
       .eq('id', leave_request_id)
@@ -79,22 +79,43 @@ Deno.serve(async (req) => {
     // Send Slack personal notification
     await sendSlackPersonalNotification(supabase, leaveRequest, new_status);
 
-    // Send Slack channel notification to all users for approved/rejected leaves
+    // Send Slack channel notifications for approved/rejected leaves
     if (new_status === 'approved' || new_status === 'rejected') {
       try {
-        const { error: slackError } = await supabase.functions.invoke('slack-notify', {
+        // Send to admin channel for all status changes
+        const { error: adminSlackError } = await supabase.functions.invoke('slack-notify', {
           body: {
             leaveApplication: leaveRequest,
             isApprovalUpdate: true,
             sendToUser: false, // Don't send personal DM here, as we handle it above
-            sendToAllUsersChannel: true // Send to all users channel for status updates
+            sendToAdminChannel: true, // Send to admin channel for all status updates
+            sendToAllUsersChannel: false // We'll handle all users channel separately
           }
         });
 
-        if (slackError) {
-          console.error('❌ Failed to send Slack channel notification:', slackError);
+        if (adminSlackError) {
+          console.error('❌ Failed to send Slack admin channel notification:', adminSlackError);
         } else {
-          console.log('✅ Slack channel notification sent successfully');
+          console.log('✅ Slack admin channel notification sent successfully');
+        }
+
+        // Send to all users channel only for approved leaves during working hours
+        if (new_status === 'approved') {
+          const { error: allUsersSlackError } = await supabase.functions.invoke('slack-notify', {
+            body: {
+              leaveApplication: leaveRequest,
+              isApprovalUpdate: true,
+              sendToUser: false,
+              sendToAdminChannel: false,
+              sendToAllUsersChannel: true // Send to all users channel for approved leaves
+            }
+          });
+
+          if (allUsersSlackError) {
+            console.error('❌ Failed to send Slack all users channel notification:', allUsersSlackError);
+          } else {
+            console.log('✅ Slack all users channel notification sent successfully');
+          }
         }
       } catch (error) {
         console.error('❌ Error calling slack-notify function:', error);

@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       .from('leave_applied_users')
       .select(`
         *,
-        profiles:user_id (name, email),
+        profiles!leave_applied_users_user_id_fkey (name, email),
         leave_types:leave_type_id (label, color)
       `)
       .in('status', ['pending', 'approved'])
