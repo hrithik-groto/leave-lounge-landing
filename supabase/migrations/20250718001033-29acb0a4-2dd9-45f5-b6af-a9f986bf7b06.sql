@@ -48,7 +48,7 @@ BEGIN
                 'isApprovalUpdate', true,
                 'sendToAdminChannel', true,
                 'sendToUser', true,
-                'sendToAllUsersChannel', (NEW.status = 'approved')
+                'sendToAllUsersChannel', false
             )::jsonb
         );
         RETURN NEW;
