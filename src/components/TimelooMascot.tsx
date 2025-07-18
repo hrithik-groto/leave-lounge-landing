@@ -87,6 +87,7 @@ const TimelooMascot: React.FC<TimelooMascotProps> = ({ shouldWave = false, onWav
               <div className="absolute -top-4 left-2 text-red-400 animate-ping">💜</div>
               <div className="absolute -top-6 right-2 text-pink-400 animate-pulse delay-300">💙</div>
               <div className="absolute -top-2 right-6 text-purple-400 animate-bounce delay-500">💚</div>
+              <div className="absolute -top-8 left-6 text-purple-400 animate-pulse delay-700">✨</div>
             </>
           )}
         </div>
