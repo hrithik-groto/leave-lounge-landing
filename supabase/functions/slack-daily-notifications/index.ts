@@ -130,19 +130,60 @@ Deno.serve(async (req) => {
 
     console.log(`📋 Found ${leaves?.length || 0} approved leaves for today`);
 
+    // Random greeting messages with personalized emojis
+    const getRandomGreeting = () => {
+      const greetings = [
+        "Morning, Groto family…",
+        "Good morning, lovely team…",
+        "Hello there, wonderful humans…",
+        "Rise and shine, Groto stars…",
+        "Hey there, amazing crew…",
+        "Good morning, fantastic folks…",
+        "Morning vibes, dear team…",
+        "Sunshine greetings, Groto gang…"
+      ];
+      return greetings[Math.floor(Math.random() * greetings.length)];
+    };
+
+    const getRandomEmojis = () => {
+      const emojiSets = [
+        "💌 or a ☀️",
+        "💌 or a 🌟",
+        "❤️ or a 🌈",
+        "💌 or a ✨",
+        "🤗 or a 🌻",
+        "💌 or a 🎉",
+        "💛 or a 🌙",
+        "💌 or a 🦋"
+      ];
+      return emojiSets[Math.floor(Math.random() * emojiSets.length)];
+    };
+
+    const randomGreeting = getRandomGreeting();
+    const randomEmojis = getRandomEmojis();
+
     // Create Slack message with personal tone
     let message;
     
     if (!leaves || leaves.length === 0) {
+      const noLeavesMessages = [
+        "🎉 *All hands on deck today!* Everyone's here and ready to make magic happen. Let's crush those goals together! 💪✨",
+        "🚀 *Full squad assembled!* All our amazing team members are here today. Time to make some incredible things happen! 🌟",
+        "💯 *Perfect attendance today!* Everyone's in the building and ready to rock. Let's make it an awesome day! 🎯",
+        "⭐ *Team complete!* All our wonderful people are here today. Ready to conquer the world together! 🌍",
+        "🔥 *All stars present!* Nobody's missing today - time to shine bright and make magic! ✨"
+      ];
+      const randomMessage = noLeavesMessages[Math.floor(Math.random() * noLeavesMessages.length)];
+
       message = {
         channel: allUsersChannelId,
-        text: `Morning, Groto family… - ${todayFormatted}`,
+        text: `${randomGreeting} - ${todayFormatted}`,
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `Morning, Groto family…\n\n🎉 *All hands on deck today!* Everyone's here and ready to make magic happen. Let's crush those goals together! 💪✨`
+              text: `${randomGreeting}\n\n${randomMessage}`
             }
           },
           {
@@ -171,15 +212,33 @@ Deno.serve(async (req) => {
         return `• *${name}* - ${leaveType}, ${daysDiff} day${daysDiff > 1 ? 's' : ''} on leave`;
       }).join('\n');
 
+      const leaveMessages = [
+        "Today our circle's a little quieter and the coffee's a little colder—our dear friends are out recharging their batteries. Let's send warm thoughts their way:",
+        "Our workspace feels a bit different today as some of our wonderful teammates are taking well-deserved time off. Let's show them some love:",
+        "The office vibes are a little more mellow today with some of our amazing crew recharging. Time to send good energy their way:",
+        "Today's a bit more peaceful as some of our fantastic team members are enjoying their time away. Let's brighten their day:",
+        "Our amazing family is spread out a bit today with some members taking their much-needed break. Let's send them virtual hugs:"
+      ];
+      const randomLeaveMessage = leaveMessages[Math.floor(Math.random() * leaveMessages.length)];
+
+      const endingMessages = [
+        `Drop a ${randomEmojis} in the thread to let them know we miss them and can't wait to have them back. 🥺✨`,
+        `Send a ${randomEmojis} their way to remind them how much they're missed! 💕`,
+        `Share a ${randomEmojis} to show them some love and let them know we're thinking of them! 🤗`,
+        `Leave a ${randomEmojis} to brighten their day and remind them they're valued! 🌈`,
+        `Drop a ${randomEmojis} to send them warm vibes and let them know we care! 💖`
+      ];
+      const randomEnding = endingMessages[Math.floor(Math.random() * endingMessages.length)];
+
       message = {
         channel: allUsersChannelId,
-        text: `Morning, Groto family… - ${todayFormatted}`,
+        text: `${randomGreeting} - ${todayFormatted}`,
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `Morning, Groto family…\n\nToday our circle's a little quieter and the coffee's a little colder—our dear friends are out recharging their batteries. Let's send warm thoughts their way:\n\n${leaveDetails}\n\nDrop a 💌 or a ☀️ in the thread to let them know we miss them and can't wait to have them back. 🥺✨`
+              text: `${randomGreeting}\n\n${randomLeaveMessage}\n\n${leaveDetails}\n\n${randomEnding}`
             }
           },
           {

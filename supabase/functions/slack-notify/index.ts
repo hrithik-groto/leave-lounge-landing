@@ -214,8 +214,8 @@ serve(async (req) => {
       channelResults.push({ channel: 'admin', success: false, error: 'Missing admin channel ID or bot token' });
     }
 
-    // Send to all users channel for approved leaves or if explicitly requested
-    if (sendToAllUsersChannel || (isApprovalUpdate && isApproved)) {
+    // Send to all users channel only if explicitly requested (not on immediate approval)
+    if (sendToAllUsersChannel) {
       const allUsersChannelId = 'C095J2588Q5'; // All users channel ID
       const botToken = Deno.env.get('SLACK_BOT_TOKEN');
       
