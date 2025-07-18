@@ -181,39 +181,37 @@ serve(async (req) => {
     // Send to appropriate Slack channels
     let channelResults = [];
 
-    // Send to admin channel for new applications or if explicitly requested
-    if (!isApprovalUpdate || sendToAdminChannel) {
-      const adminChannelId = 'C0920F0V7PW'; // Admin channel ID
-      const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    // Always send to admin channel for ALL leave applications (pending, approved, rejected)
+    const adminChannelId = 'C0920F0V7PW'; // Admin channel ID
+    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    
+    if (adminChannelId && botToken) {
+      console.log('Sending message to admin Slack channel...');
       
-      if (adminChannelId && botToken) {
-        console.log('Sending message to admin Slack channel...');
-        
-        const adminResponse = await fetch('https://slack.com/api/chat.postMessage', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${botToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            channel: adminChannelId,
-            ...slackMessage,
-          }),
-        });
+      const adminResponse = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${botToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: adminChannelId,
+          ...slackMessage,
+        }),
+      });
 
-        const adminData = await adminResponse.json();
-        
-        if (!adminData.ok) {
-          console.error('Admin Slack API error:', adminData.error);
-          channelResults.push({ channel: 'admin', success: false, error: adminData.error });
-        } else {
-          console.log('✅ Successfully sent Slack admin channel notification');
-          channelResults.push({ channel: 'admin', success: true });
-        }
+      const adminData = await adminResponse.json();
+      
+      if (!adminData.ok) {
+        console.error('Admin Slack API error:', adminData.error);
+        channelResults.push({ channel: 'admin', success: false, error: adminData.error });
       } else {
-        console.error('❌ Missing admin channel ID or bot token');
-        channelResults.push({ channel: 'admin', success: false, error: 'Missing admin channel ID or bot token' });
+        console.log('✅ Successfully sent Slack admin channel notification');
+        channelResults.push({ channel: 'admin', success: true });
       }
+    } else {
+      console.error('❌ Missing admin channel ID or bot token');
+      channelResults.push({ channel: 'admin', success: false, error: 'Missing admin channel ID or bot token' });
     }
 
     // Send to all users channel for approved leaves or if explicitly requested
