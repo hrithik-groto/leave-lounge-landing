@@ -30,6 +30,8 @@ const AdminDashboard = () => {
   const [isAddingLeaves, setIsAddingLeaves] = useState(false);
   const [processingApplications, setProcessingApplications] = useState<Set<string>>(new Set());
   const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
+  const [adminInviteEmail, setAdminInviteEmail] = useState("");
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -386,6 +388,60 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleSendAdminInvite = async () => {
+    if (!adminInviteEmail.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminInviteEmail)) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSendingInvite(true);
+    try {
+      const { error } = await supabase.functions.invoke('send-admin-invite', {
+        body: { 
+          email: adminInviteEmail,
+          invitedBy: user?.id 
+        }
+      });
+
+      if (error) {
+        console.error('Error sending admin invite:', error);
+        throw error;
+      }
+
+      toast({
+        title: "🎉 Admin Invite Sent Successfully!",
+        description: `An admin invitation has been sent to ${adminInviteEmail} with Timeloo branding and mascot!`,
+        className: "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200"
+      });
+
+      setAdminInviteEmail("");
+    } catch (error) {
+      console.error('Error sending admin invite:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send admin invite",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
   if (!isLoaded) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -581,6 +637,50 @@ const AdminDashboard = () => {
                     <>
                       <Zap className="w-4 h-4 mr-2" />
                       Add Leaves
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Admin Invite Section */}
+          <Card className="mb-8 hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200">
+            <CardHeader>
+              <CardTitle className="flex items-center text-pink-700">
+                <Users className="w-5 h-5 mr-2" />
+                Send Admin Invitation
+              </CardTitle>
+              <p className="text-sm text-pink-600 mt-2">Invite new team members to join as administrators with full access to the Timeloo dashboard.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="flex space-x-4 items-end">
+                <div className="flex-1">
+                  <Label htmlFor="admin-email">Email Address</Label>
+                  <Input
+                    id="admin-email"
+                    type="email"
+                    placeholder="Enter email address to invite..."
+                    value={adminInviteEmail}
+                    onChange={(e) => setAdminInviteEmail(e.target.value)}
+                    className="mt-1 focus:ring-2 focus:ring-pink-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">They'll receive a beautifully designed email with Timeloo branding and our mascot!</p>
+                </div>
+                <Button 
+                  onClick={handleSendAdminInvite}
+                  disabled={isSendingInvite}
+                  className="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 shadow-lg text-white"
+                >
+                  {isSendingInvite ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Sending Invite...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Send Admin Invite
                     </>
                   )}
                 </Button>

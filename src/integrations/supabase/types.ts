@@ -58,6 +58,39 @@ export type Database = {
           },
         ]
       }
+      admin_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invite_token: string
+          invited_by: string
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invite_token: string
+          invited_by: string
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invite_token?: string
+          invited_by?: string
+          status?: string
+        }
+        Relationships: []
+      }
       approvals: {
         Row: {
           approver_id: string
@@ -645,6 +678,36 @@ export type Database = {
           email?: string
           id?: string
           name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      slack_token_updates: {
+        Row: {
+          created_at: string | null
+          id: string
+          new_token: string
+          old_token: string
+          refresh_date: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          new_token: string
+          old_token: string
+          refresh_date: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          new_token?: string
+          old_token?: string
+          refresh_date?: string
+          status?: string
           updated_at?: string | null
         }
         Relationships: []
