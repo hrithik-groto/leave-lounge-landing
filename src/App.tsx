@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import TestNotifications from "./pages/TestNotifications";
 import NotFound from "./pages/NotFound";
+import AuthenticatedChatbot from "@/components/AuthenticatedChatbot";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +63,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <AuthenticatedChatbot />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
