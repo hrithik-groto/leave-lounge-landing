@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 import { Resend } from "npm:resend@2.0.0";
@@ -64,9 +65,9 @@ const handler = async (req: Request): Promise<Response> => {
     const inviterName = inviterProfile?.name || 'Timeloo Admin';
     const inviteUrl = `${Deno.env.get('PROJECT_URL')}/admin/accept-invite?token=${inviteToken}`;
 
-    // Send invitation email with Timeloo branding
+    // Send invitation email with verified domain (using onboarding@resend.dev)
     const emailResponse = await resend.emails.send({
-      from: "Timeloo <admin@timeloo.com>",
+      from: "Timeloo <onboarding@resend.dev>",
       to: [email],
       subject: "🎉 You're Invited to Join Timeloo as an Admin!",
       html: `
