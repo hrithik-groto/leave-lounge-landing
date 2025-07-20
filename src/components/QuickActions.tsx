@@ -28,11 +28,15 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onActionClick }) => {
               key={index}
               variant="outline"
               size="sm"
-              className={`text-xs h-12 justify-start bg-gradient-to-r ${action.gradient} text-white border-0 hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg`}
+              className={`text-xs h-14 justify-start bg-gradient-to-r ${action.gradient} text-white border-0 hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg p-2`}
               onClick={() => onActionClick(action.text)}
             >
-              <span className="mr-2 text-base">{action.icon}</span>
-              <span className="text-xs font-medium">{action.text}</span>
+              <div className="flex items-center gap-2 w-full">
+                <span className="text-base flex-shrink-0">{action.icon}</span>
+                <span className="text-xs font-medium leading-tight break-words flex-1 text-left">
+                  {action.text}
+                </span>
+              </div>
             </Button>
           ))}
         </div>

@@ -19,19 +19,24 @@ interface Message {
 const TimelooChat = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hi there! 👋 I'm your Timeloo assistant! I can help you with leave applications, answer questions about the platform, or we can play some fun games! 🎮 What would you like to do?",
-      isBot: true,
-      timestamp: new Date()
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Random welcome messages with games and facts
+  const welcomeMessages = [
+    "Hi there! 👋 I'm your Timeloo assistant! Ready for a quick number guessing game? I'm thinking of a number between 1-10! 🎯",
+    "Hello! 🎉 Fun fact: Did you know octopuses have three hearts? 🐙 Now, how can I help you with Timeloo today?",
+    "Hey! 🌟 Want to play word association? I'll start: 'Vacation' - what's the first word that comes to mind? 🤔",
+    "Welcome back! 🚀 Here's a cool fact: Honey never spoils! 🍯 What would you like to know about your leave balance?",
+    "Hi! 🎲 Let's roll the virtual dice! *Rolling...* You got a 6! Lucky day ahead! What can I help you with?",
+    "Greetings! 🌈 Quick riddle: I'm tall when I'm young, short when I'm old. What am I? (Answer: A candle!) 🕯️ Ready to explore Timeloo?",
+    "Hello there! 🎪 This or that: Coffee ☕ or Tea 🍵? Now, let's make your work day amazing with Timeloo!",
+    "Hey! 💫 Daily motivation: You're capable of amazing things! 🌟 How can I assist with your leave management today?"
+  ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,6 +45,19 @@ const TimelooChat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Initialize with random welcome message
+  useEffect(() => {
+    if (isOpen && messages.length === 0) {
+      const randomWelcome = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+      setMessages([{
+        id: '1',
+        text: randomWelcome,
+        isBot: true,
+        timestamp: new Date()
+      }]);
+    }
+  }, [isOpen]);
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
@@ -113,7 +131,7 @@ const TimelooChat = () => {
         <div className="relative">
           <Button
             onClick={() => setIsOpen(true)}
-            className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-2xl transition-all duration-300 hover:scale-110 animate-pulse"
+            className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-2xl transition-all duration-300 hover:scale-110"
             size="icon"
           >
             <MessageCircle className="h-8 w-8 text-white" />
