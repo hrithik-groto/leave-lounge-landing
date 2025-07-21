@@ -215,39 +215,7 @@ serve(async (req) => {
     }
 
     // Send to all users channel only if explicitly requested (not on immediate approval)
-    if (sendToAllUsersChannel) {
-      const allUsersChannelId = 'C095J2588Q5'; // All users channel ID
-      const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-      
-      if (allUsersChannelId && botToken) {
-        console.log('Sending message to all users Slack channel...');
-        
-        const allUsersResponse = await fetch('https://slack.com/api/chat.postMessage', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${botToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            channel: allUsersChannelId,
-            ...slackMessage,
-          }),
-        });
-
-        const allUsersData = await allUsersResponse.json();
-        
-        if (!allUsersData.ok) {
-          console.error('All users channel Slack API error:', allUsersData.error);
-          channelResults.push({ channel: 'all_users', success: false, error: allUsersData.error });
-        } else {
-          console.log('✅ Successfully sent Slack all users channel notification');
-          channelResults.push({ channel: 'all_users', success: true });
-        }
-      } else {
-        console.error('❌ Missing all users channel ID or bot token');
-        channelResults.push({ channel: 'all_users', success: false, error: 'Missing all users channel ID or bot token' });
-      }
-    }
+   
 
     console.log('Channel notification results:', channelResults);
 
