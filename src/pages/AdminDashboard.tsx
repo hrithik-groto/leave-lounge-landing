@@ -36,6 +36,8 @@ const AdminDashboard = () => {
 
   // Check if current user is admin
   const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+  const isAdmin = user?.id === 'user_2yaD1O0ZB5G9XOkaJfKPDYS28qF';
+  
 
   useEffect(() => {
     if (isLoaded && isAdmin) {
