@@ -441,11 +441,11 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
             },
             options: [
               {
-                text: { type: 'plain_text', text: 'Start of day (9:00 AM)' },
+                text: { type: 'plain_text', text: 'Start of day (10:00 AM)' },
                 value: 'start_of_day'
               },
               {
-                text: { type: 'plain_text', text: 'After lunch (1:00 PM)' },
+                text: { type: 'plain_text', text: 'After lunch (2:45 PM)' },
                 value: 'after_lunch'
               },
               {
@@ -454,7 +454,7 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
               }
             ],
             initial_option: {
-              text: { type: 'plain_text', text: 'Start of day (9:00 AM)' },
+              text: { type: 'plain_text', text: 'Start of day (10:00 AM)' },
               value: 'start_of_day'
             }
           }
@@ -489,11 +489,11 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
             },
             options: [
               {
-                text: { type: 'plain_text', text: 'End of day (6:00 PM)' },
+                text: { type: 'plain_text', text: 'End of day (6:30 PM)' },
                 value: 'end_of_day'
               },
               {
-                text: { type: 'plain_text', text: 'Before lunch (12:00 PM)' },
+                text: { type: 'plain_text', text: 'Before lunch (2:00 PM)' },
                 value: 'before_lunch'
               },
               {
@@ -502,7 +502,7 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
               }
             ],
             initial_option: {
-              text: { type: 'plain_text', text: 'End of day (6:00 PM)' },
+              text: { type: 'plain_text', text: 'End of day (6:30 PM)' },
               value: 'end_of_day'
             }
           }
