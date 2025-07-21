@@ -35,7 +35,7 @@ const AdminDashboard = () => {
   const { toast } = useToast();
 
   // Check if current user is admin
-  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV' || user?.id === 'user_2yaD1O0ZB5G9XOkaJfKPDYS28qF';
+  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
   
 
   useEffect(() => {
@@ -426,7 +426,7 @@ const AdminDashboard = () => {
 
       toast({
         title: "🎉 Admin Invite Sent Successfully!",
-        description: `An admin invitation has been sent to ${adminInviteEmail} with Timeloo branding and mascot!`,
+        description: `An admin invitation has been sent to ${adminInviteEmail}!`,
         className: "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200"
       });
 
