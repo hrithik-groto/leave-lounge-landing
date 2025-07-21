@@ -1,13 +1,12 @@
 
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+export interface GameState {
+  currentQuestion?: any;
+  score: number;
+  usedQuestions: Set<string>;
+  gameType: string;
+}
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Game data and logic
-const GAMES = {
+export const GAMES = {
   funFact: {
     facts: [
       "🐙 Octopuses have three hearts and blue blood!",
@@ -52,27 +51,11 @@ const GAMES = {
   }
 };
 
-// Game state management
-const gameStates = new Map();
-
-function getRandomElement<T>(array: T[]): T {
+export function getRandomElement<T>(array: T[]): T {
   return array[Math.floor(Math.random() * array.length)];
 }
 
-function getUserGameState(userId: string, gameType: string) {
-  const key = `${userId}_${gameType}`;
-  if (!gameStates.has(key)) {
-    gameStates.set(key, {
-      currentQuestion: null,
-      score: 0,
-      usedQuestions: new Set(),
-      gameType: gameType
-    });
-  }
-  return gameStates.get(key);
-}
-
-function generateResponse(message: string, userId: string): string {
+export function handleGameResponse(message: string, gameStates: Map<string, GameState>, userId: string): string {
   const lowerMessage = message.toLowerCase();
   
   // Handle fun fact requests
@@ -83,47 +66,45 @@ function generateResponse(message: string, userId: string): string {
   
   // Handle riddle requests
   if (lowerMessage.includes('riddle')) {
-    const state = getUserGameState(userId, 'riddle');
-    const availableRiddles = GAMES.riddle.riddles.filter(r => !state.usedQuestions.has(r.question));
+    const state = getUserGameState(gameStates, userId, 'riddle');
+    const riddle = getRandomElement(GAMES.riddle.riddles.filter(r => !state.usedQuestions.has(r.question)));
     
-    let riddle;
-    if (availableRiddles.length === 0) {
+    if (!riddle) {
       // Reset if all riddles used
       state.usedQuestions.clear();
-      riddle = getRandomElement(GAMES.riddle.riddles);
+      const newRiddle = getRandomElement(GAMES.riddle.riddles);
+      state.currentQuestion = newRiddle;
+      state.usedQuestions.add(newRiddle.question);
     } else {
-      riddle = getRandomElement(availableRiddles);
+      state.currentQuestion = riddle;
+      state.usedQuestions.add(riddle.question);
     }
     
-    state.currentQuestion = riddle;
-    state.usedQuestions.add(riddle.question);
-    
-    return `🧩 Here's a riddle for you:\n\n${riddle.question}\n\nThink carefully and give me your answer! 🤔`;
+    return `🧩 Here's a riddle for you:\n\n${state.currentQuestion.question}\n\nThink carefully and give me your answer! 🤔`;
   }
   
   // Handle math problem requests
   if (lowerMessage.includes('math') || lowerMessage.includes('problem')) {
-    const state = getUserGameState(userId, 'math');
-    const availableProblems = GAMES.math.problems.filter(p => !state.usedQuestions.has(p.question));
+    const state = getUserGameState(gameStates, userId, 'math');
+    const problem = getRandomElement(GAMES.math.problems.filter(p => !state.usedQuestions.has(p.question)));
     
-    let problem;
-    if (availableProblems.length === 0) {
+    if (!problem) {
       // Reset if all problems used
       state.usedQuestions.clear();
-      problem = getRandomElement(GAMES.math.problems);
+      const newProblem = getRandomElement(GAMES.math.problems);
+      state.currentQuestion = newProblem;
+      state.usedQuestions.add(newProblem.question);
     } else {
-      problem = getRandomElement(availableProblems);
+      state.currentQuestion = problem;
+      state.usedQuestions.add(problem.question);
     }
     
-    state.currentQuestion = problem;
-    state.usedQuestions.add(problem.question);
-    
-    return `🔢 Here's a math problem for you:\n\n${problem.question}\n\nSolve it and give me your answer! ⚡`;
+    return `🔢 Here's a math problem for you:\n\n${state.currentQuestion.question}\n\nSolve it and give me your answer! ⚡`;
   }
   
   // Check if user is answering a riddle
-  const riddleState = getUserGameState(userId, 'riddle');
-  if (riddleState.currentQuestion && riddleState.gameType === 'riddle') {
+  const riddleState = gameStates.get(`${userId}_riddle`);
+  if (riddleState?.currentQuestion && riddleState.gameType === 'riddle') {
     const userAnswer = message.trim().toLowerCase();
     const correctAnswer = riddleState.currentQuestion.answer.toLowerCase();
     
@@ -138,8 +119,8 @@ function generateResponse(message: string, userId: string): string {
   }
   
   // Check if user is answering a math problem
-  const mathState = getUserGameState(userId, 'math');
-  if (mathState.currentQuestion && mathState.gameType === 'math') {
+  const mathState = gameStates.get(`${userId}_math`);
+  if (mathState?.currentQuestion && mathState.gameType === 'math') {
     const userAnswer = message.trim();
     const correctAnswer = mathState.currentQuestion.answer;
     
@@ -153,64 +134,24 @@ function generateResponse(message: string, userId: string): string {
     }
   }
   
-  // Handle greetings
-  if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
-    return "Hello there! 👋 I'm Timeloo, your friendly assistant! I can share fun facts, give you riddles, or create math problems for you. What would you like to try?";
-  }
-  
-  // Handle gratitude
-  if (lowerMessage.includes('thank') || lowerMessage.includes('thanks')) {
-    return "You're very welcome! 😊 I'm always here to help and entertain. Want to try another fun fact, riddle, or math problem?";
-  }
-  
   // Default response
   const defaultResponses = [
-    "Hi there! I can share fun facts, give you riddles, or create math problems for you! Try saying 'fun fact', 'riddle', or 'math problem'! 🤖",
-    "I'd love to help! Ask me for a 'fun fact', 'riddle', or 'math problem' and let's have some fun! ✨",
+    "Hi there! I can share fun facts, give you riddles, or create math problems for you! 🤖",
+    "I'd love to help! Try asking for a 'fun fact', 'riddle', or 'math problem'! ✨",
     "Hello! I'm here to entertain and challenge you. What would you like - a fun fact, riddle, or math problem? 😊"
   ];
   
   return getRandomElement(defaultResponses);
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+function getUserGameState(gameStates: Map<string, GameState>, userId: string, gameType: string): GameState {
+  const key = `${userId}_${gameType}`;
+  if (!gameStates.has(key)) {
+    gameStates.set(key, {
+      score: 0,
+      usedQuestions: new Set(),
+      gameType: gameType
+    });
   }
-
-  try {
-    const { message, userId } = await req.json();
-    
-    if (!message || !userId) {
-      return new Response(
-        JSON.stringify({ error: 'Message and userId are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const response = generateResponse(message, userId);
-
-    return new Response(
-      JSON.stringify({ response }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
-
-  } catch (error) {
-    console.error('Error in timeloo-chatbot function:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: 'Internal server error',
-        response: 'Sorry, I encountered an error. Please try again! 😅' 
-      }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
-  }
-};
-
-serve(handler);
+  return gameStates.get(key)!;
+}
