@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar"
@@ -6,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { format } from 'date-fns';
@@ -22,7 +23,8 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [reason, setReason] = useState('');
-	const [selectedLeaveType, setSelectedLeaveType] = useState('');
+  const [selectedLeaveType, setSelectedLeaveType] = useState('');
+  const [isHalfDay, setIsHalfDay] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<Array<{id: string, label: string, color: string}>>([]);
   const { toast } = useToast();
@@ -50,6 +52,9 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
     fetchLeaveTypes();
   }, []);
+
+  const selectedLeaveTypeData = leaveTypes.find(type => type.id === selectedLeaveType);
+  const isPaidLeave = selectedLeaveTypeData?.label === 'Paid Leave';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,14 +100,19 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
     try {
       console.log('Submitting leave application...');
       
+      const actualDaysUsed = isPaidLeave && isHalfDay ? 0.5 : 
+                            Math.ceil(Math.abs(endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
       const leaveData = {
         user_id: user.id,
         start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
+        end_date: (isPaidLeave && isHalfDay) ? startDate.toISOString().split('T')[0] : endDate.toISOString().split('T')[0],
         reason: reason.trim(),
         leave_type_id: selectedLeaveType,
         applied_at: new Date().toISOString(),
-        status: 'pending'
+        status: 'pending',
+        is_half_day: isPaidLeave ? isHalfDay : false,
+        actual_days_used: actualDaysUsed
       };
 
       // First ensure user profile exists and get profile data
@@ -197,11 +207,15 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
         }
 
         // Now create the notification
+        const leaveTypeText = isPaidLeave && isHalfDay ? `${selectedLeaveTypeData?.label} (Half Day)` : selectedLeaveTypeData?.label;
+        const dateText = isPaidLeave && isHalfDay ? startDate.toLocaleDateString() : 
+                        `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`;
+        
         const { error: notificationError } = await supabase
           .from('notifications')
           .insert([{
             user_id: adminUserId,
-            message: `New leave application from ${profile?.name || 'Unknown User'} for ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`,
+            message: `New ${leaveTypeText} application from ${profile?.name || 'Unknown User'} for ${dateText}`,
             type: 'info'
           }]);
 
@@ -216,9 +230,13 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
       }
 
       // Show success message
+      const successMessage = isPaidLeave && isHalfDay ? 
+        "Your half-day leave application has been submitted successfully and admin has been notified!" :
+        "Your application has been submitted successfully and admin has been notified!";
+
       toast({
         title: "🎉 Leave Application Submitted!",
-        description: "Your application has been submitted successfully and admin has been notified!",
+        description: successMessage,
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
       });
 
@@ -227,6 +245,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
       setEndDate(new Date());
       setReason('');
       setSelectedLeaveType('');
+      setIsHalfDay(false);
 
       // Call success callback
       if (onSuccess) {
@@ -247,6 +266,43 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
+      {/* Leave Type Select */}
+      <div className="grid gap-2">
+        <Label htmlFor="leave-type">Type of Leave</Label>
+        <Select onValueChange={setSelectedLeaveType}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a leave type" />
+          </SelectTrigger>
+          <SelectContent>
+            {leaveTypes.map((type) => (
+              <SelectItem key={type.id} value={type.id}>
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded-full" 
+                    style={{ backgroundColor: type.color }}
+                  ></div>
+                  {type.label}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Half Day Option for Paid Leave */}
+      {isPaidLeave && (
+        <div className="flex items-center space-x-2">
+          <Checkbox 
+            id="half-day" 
+            checked={isHalfDay}
+            onCheckedChange={setIsHalfDay}
+          />
+          <Label htmlFor="half-day" className="text-sm">
+            Half Day (0.5 days) - Office hours: 10:00 AM to 2:00 PM
+          </Label>
+        </div>
+      )}
+
       {/* Date Range Picker */}
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
@@ -286,11 +342,15 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
                 variant={"outline"}
                 className={cn(
                   "w-[280px] justify-start text-left font-normal",
-                  !endDate && "text-muted-foreground"
+                  !endDate && "text-muted-foreground",
+                  isPaidLeave && isHalfDay && "opacity-50 cursor-not-allowed"
                 )}
+                disabled={isPaidLeave && isHalfDay}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                {endDate && !(isPaidLeave && isHalfDay) ? format(endDate, "PPP") : 
+                 isPaidLeave && isHalfDay ? "Same as start date" : 
+                 <span>Pick a date</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -299,7 +359,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
                 selected={endDate}
                 onSelect={setEndDate}
                 disabled={(date) =>
-                  date < new Date() || (startDate && date < startDate)
+                  date < new Date() || (startDate && date < startDate) || (isPaidLeave && isHalfDay)
                 }
                 initialFocus
               />
@@ -307,29 +367,6 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
           </Popover>
         </div>
       </div>
-
-			{/* Leave Type Select */}
-			<div className="grid gap-2">
-				<Label htmlFor="leave-type">Type of Leave</Label>
-				<Select onValueChange={setSelectedLeaveType}>
-					<SelectTrigger className="w-full">
-						<SelectValue placeholder="Select a leave type" />
-					</SelectTrigger>
-					<SelectContent>
-						{leaveTypes.map((type) => (
-							<SelectItem key={type.id} value={type.id}>
-								<div className="flex items-center gap-2">
-									<div 
-										className="w-3 h-3 rounded-full" 
-										style={{ backgroundColor: type.color }}
-									></div>
-									{type.label}
-								</div>
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			</div>
 
       {/* Reason Textarea */}
       <div className="grid gap-2">

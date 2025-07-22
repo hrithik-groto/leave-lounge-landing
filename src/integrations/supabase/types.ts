@@ -239,6 +239,7 @@ export type Database = {
       }
       leave_applied_users: {
         Row: {
+          actual_days_used: number | null
           applied_at: string | null
           approved_at: string | null
           approved_by: string | null
@@ -258,6 +259,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          actual_days_used?: number | null
           applied_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
@@ -277,6 +279,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          actual_days_used?: number | null
           applied_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
@@ -804,6 +807,53 @@ export type Database = {
           },
         ]
       }
+      user_monthly_leave_balances: {
+        Row: {
+          allocated_balance: number
+          carried_forward: number
+          created_at: string
+          id: string
+          leave_type_id: string
+          month: number
+          updated_at: string
+          used_balance: number
+          user_id: string
+          year: number
+        }
+        Insert: {
+          allocated_balance?: number
+          carried_forward?: number
+          created_at?: string
+          id?: string
+          leave_type_id: string
+          month: number
+          updated_at?: string
+          used_balance?: number
+          user_id: string
+          year: number
+        }
+        Update: {
+          allocated_balance?: number
+          carried_forward?: number
+          created_at?: string
+          id?: string
+          leave_type_id?: string
+          month?: number
+          updated_at?: string
+          used_balance?: number
+          user_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_monthly_leave_balances_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_slack_integrations: {
         Row: {
           access_token: string | null
@@ -845,6 +895,15 @@ export type Database = {
           p_leave_type_id: string
           p_month?: number
           p_year?: number
+        }
+        Returns: Json
+      }
+      get_or_create_monthly_balance: {
+        Args: {
+          p_user_id: string
+          p_leave_type_id: string
+          p_year?: number
+          p_month?: number
         }
         Returns: Json
       }

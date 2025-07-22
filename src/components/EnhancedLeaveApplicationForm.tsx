@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar";
@@ -9,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
@@ -29,6 +31,7 @@ interface LeaveBalance {
   used_this_month: number;
   remaining_this_month: number;
   duration_type: string;
+  carried_forward?: number;
 }
 
 interface EnhancedLeaveApplicationFormProps {
@@ -44,6 +47,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
   const [endTime, setEndTime] = useState('10:00');
   const [reason, setReason] = useState('');
   const [selectedLeaveType, setSelectedLeaveType] = useState('');
+  const [isHalfDay, setIsHalfDay] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
@@ -112,6 +116,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
 
   const selectedLeaveTypeData = leaveTypes.find(type => type.id === selectedLeaveType);
   const isShortLeave = selectedLeaveTypeData?.duration_type === 'hours';
+  const isPaidLeave = selectedLeaveTypeData?.label === 'Paid Leave';
 
   const calculateLeaveDuration = () => {
     if (!startDate || !selectedLeaveTypeData) return 0;
@@ -120,6 +125,8 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       const start = new Date(`1970-01-01T${startTime}:00`);
       const end = new Date(`1970-01-01T${endTime}:00`);
       return (end.getTime() - start.getTime()) / (1000 * 60 * 60); // hours
+    } else if (isPaidLeave && isHalfDay) {
+      return 0.5; // Half day for paid leave
     } else {
       const end = endDate || startDate;
       const diffTime = Math.abs(end.getTime() - startDate.getTime());
@@ -182,7 +189,9 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       const leaveData = {
         user_id: user.id,
         start_date: startDate.toISOString().split('T')[0],
-        end_date: isShortLeave ? startDate.toISOString().split('T')[0] : (endDate || startDate).toISOString().split('T')[0],
+        end_date: (isPaidLeave && isHalfDay) ? startDate.toISOString().split('T')[0] : 
+                  isShortLeave ? startDate.toISOString().split('T')[0] : 
+                  (endDate || startDate).toISOString().split('T')[0],
         reason: reason.trim(),
         leave_type_id: selectedLeaveType,
         applied_at: new Date().toISOString(),
@@ -190,7 +199,9 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
         leave_duration_type: isShortLeave ? 'hours' : 'days',
         hours_requested: isShortLeave ? duration : null,
         leave_time_start: isShortLeave ? startTime : null,
-        leave_time_end: isShortLeave ? endTime : null
+        leave_time_end: isShortLeave ? endTime : null,
+        is_half_day: isPaidLeave ? isHalfDay : false,
+        actual_days_used: isPaidLeave && isHalfDay ? 0.5 : duration
       };
 
       // Ensure user profile exists
@@ -245,11 +256,16 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       // Create in-app notification for admin
       try {
         const adminUserId = 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+        const leaveTypeText = isPaidLeave && isHalfDay ? `${selectedLeaveTypeData?.label} (Half Day)` : selectedLeaveTypeData?.label;
+        const dateText = isShortLeave ? `${startDate.toLocaleDateString()} (${startTime}-${endTime})` : 
+                        isPaidLeave && isHalfDay ? startDate.toLocaleDateString() : 
+                        `${startDate.toLocaleDateString()} to ${(endDate || startDate).toLocaleDateString()}`;
+        
         await supabase
           .from('notifications')
           .insert([{
             user_id: adminUserId,
-            message: `New ${selectedLeaveTypeData?.label} application from ${profile?.name || 'Unknown User'} for ${startDate.toLocaleDateString()}${isShortLeave ? ` (${startTime}-${endTime})` : ` to ${(endDate || startDate).toLocaleDateString()}`}`,
+            message: `New ${leaveTypeText} application from ${profile?.name || 'Unknown User'} for ${dateText}`,
             type: 'info'
           }]);
       } catch (notificationError) {
@@ -271,9 +287,13 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
         colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
       });
 
+      const successMessage = isPaidLeave && isHalfDay ? 
+        `Your ${selectedLeaveTypeData?.label} (Half Day) application has been submitted successfully!` :
+        `Your ${selectedLeaveTypeData?.label} application has been submitted successfully!`;
+
       toast({
         title: "🎉 Leave Application Submitted!",
-        description: `Your ${selectedLeaveTypeData?.label} application has been submitted successfully!`,
+        description: successMessage,
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
       });
 
@@ -284,6 +304,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       setEndTime('10:00');
       setReason('');
       setSelectedLeaveType('');
+      setIsHalfDay(false);
       setLeaveBalance(null);
 
       if (onSuccess) {
@@ -339,13 +360,32 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
                 <p className="text-sm text-blue-800">
                   <strong>This Month:</strong> {leaveBalance.remaining_this_month} {leaveBalance.duration_type} remaining 
                   (Used: {leaveBalance.used_this_month}/{leaveBalance.monthly_allowance})
+                  {leaveBalance.carried_forward && leaveBalance.carried_forward > 0 && (
+                    <span className="block mt-1">
+                      <strong>Carried Forward:</strong> {leaveBalance.carried_forward} {leaveBalance.duration_type} from last month
+                    </span>
+                  )}
                 </p>
               </div>
             )}
           </div>
 
+          {/* Half Day Option for Paid Leave */}
+          {isPaidLeave && (
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="half-day" 
+                checked={isHalfDay}
+                onCheckedChange={setIsHalfDay}
+              />
+              <Label htmlFor="half-day" className="text-sm">
+                Half Day (0.5 days) - Office hours: 10:00 AM to 2:00 PM
+              </Label>
+            </div>
+          )}
+
           {/* Date Selection */}
-          {isShortLeave ? (
+          {isShortLeave || (isPaidLeave && isHalfDay) ? (
             <div className="space-y-2">
               <Label htmlFor="leave-date">Leave Date</Label>
               <Popover>
@@ -483,6 +523,9 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-700">
                 <strong>Duration:</strong> {calculateLeaveDuration()} {selectedLeaveTypeData.duration_type}
+                {isPaidLeave && isHalfDay && (
+                  <span className="text-blue-600 ml-2">(Half Day)</span>
+                )}
               </p>
             </div>
           )}
