@@ -252,22 +252,36 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
     setIsSubmitting(true);
 
     try {
-      // Prepare the submission data with proper null handling
-      const submissionData = {
+      // Prepare the submission data with proper handling
+      const submissionData: any = {
         user_id: user.id,
         start_date: format(startDate, 'yyyy-MM-dd'),
         end_date: format(endDate, 'yyyy-MM-dd'),
         leave_type_id: leaveTypeId,
         reason: reason.trim(),
-        is_half_day: isHalfDay || false,
-        hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : null,
-        holiday_name: holidayName.trim() || null,
-        meeting_details: meetingDetails.trim() || null,
-        leave_time_start: (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) ? 
-          (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
-        leave_time_end: (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) ? 
-          (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
+        is_half_day: isHalfDay,
       };
+
+      // Only add hours_requested for Short Leave
+      if (selectedLeaveType?.label === 'Short Leave') {
+        submissionData.hours_requested = hoursRequested;
+      }
+
+      // Only add holiday_name if it exists
+      if (holidayName.trim()) {
+        submissionData.holiday_name = holidayName.trim();
+      }
+
+      // Only add meeting_details if it exists
+      if (meetingDetails.trim()) {
+        submissionData.meeting_details = meetingDetails.trim();
+      }
+
+      // Only add time fields for half-day Paid Leave or Annual Leave
+      if (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) {
+        submissionData.leave_time_start = halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00';
+        submissionData.leave_time_end = halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00';
+      }
 
       console.log('Submitting leave application with data:', submissionData);
 
