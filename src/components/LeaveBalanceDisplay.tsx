@@ -59,19 +59,19 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
 
   return (
     <Card className="w-full">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Icon className="h-4 w-4" />
           {leaveTypeName}
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
-        <div className="space-y-2">
+      <CardContent className="pt-0 space-y-3">
+        <div className="grid grid-cols-1 gap-2">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">
               {balance.leave_type === 'Annual Leave' ? 'Annual Allowance' : 'Monthly Allowance'}:
             </span>
-            <span className="font-medium">
+            <span className="font-medium text-sm">
               {balance.leave_type === 'Annual Leave' ? balance.annual_allowance : balance.monthly_allowance} {balance.duration_type}
             </span>
           </div>
@@ -80,12 +80,12 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
             <span className="text-sm text-muted-foreground">
               {balance.leave_type === 'Annual Leave' ? 'Used This Year' : 'Used This Month'}:
             </span>
-            <span className="font-medium">{balance.used_this_month} {balance.duration_type}</span>
+            <span className="font-medium text-sm">{balance.used_this_month} {balance.duration_type}</span>
           </div>
 
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Remaining:</span>
-            <Badge variant={getStatusColor()}>
+            <Badge variant={getStatusColor()} className="text-xs">
               {balance.remaining_this_month} {balance.duration_type}
             </Badge>
           </div>
@@ -98,13 +98,24 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
               </span>
             </div>
           )}
-
-          {balance.remaining_this_month <= 0 && balance.leave_type === 'Paid Leave' && (
-            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
-              Monthly limit reached. Wait for next month to apply for paid leave.
-            </div>
-          )}
         </div>
+
+        {balance.remaining_this_month <= 0 && (
+          <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
+            {balance.leave_type === 'Short Leave' 
+              ? 'Monthly short leave quota exhausted. Wait for next month to get 4 new short leaves.'
+              : balance.leave_type === 'Paid Leave' 
+                ? 'Monthly limit reached. Wait for next month to apply for paid leave.'
+                : 'Leave quota exhausted.'
+            }
+          </div>
+        )}
+
+        {balance.leave_type === 'Short Leave' && balance.remaining_this_month > 0 && (
+          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600">
+            You have {balance.remaining_this_month} hour{balance.remaining_this_month !== 1 ? 's' : ''} of short leave remaining this month.
+          </div>
+        )}
       </CardContent>
     </Card>
   );
