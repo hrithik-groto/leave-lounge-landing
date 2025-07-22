@@ -16,6 +16,7 @@ import EnhancedCalendar from '@/components/EnhancedCalendar';
 import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
 import SlackOAuthButton from '@/components/SlackOAuthButton';
 import TimelooMascot from '@/components/TimelooMascot';
+import { ComprehensiveLeaveBalance } from '@/components/ComprehensiveLeaveBalance';
 
 import confetti from 'canvas-confetti';
 
@@ -26,6 +27,7 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [shouldMascotWave, setShouldMascotWave] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { toast } = useToast();
   const navigate = useNavigate();
   const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
@@ -133,6 +135,7 @@ const Dashboard = () => {
     setShouldMascotWave(true);
     fetchLeaveApplications();
     calculateLeaveBalance();
+    setRefreshTrigger(prev => prev + 1);
   };
 
   const handleApplyLeaveClick = () => {
@@ -159,6 +162,7 @@ const Dashboard = () => {
 
       fetchLeaveApplications();
       calculateLeaveBalance();
+      setRefreshTrigger(prev => prev + 1);
     } catch (error) {
       console.error('Error cancelling leave:', error);
       toast({
@@ -282,79 +286,8 @@ const Dashboard = () => {
 
   const renderLeavesRemaining = () => (
     <div className="space-y-6 px-4 sm:px-0">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Balance</h2>
-      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
-        <CardContent className="p-6">
-          <div className="text-center">
-            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
-            <div className="text-lg opacity-90">Days Remaining</div>
-            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
-            {leaveBalance <= 0 && (
-              <div className="mt-3 p-2 bg-white/20 rounded-lg">
-                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      
-      {leaveBalance <= 5 && leaveBalance > 0 && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You have {leaveBalance} leave days remaining. Plan your time off carefully!
-          </AlertDescription>
-        </Alert>
-      )}
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Leave History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {leaveApplications.slice(0, 5).map((app: any) => (
-                <div key={app.id} className="flex justify-between items-center py-2 border-b">
-                  <div>
-                    <p className="font-medium">{format(new Date(app.start_date), 'MMM dd')} - {format(new Date(app.end_date), 'MMM dd')}</p>
-                    <p className="text-sm text-gray-500">{app.status}</p>
-                  </div>
-                  <span className="text-sm font-medium">
-                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Stats</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>Used this year:</span>
-                <span className="font-medium">{20 - leaveBalance} days</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Pending approval:</span>
-                <span className="font-medium">
-                  {leaveApplications.filter((app: any) => app.status === 'pending').length} applications
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Approved leaves:</span>
-                <span className="font-medium">
-                  {leaveApplications.filter((app: any) => app.status === 'approved').length} applications
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Balance Overview</h2>
+      <ComprehensiveLeaveBalance refreshTrigger={refreshTrigger} />
     </div>
   );
 
