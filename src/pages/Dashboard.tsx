@@ -1,3 +1,4 @@
+
 import { useUser } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,11 +9,21 @@ import { CalendarDays, Clock, Users, FileText, Calendar, BarChart3 } from "lucid
 import { useState } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import EnhancedLeaveApplicationForm from "@/components/EnhancedLeaveApplicationForm";
-import { TabbedLeaveApplications } from "@/components/TabbedLeaveApplications";
-import { EnhancedCalendar } from "@/components/EnhancedCalendar";
-import { AllUsersOnLeave } from "@/components/AllUsersOnLeave";
-import { NotificationBell } from "@/components/NotificationBell";
-import { QuickActions } from "@/components/QuickActions";
+import TabbedLeaveApplications from "@/components/TabbedLeaveApplications";
+import EnhancedCalendar from "@/components/EnhancedCalendar";
+import AllUsersOnLeave from "@/components/AllUsersOnLeave";
+import NotificationBell from "@/components/NotificationBell";
+import QuickActions from "@/components/QuickActions";
+
+interface LeaveBalance {
+  leave_type: string;
+  duration_type: string;
+  monthly_allowance: number;
+  used_this_month: number;
+  remaining_this_month: number;
+  annual_allowance?: number;
+  carried_forward?: number;
+}
 
 const Dashboard = () => {
   const { user } = useUser();
@@ -66,7 +77,7 @@ const Dashboard = () => {
         
         return {
           leave_type: type,
-          balance: data
+          balance: data as LeaveBalance
         };
       });
 
@@ -83,7 +94,10 @@ const Dashboard = () => {
 
       const { data, error } = await supabase
         .from('leave_applied_users')
-        .select('*, leave_types(label, color)')
+        .select(`
+          *,
+          leave_types!leave_applied_users_leave_type_id_fkey(label, color)
+        `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -158,12 +172,13 @@ const Dashboard = () => {
             ))
           ) : (
             leaveBalances?.map((item) => {
-              const isAnnualLeave = item.balance?.leave_type === 'Annual Leave';
-              const remaining = item.balance?.remaining_this_month || 0;
+              const balance = item.balance;
+              const isAnnualLeave = balance?.leave_type === 'Annual Leave';
+              const remaining = balance?.remaining_this_month || 0;
               const total = isAnnualLeave 
-                ? (item.balance?.annual_allowance || item.balance?.monthly_allowance || 0)
-                : (item.balance?.monthly_allowance || 0);
-              const used = item.balance?.used_this_month || 0;
+                ? (balance?.annual_allowance || balance?.monthly_allowance || 0)
+                : (balance?.monthly_allowance || 0);
+              const used = balance?.used_this_month || 0;
               
               return (
                 <Card key={item.leave_type.id} className="hover:shadow-lg transition-shadow">
@@ -184,11 +199,11 @@ const Dashboard = () => {
                       {isAnnualLeave ? 'remaining this year' : 'remaining this month'}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Used: {used} / {total} {item.balance?.duration_type || 'days'}
+                      Used: {used} / {total} {balance?.duration_type || 'days'}
                     </div>
-                    {item.balance?.carried_forward !== undefined && item.balance.carried_forward > 0 && (
+                    {balance?.carried_forward !== undefined && balance.carried_forward > 0 && (
                       <div className="text-xs text-blue-600 mt-1">
-                        Carried: {item.balance.carried_forward} days
+                        Carried: {balance.carried_forward} days
                       </div>
                     )}
                   </CardContent>
