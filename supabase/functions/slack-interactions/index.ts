@@ -517,7 +517,7 @@ async function handleApplyLeave(supabaseClient: any, payload: any, userId: strin
           multiline: true,
           placeholder: {
             type: 'plain_text',
-            text: '✏️ Add a reason (optional)',
+            text: 'Add a reason (required)',
           },
         },
         label: {

@@ -20,7 +20,7 @@ BEGIN
         INSERT INTO notifications (user_id, message, type)
         VALUES (
           NEW.user_id,
-          'Great news! Your leave application has been approved.',
+          'Great news ! Your leave application has been approved.',
           'success'
         );
       WHEN 'rejected' THEN
