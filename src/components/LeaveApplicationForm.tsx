@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,7 +138,7 @@ export const LeaveApplicationForm = () => {
       <div className="text-sm text-muted-foreground space-y-1 mt-2">
         {isAnnualLeave ? (
           <>
-            <div>Annual allowance: {currentBalance.annual_allowance || currentBalance.monthly_allowance} days</div>
+            <div>Annual allowance: 18 days</div>
             <div>Used this year: {currentBalance.used_this_month} days</div>
             <div>Remaining: {currentBalance.remaining_this_month} days</div>
           </>
@@ -187,18 +188,23 @@ export const LeaveApplicationForm = () => {
         end_date: format(endDate, 'yyyy-MM-dd'),
         leave_type_id: leaveTypeId,
         reason: reason.trim(),
-        is_half_day: isHalfDay,
+        status: 'pending'
       };
 
-      // Only add hours_requested for Short Leave
-      if (selectedLeaveType?.label === 'Short Leave') {
-        submissionData.hours_requested = hoursRequested;
+      // Only add optional fields if they have values
+      if (isHalfDay) {
+        submissionData.is_half_day = true;
+        
+        // Only add time fields for half-day Paid Leave or Annual Leave
+        if (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') {
+          submissionData.leave_time_start = halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00';
+          submissionData.leave_time_end = halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00';
+        }
       }
 
-      // Only add time fields for half-day Paid Leave or Annual Leave
-      if (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) {
-        submissionData.leave_time_start = halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00';
-        submissionData.leave_time_end = halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00';
+      // Only add hours_requested for Short Leave and when it's greater than 0
+      if (selectedLeaveType?.label === 'Short Leave' && hoursRequested > 0) {
+        submissionData.hours_requested = hoursRequested;
       }
 
       console.log('Submitting leave application with data:', submissionData);
@@ -363,7 +369,7 @@ export const LeaveApplicationForm = () => {
               min="0.5"
               max="4"
               step="0.5"
-              value={hoursRequested}
+              value={hoursRequested || ''}
               onChange={(e) => setHoursRequested(parseFloat(e.target.value) || 0)}
               placeholder="Enter hours (0.5 to 4)"
             />

@@ -31,7 +31,7 @@ const AnnualLeaveInitializer: React.FC = () => {
 
       const currentYear = new Date().getFullYear();
       
-      // Initialize annual leave balances for all users
+      // Initialize annual leave balances for all users with 18 leaves
       const balances = profiles?.map(profile => ({
         user_id: profile.id,
         leave_type_id: annualLeaveType.id,
@@ -50,7 +50,7 @@ const AnnualLeaveInitializer: React.FC = () => {
 
         if (insertError) throw insertError;
 
-        toast.success(`Successfully initialized annual leave balances for ${balances.length} users!`);
+        toast.success(`Successfully initialized 18 annual leave balances for ${balances.length} users!`);
       } else {
         toast.info('No users found to initialize.');
       }
@@ -82,7 +82,7 @@ const AnnualLeaveInitializer: React.FC = () => {
               Initializing...
             </>
           ) : (
-            'Initialize Annual Leaves'
+            'Initialize 18 Annual Leaves for All Users'
           )}
         </Button>
       </CardContent>
