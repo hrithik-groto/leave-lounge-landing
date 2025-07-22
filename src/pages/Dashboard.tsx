@@ -147,7 +147,7 @@ const Dashboard = () => {
         .delete()
         .eq('id', applicationId)
         .eq('user_id', user?.id)
-        .eq('status', 'pending'); // Only allow deletion of pending applications
+        .eq('status', 'pending','approved'); // Only allow deletion of pending applications
 
       if (error) {
         throw error;
