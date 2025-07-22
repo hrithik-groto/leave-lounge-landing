@@ -205,18 +205,18 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
     const isAnnualLeave = currentBalance.leave_type === 'Annual Leave';
     
     return (
-      <div className="text-sm text-muted-foreground space-y-1">
+      <div className="text-sm text-muted-foreground space-y-1 p-3 bg-muted/50 rounded-md">
         {isAnnualLeave ? (
           <>
-            <div>Annual allowance: {currentBalance.annual_allowance || currentBalance.monthly_allowance} days</div>
+            <div className="font-medium">Annual allowance: {currentBalance.annual_allowance || currentBalance.monthly_allowance} days</div>
             <div>Used this year: {currentBalance.used_this_month} days</div>
-            <div>Remaining: {currentBalance.remaining_this_month} days</div>
+            <div className="font-medium text-primary">Remaining: {currentBalance.remaining_this_month} days</div>
           </>
         ) : (
           <>
-            <div>Monthly allowance: {currentBalance.monthly_allowance} {currentBalance.duration_type}</div>
+            <div className="font-medium">Monthly allowance: {currentBalance.monthly_allowance} {currentBalance.duration_type}</div>
             <div>Used this month: {currentBalance.used_this_month} {currentBalance.duration_type}</div>
-            <div>Remaining: {currentBalance.remaining_this_month} {currentBalance.duration_type}</div>
+            <div className="font-medium text-primary">Remaining: {currentBalance.remaining_this_month} {currentBalance.duration_type}</div>
             {currentBalance.carried_forward !== undefined && currentBalance.carried_forward > 0 && (
               <div>Carried forward: {currentBalance.carried_forward} days</div>
             )}
@@ -252,7 +252,6 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
     setIsSubmitting(true);
 
     try {
-      // Prepare the submission data with proper null handling
       const submissionData = {
         user_id: user.id,
         start_date: format(startDate, 'yyyy-MM-dd'),
@@ -307,16 +306,16 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Apply for Leave</CardTitle>
+    <Card className="w-full max-w-xl mx-auto max-h-[90vh] flex flex-col">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg">Apply for Leave</CardTitle>
         <CardDescription>
           Submit your leave application with all the necessary details
         </CardDescription>
       </CardHeader>
-      <CardContent className="max-h-[70vh]">
-        <ScrollArea className="h-full pr-4">
-          <form onSubmit={handleSubmit} className="space-y-6">
+      <CardContent className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full max-h-[60vh] pr-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Leave Type Selection */}
             <div className="space-y-2">
               <Label htmlFor="leave-type">Leave Type *</Label>
@@ -342,7 +341,7 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
             </div>
 
             {/* Date Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>Start Date *</Label>
                 <Popover>
@@ -400,7 +399,7 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
 
             {/* Half Day Option for Paid Leave and Annual Leave */}
             {(selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') && startDate && endDate && isSameDay(startDate, endDate) && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="half-day"
@@ -413,7 +412,7 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
                 </div>
 
                 {isHalfDay && (
-                  <div className="space-y-3 pl-6">
+                  <div className="space-y-2 pl-6">
                     <Label className="text-sm font-medium">Select Half Day Period:</Label>
                     <RadioGroup value={halfDayPeriod} onValueChange={(value) => setHalfDayPeriod(value as 'morning' | 'afternoon')}>
                       <div className="flex items-center space-x-2">
@@ -460,7 +459,7 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
                   value={meetingDetails}
                   onChange={(e) => setMeetingDetails(e.target.value)}
                   placeholder="Describe any important meetings or tasks for the day"
-                  rows={3}
+                  rows={2}
                 />
               </div>
             )}
@@ -485,21 +484,21 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Please provide a reason for your leave"
-                rows={4}
+                rows={3}
                 required
               />
             </div>
 
             {/* Leave Duration Display */}
             {startDate && endDate && selectedLeaveType && (
-              <div className="bg-muted p-4 rounded-lg">
-                <div className="text-sm font-medium mb-2">Leave Duration Summary:</div>
+              <div className="bg-muted p-3 rounded-lg">
+                <div className="text-sm font-medium mb-1">Leave Duration Summary:</div>
                 <div className="text-sm">
                   Duration: {calculateLeaveDuration()} {selectedLeaveType.label === 'Short Leave' ? 'hours' : 'days'}
                 </div>
                 {currentBalance && (
-                  <div className="text-sm">
-                    Remaining after this request: {currentBalance.remaining_this_month - calculateLeaveDuration()} {currentBalance.duration_type}
+                  <div className="text-sm text-muted-foreground">
+                    Remaining after this request: {Math.max(0, currentBalance.remaining_this_month - calculateLeaveDuration())} {currentBalance.duration_type}
                   </div>
                 )}
               </div>

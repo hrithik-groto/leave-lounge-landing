@@ -1,524 +1,259 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useUser } from '@clerk/clerk-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { CalendarDays, Plus, FileText, Clock, Shield, AlertCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { format, differenceInDays } from 'date-fns';
-import { UserButton } from '@clerk/clerk-react';
-import { useNavigate } from 'react-router-dom';
-import NotificationBell from '@/components/NotificationBell';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { EnhancedLeaveApplicationForm } from '@/components/EnhancedLeaveApplicationForm';
-import EnhancedCalendar from '@/components/EnhancedCalendar';
-import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
-import SlackOAuthButton from '@/components/SlackOAuthButton';
-import TimelooMascot from '@/components/TimelooMascot';
-
-import confetti from 'canvas-confetti';
+import { useUser } from "@clerk/clerk-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CalendarDays, Clock, Users, FileText, Calendar, BarChart3 } from "lucide-react";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import EnhancedLeaveApplicationForm from "@/components/EnhancedLeaveApplicationForm";
+import { TabbedLeaveApplications } from "@/components/TabbedLeaveApplications";
+import { EnhancedCalendar } from "@/components/EnhancedCalendar";
+import { AllUsersOnLeave } from "@/components/AllUsersOnLeave";
+import { NotificationBell } from "@/components/NotificationBell";
+import { QuickActions } from "@/components/QuickActions";
 
 const Dashboard = () => {
-  const { user, isLoaded } = useUser();
-  const [leaveApplications, setLeaveApplications] = useState([]);
-  const [leaveBalance, setLeaveBalance] = useState(20);
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
-  const [shouldMascotWave, setShouldMascotWave] = useState(false);
-  const { toast } = useToast();
-  const navigate = useNavigate();
-  const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
+  const { user } = useUser();
+  const [isLeaveFormOpen, setIsLeaveFormOpen] = useState(false);
 
-  // Check if current user is admin
-  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV' || user?.id === 'user_2yaD1O0ZB5G9XOkaJfKPDYS28qF';
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
 
-  useEffect(() => {
-    if (user && isLoaded) {
-      createOrUpdateProfile();
-      fetchLeaveApplications();
-      calculateLeaveBalance();
-    }
-  }, [user, isLoaded]);
-
-  const createOrUpdateProfile = async () => {
-    if (!user) return;
-
-    try {
       const { data, error } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.emailAddresses[0]?.emailAddress || '',
-          name: user.fullName || user.firstName || '',
-          updated_at: new Date().toISOString()
-        })
-        .select();
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
       if (error) {
-        console.error('Error creating/updating profile:', error);
+        console.error('Error fetching user profile:', error);
+        return null;
       }
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
 
-  const fetchLeaveApplications = async () => {
-    if (!user) return;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
 
-    try {
+  const { data: leaveBalances, isLoading: balancesLoading } = useQuery({
+    queryKey: ['leave-balances', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      
+      // Fetch all leave types
+      const { data: leaveTypes, error: typesError } = await supabase
+        .from('leave_types')
+        .select('*')
+        .eq('is_active', true);
+
+      if (typesError) throw typesError;
+
+      // Fetch balances for each leave type
+      const balancePromises = leaveTypes.map(async (type) => {
+        const { data, error } = await supabase.rpc('get_monthly_leave_balance', {
+          p_user_id: user.id,
+          p_leave_type_id: type.id,
+        });
+        
+        if (error) {
+          console.error(`Error fetching balance for ${type.label}:`, error);
+          return null;
+        }
+        
+        return {
+          leave_type: type,
+          balance: data
+        };
+      });
+
+      const results = await Promise.all(balancePromises);
+      return results.filter(result => result !== null);
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: applications } = useQuery({
+    queryKey: ['leave-applications', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+
       const { data, error } = await supabase
         .from('leave_applied_users')
-        .select('*')
+        .select('*, leave_types(label, color)')
         .eq('user_id', user.id)
-        .order('applied_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching leave applications:', error);
-      } else {
-        setLeaveApplications(data || []);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
-
-  const calculateLeaveBalance = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('leave_applied_users')
-        .select('start_date, end_date, status')
-        .eq('user_id', user.id)
-        .in('status', ['approved', 'pending']);
-
-      if (error) {
-        console.error('Error calculating leave balance:', error);
-        return;
+        return [];
       }
 
-      let usedLeaves = 0;
-      data?.forEach((leave: any) => {
-        const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
-        usedLeaves += days;
-      });
+      return data;
+    },
+    enabled: !!user?.id,
+  });
 
-      setLeaveBalance(20 - usedLeaves);
-    } catch (error) {
-      console.error('Error:', error);
-    }
+  const handleLeaveFormSuccess = () => {
+    setIsLeaveFormOpen(false);
   };
-
-  const triggerConfetti = () => {
-    // Left side confetti
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { x: 0, y: 0.6 },
-      colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
-    });
-    
-    // Right side confetti
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { x: 1, y: 0.6 },
-      colors: ['#a855f7', '#3b82f6', '#10b981', '#f59e0b']
-    });
-  };
-
-  const handleLeaveSuccess = () => {
-    triggerConfetti();
-    setShouldMascotWave(true);
-    fetchLeaveApplications();
-    calculateLeaveBalance();
-  };
-
-  const handleApplyLeaveClick = () => {
-    calendarRef.current?.openApplyDialog();
-  };
-
-  const handleRevertLeave = async (applicationId: string) => {
-    try {
-      const { error } = await supabase
-        .from('leave_applied_users')
-        .delete()
-        .eq('id', applicationId)
-        .eq('user_id', user?.id)
-        .eq('status', 'pending'); // Only allow deletion of pending applications
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Success",
-        description: "Leave application cancelled successfully!"
-      });
-
-      fetchLeaveApplications();
-      calculateLeaveBalance();
-    } catch (error) {
-      console.error('Error cancelling leave:', error);
-      toast({
-        title: "Error",
-        description: "Failed to cancel leave application",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const renderNavbar = () => (
-    <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex flex-wrap gap-2 sm:space-x-6 justify-center sm:justify-start">
-          <button
-            onClick={() => setCurrentPage('dashboard')}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 hover:scale-105 ${
-              currentPage === 'dashboard' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
-            }`}
-          >
-            <CalendarDays className="w-4 h-4" />
-            <span>Dashboard</span>
-          </button>
-          <button
-            onClick={() => setCurrentPage('leave-types')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
-              currentPage === 'leave-types' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Leave Types</span>
-          </button>
-          <button
-            onClick={() => setCurrentPage('leaves-remaining')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
-              currentPage === 'leaves-remaining' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>Leaves Remaining</span>
-          </button>
-          <button
-            onClick={() => setCurrentPage('policies')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105 ${
-              currentPage === 'policies' ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 shadow-md' : 'text-gray-600 hover:text-purple-600 hover:bg-purple-50'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span>Policies</span>
-          </button>
-          {isAdmin && (
-            <button
-              onClick={() => navigate('/admin')}
-              className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-300 hover:scale-105"
-            >
-              <Shield className="w-4 h-4" />
-              <span>Admin Panel</span>
-            </button>
-          )}
-        </div>
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          <SlackOAuthButton />
-          <NotificationBell />
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderLeaveTypes = () => (
-    <div className="space-y-6 px-4 sm:px-0">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Types</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span>Paid Leave</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 text-sm mb-2">Regular vacation time for rest and relaxation.</p>
-            <p className="text-xs text-gray-500">• 1.5 days per month</p>
-            <p className="text-xs text-gray-500">• Requires approval</p>
-            <p className="text-xs text-gray-500">• Full day only</p>
-          </CardContent>
-        </Card>
-        
-        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span>Work From Home</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 text-sm mb-2">Remote work days for better work-life balance.</p>
-            <p className="text-xs text-gray-500">• 2 days per month</p>
-            <p className="text-xs text-gray-500">• No approval required</p>
-            <p className="text-xs text-gray-500">• Full day only</p>
-          </CardContent>
-        </Card>
-        
-        <Card className="hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <span>Short Leave</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 text-sm mb-2">Hourly leave for appointments and personal matters.</p>
-            <p className="text-xs text-gray-500">• 4 hours per month</p>
-            <p className="text-xs text-gray-500">• No approval required</p>
-            <p className="text-xs text-gray-500">• Min 1 hour, max 4 hours per request</p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-
-  const renderLeavesRemaining = () => (
-    <div className="space-y-6 px-4 sm:px-0">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Balance</h2>
-      <Card className={`${leaveBalance > 0 ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-red-500 to-orange-500'} text-white`}>
-        <CardContent className="p-6">
-          <div className="text-center">
-            <div className="text-4xl font-bold mb-2">{leaveBalance}</div>
-            <div className="text-lg opacity-90">Days Remaining</div>
-            <div className="text-sm opacity-75 mt-2">Out of 20 annual days</div>
-            {leaveBalance <= 0 && (
-              <div className="mt-3 p-2 bg-white/20 rounded-lg">
-                <p className="text-sm">All leave days used! Contact HR for additional requests.</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      
-      {leaveBalance <= 5 && leaveBalance > 0 && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You have {leaveBalance} leave days remaining. Plan your time off carefully!
-          </AlertDescription>
-        </Alert>
-      )}
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Leave History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {leaveApplications.slice(0, 5).map((app: any) => (
-                <div key={app.id} className="flex justify-between items-center py-2 border-b">
-                  <div>
-                    <p className="font-medium">{format(new Date(app.start_date), 'MMM dd')} - {format(new Date(app.end_date), 'MMM dd')}</p>
-                    <p className="text-sm text-gray-500">{app.status}</p>
-                  </div>
-                  <span className="text-sm font-medium">
-                    {differenceInDays(new Date(app.end_date), new Date(app.start_date)) + 1} days
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Stats</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>Used this year:</span>
-                <span className="font-medium">{20 - leaveBalance} days</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Pending approval:</span>
-                <span className="font-medium">
-                  {leaveApplications.filter((app: any) => app.status === 'pending').length} applications
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Approved leaves:</span>
-                <span className="font-medium">
-                  {leaveApplications.filter((app: any) => app.status === 'approved').length} applications
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-
-  const renderPolicies = () => (
-    <div className="space-y-6 px-4 sm:px-0">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Policies</h2>
-      <div className="space-y-4 sm:space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly Leave Entitlements</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h4 className="font-medium mb-2 flex items-center">
-                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                Paid Leave
-              </h4>
-              <p className="text-gray-600 text-sm">1.5 days per month. Requires management approval. Must be requested in advance.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2 flex items-center">
-                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                Work From Home
-              </h4>
-              <p className="text-gray-600 text-sm">2 days per month. No approval required. Can be used for better work-life balance.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2 flex items-center">
-                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
-                Short Leave
-              </h4>
-              <p className="text-gray-600 text-sm">4 hours per month. No approval required. For appointments and personal matters. Minimum 1 hour blocks.</p>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Leave Guidelines</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h4 className="font-medium mb-2">Monthly Reset</h4>
-              <p className="text-gray-600 text-sm">All leave balances reset at the beginning of each month. Unused leave does not carry forward.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2">Short Leave Usage</h4>
-              <p className="text-gray-600 text-sm">Short leaves can be taken in 1-hour increments and must be within regular working hours (9 AM - 6 PM).</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2">Approval Process</h4>
-              <p className="text-gray-600 text-sm">Paid leaves require manager approval. WFH and Short leaves are automatically approved upon submission.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2">Cancellation Policy</h4>
-              <p className="text-gray-600 text-sm">Leave can be cancelled before the start date. Contact your manager for approved leave cancellations.</p>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Slack Integration</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h4 className="font-medium mb-2">Slack Commands</h4>
-              <p className="text-gray-600 text-sm">Use <code className="bg-gray-100 px-1 rounded">/leaves</code> command in Slack to apply for leave directly from your workspace.</p>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2">Notifications</h4>
-              <p className="text-gray-600 text-sm">Connect your Slack account to receive real-time notifications about leave status updates.</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-
-  const renderDashboard = () => (
-    <div className="space-y-6 sm:space-y-8 relative px-4 sm:px-0">
-      {/* Floating particles background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-purple-300 rounded-full animate-pulse opacity-30"></div>
-        <div className="absolute top-3/4 right-1/4 w-1 h-1 bg-pink-300 rounded-full animate-bounce opacity-40"></div>
-        <div className="absolute top-1/2 left-3/4 w-1.5 h-1.5 bg-blue-300 rounded-full animate-ping opacity-25"></div>
-        <div className="absolute top-1/6 right-1/3 w-1 h-1 bg-green-300 rounded-full animate-pulse opacity-30"></div>
-      </div>
-
-      {/* Apply Leave CTA */}
-      <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
-        <CardContent className="p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg sm:text-xl font-bold mb-2">Ready to Take Some Time Off?</h3>
-              <p className="text-purple-100 text-sm sm:text-base">Apply for leave with just a few clicks</p>
-            </div>
-            <Button 
-              onClick={handleApplyLeaveClick}
-              className="bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 transition-all duration-300 shadow-lg font-semibold px-4 sm:px-6 py-2 sm:py-3 w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Apply Leave
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Leave Balance Alert */}
-      {leaveBalance <= 0 && (
-        <Alert className="border-red-200 bg-red-50 animate-pulse">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            You have exhausted all your annual leave days. Please contact HR if you need additional leave.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
-        {/* Enhanced Calendar Section */}
-        <EnhancedCalendar ref={calendarRef} onRefresh={handleLeaveSuccess} />
-
-        {/* Leave Applications Section with Tabs */}
-        <TabbedLeaveApplications
-          applications={leaveApplications}
-          onRevert={handleRevertLeave}
-        />
-      </div>
-
-      {/* Timeloo Mascot */}
-      <TimelooMascot 
-        shouldWave={shouldMascotWave} 
-        onWaveComplete={() => setShouldMascotWave(false)}
-      />
-    </div>
-  );
-
-  if (!isLoaded) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
 
   if (!user) {
-    return <div className="flex items-center justify-center min-h-screen">Please sign in to access the dashboard.</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Please sign in to access the dashboard</h1>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 px-4 sm:px-0">
-      {renderNavbar()}
-      <div className="pt-6 px-4">
-        <div className="max-w-7xl mx-auto">
-          {currentPage === 'dashboard' && renderDashboard()}
-          {currentPage === 'leave-types' && renderLeaveTypes()}
-          {currentPage === 'leaves-remaining' && renderLeavesRemaining()}
-          {currentPage === 'policies' && renderPolicies()}
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Welcome back, {profile?.name || user.firstName || 'User'}! 👋
+            </h1>
+            <p className="text-gray-600 mt-1">Here's your leave management overview</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <Dialog open={isLeaveFormOpen} onOpenChange={setIsLeaveFormOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+                  <CalendarDays className="w-4 h-4 mr-2" />
+                  Apply Leave
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[95vh] overflow-hidden p-0">
+                <EnhancedLeaveApplicationForm onSuccess={handleLeaveFormSuccess} />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
+
+        {/* Quick Actions */}
+        <QuickActions />
+
+        {/* Leave Balances */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {balancesLoading ? (
+            // Loading skeletons
+            Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader className="pb-2">
+                  <div className="h-4 bg-gray-200 rounded w-24"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 bg-gray-200 rounded w-12 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-20"></div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            leaveBalances?.map((item) => {
+              const isAnnualLeave = item.balance?.leave_type === 'Annual Leave';
+              const remaining = item.balance?.remaining_this_month || 0;
+              const total = isAnnualLeave 
+                ? (item.balance?.annual_allowance || item.balance?.monthly_allowance || 0)
+                : (item.balance?.monthly_allowance || 0);
+              const used = item.balance?.used_this_month || 0;
+              
+              return (
+                <Card key={item.leave_type.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: item.leave_type.color }}
+                      />
+                      {item.leave_type.label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600 mb-1">
+                      {remaining}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {isAnnualLeave ? 'remaining this year' : 'remaining this month'}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Used: {used} / {total} {item.balance?.duration_type || 'days'}
+                    </div>
+                    {item.balance?.carried_forward !== undefined && item.balance.carried_forward > 0 && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        Carried: {item.balance.carried_forward} days
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Calendar */}
+          <div className="lg:col-span-2">
+            <Card className="h-fit">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Leave Calendar
+                </CardTitle>
+                <CardDescription>View and manage your leave schedule</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EnhancedCalendar />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Sidebar */}
+          <div className="space-y-6">
+            {/* Users on Leave Today */}
+            <AllUsersOnLeave />
+
+            {/* Recent Applications */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Recent Applications
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {applications?.slice(0, 3).map((app) => (
+                  <div key={app.id} className="flex justify-between items-center py-2 border-b last:border-b-0">
+                    <div>
+                      <div className="font-medium text-sm">{app.leave_types?.label}</div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(app.start_date).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <Badge variant={
+                      app.status === 'approved' ? 'default' : 
+                      app.status === 'rejected' ? 'destructive' : 'secondary'
+                    }>
+                      {app.status}
+                    </Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Applications Table */}
+        <TabbedLeaveApplications />
       </div>
-      
-      {/* Timeloo Mascot */}
-      <TimelooMascot 
-        shouldWave={shouldMascotWave} 
-        onWaveComplete={() => setShouldMascotWave(false)}
-        showMessage={true}
-        message={`Welcome ${user?.firstName || 'User'}!`}
-      />
     </div>
   );
 };
