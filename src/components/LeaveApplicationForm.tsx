@@ -74,15 +74,17 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
     setIsSubmitting(true);
 
     try {
-      // Prepare the submission data with explicit validation
-      const submissionData: Record<string, any> = {
+      // Prepare the submission data with proper typing
+      const submissionData = {
         user_id: user.id,
         start_date: format(startDate, 'yyyy-MM-dd'),
         end_date: format(endDate, 'yyyy-MM-dd'),
         leave_type_id: leaveTypeId,
         reason: reason.trim(),
-        status: 'pending',
-        is_half_day: false
+        status: 'pending' as const,
+        is_half_day: false,
+        actual_days_used: 1,
+        hours_requested: 0
       };
 
       console.log('Submitting leave application with data:', submissionData);

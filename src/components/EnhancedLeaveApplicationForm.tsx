@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -252,39 +251,22 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
     setIsSubmitting(true);
 
     try {
-      // Prepare the submission data with explicit typing and validation
-      const submissionData: Record<string, any> = {
+      const submissionData = {
         user_id: user.id,
         start_date: format(startDate, 'yyyy-MM-dd'),
         end_date: format(endDate, 'yyyy-MM-dd'),
         leave_type_id: leaveTypeId,
         reason: reason.trim(),
-        status: 'pending'
+        status: 'pending' as const,
+        is_half_day: isHalfDay,
+        actual_days_used: calculateLeaveDuration(),
+        hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : 0,
+        leave_duration_type: selectedLeaveType?.label === 'Short Leave' ? 'hours' as const : 'days' as const,
+        leave_time_start: isHalfDay ? (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
+        leave_time_end: isHalfDay ? (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
+        holiday_name: holidayName.trim() || null,
+        meeting_details: meetingDetails.trim() || null
       };
-
-      // Handle half-day flag and time fields
-      if (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) {
-        submissionData.is_half_day = true;
-        submissionData.leave_time_start = halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00';
-        submissionData.leave_time_end = halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00';
-      } else {
-        submissionData.is_half_day = false;
-      }
-
-      // Handle hours requested for Short Leave
-      if (selectedLeaveType?.label === 'Short Leave' && hoursRequested > 0) {
-        submissionData.hours_requested = hoursRequested;
-        submissionData.leave_duration_type = 'hours';
-      }
-
-      // Handle optional fields only if they have meaningful content
-      if (holidayName && holidayName.trim()) {
-        submissionData.holiday_name = holidayName.trim();
-      }
-
-      if (meetingDetails && meetingDetails.trim()) {
-        submissionData.meeting_details = meetingDetails.trim();
-      }
 
       console.log('Submitting leave application with data:', submissionData);
 
@@ -302,7 +284,6 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
 
       toast.success('Leave application submitted successfully!');
       
-      // Reset form
       setStartDate(undefined);
       setEndDate(undefined);
       setLeaveTypeId("");
