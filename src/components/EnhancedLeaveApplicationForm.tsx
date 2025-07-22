@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -322,7 +321,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden p-0">
-          <ScrollArea className="h-full px-6 pb-6">
+          <ScrollArea className="h-full max-h-[calc(80vh-10rem)] px-6 pb-6">
             <div className="space-y-6">
               {/* Validation Message */}
               {validationMessage && (

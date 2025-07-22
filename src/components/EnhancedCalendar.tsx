@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, Users, User } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from 'date-fns';
@@ -7,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -285,7 +285,7 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
         
         {/* Leave Application Dialog */}
         <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-          <DialogContent className="max-w-4xl w-[95vw] h-[90vh] max-h-[800px] p-0 flex flex-col">
+          <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 flex flex-col overflow-hidden">
             <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
               <DialogTitle className="flex items-center space-x-2">
                 <Clock className="h-5 w-5 text-purple-600" />
