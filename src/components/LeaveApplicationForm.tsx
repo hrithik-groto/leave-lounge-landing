@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar"
@@ -295,7 +294,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
           <Checkbox 
             id="half-day" 
             checked={isHalfDay}
-            onCheckedChange={setIsHalfDay}
+            onCheckedChange={(checked) => setIsHalfDay(checked === true)}
           />
           <Label htmlFor="half-day" className="text-sm">
             Half Day (0.5 days) - Office hours: 10:00 AM to 2:00 PM
