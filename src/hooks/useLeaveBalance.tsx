@@ -46,7 +46,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
         // Type guard to ensure data is properly typed
         if (data && typeof data === 'object' && !Array.isArray(data)) {
-          const typedData = data as LeaveBalance;
+          const typedData = data as unknown as LeaveBalance;
           setBalance(typedData);
         } else {
           setError('Invalid balance data received');
