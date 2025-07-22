@@ -11,11 +11,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { CalendarIcon, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, Clock, AlertCircle, XCircle, CheckCircle } from "lucide-react";
 import { format, addDays, isSameDay, isAfter, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
+import { useLeaveOverlapValidation } from "@/hooks/useLeaveOverlapValidation";
 
 interface LeaveType {
   id: string;
@@ -60,6 +61,14 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   const [currentUsage, setCurrentUsage] = useState<{[key: string]: number}>({});
 
   const selectedLeaveType = leaveTypes.find(lt => lt.id === leaveTypeId);
+
+  // Use the overlap validation hook
+  const { validationResult, loading: validationLoading } = useLeaveOverlapValidation(
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDayPeriod
+  );
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -326,6 +335,12 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       return;
     }
 
+    // Check for overlapping leave applications
+    if (!validationResult.canApply) {
+      toast.error(validationResult.message || 'Cannot apply for leave on selected dates');
+      return;
+    }
+
     if (!canApplyForLeave()) {
       toast.error(getValidationMessage() || 'Cannot apply for leave');
       return;
@@ -414,6 +429,53 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                   <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                     <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                     <p className="text-sm text-yellow-800">{validationMessage}</p>
+                  </div>
+                )}
+
+                {/* Overlap Validation Message */}
+                {!validationResult.canApply && validationResult.message && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <XCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-red-800">{validationResult.message}</p>
+                  </div>
+                )}
+
+                {/* Available Slots Information */}
+                {startDate && endDate && isSameDay(startDate, endDate) && validationResult.conflicts.length > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">Available Time Slots:</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        {validationResult.availableSlots.morning ? (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        )}
+                        <span className={validationResult.availableSlots.morning ? 'text-green-800' : 'text-red-800'}>
+                          Morning (10:00 AM - 2:00 PM)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {validationResult.availableSlots.afternoon ? (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        )}
+                        <span className={validationResult.availableSlots.afternoon ? 'text-green-800' : 'text-red-800'}>
+                          Afternoon (2:00 PM - 6:30 PM)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {validationResult.availableSlots.fullDay ? (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        )}
+                        <span className={validationResult.availableSlots.fullDay ? 'text-green-800' : 'text-red-800'}>
+                          Full Day
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -523,12 +585,32 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                           className="ml-6"
                         >
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="morning" id="morning" />
-                            <Label htmlFor="morning">Morning (10:00 AM - 2:00 PM)</Label>
+                            <RadioGroupItem 
+                              value="morning" 
+                              id="morning" 
+                              disabled={!validationResult.availableSlots.morning}
+                            />
+                            <Label 
+                              htmlFor="morning"
+                              className={!validationResult.availableSlots.morning ? 'text-muted-foreground' : ''}
+                            >
+                              Morning (10:00 AM - 2:00 PM)
+                              {!validationResult.availableSlots.morning && ' - Not Available'}
+                            </Label>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="afternoon" id="afternoon" />
-                            <Label htmlFor="afternoon">Afternoon (2:00 PM - 6:30 PM)</Label>
+                            <RadioGroupItem 
+                              value="afternoon" 
+                              id="afternoon" 
+                              disabled={!validationResult.availableSlots.afternoon}
+                            />
+                            <Label 
+                              htmlFor="afternoon"
+                              className={!validationResult.availableSlots.afternoon ? 'text-muted-foreground' : ''}
+                            >
+                              Afternoon (2:00 PM - 6:30 PM)
+                              {!validationResult.availableSlots.afternoon && ' - Not Available'}
+                            </Label>
                           </div>
                         </RadioGroup>
                       )}
@@ -613,7 +695,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
               type="submit"
               form="leave-form" 
               className="w-full" 
-              disabled={isSubmitting || !canApplyForLeave()}
+              disabled={isSubmitting || !canApplyForLeave() || !validationResult.canApply || validationLoading}
             >
               {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
             </Button>
