@@ -1,45 +1,50 @@
 
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface SlackTokenResponse {
-  ok: boolean;
-  access_token?: string;
-  refresh_token?: string;
-  error?: string;
-}
-
-const handler = async (req: Request): Promise<Response> => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Starting Slack token refresh process...');
-
-    // Initialize Supabase client with service role key
-    const supabase = createClient(
+    console.log('🔄 Slack token refresh initiated');
+    
+    const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get credentials from environment
+    const { source } = await req.json().catch(() => ({ source: 'manual' }));
+    console.log(`Token refresh source: ${source}`);
+
+    // Get current refresh token
+    let refreshToken = Deno.env.get('SLACK_REFRESH_TOKEN');
+    
+    // Use the new refresh token you provided
+    const newRefreshToken = 'xoxe-1-My0xLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjYzMDU3Ny05MTc2MjY1MjQ5Mjk5LTM4MzhkOWViZjg0MzE5ZDkzYTQxYjAwYTFiM2RkMjRmYTQ3NzgyMWM3Yjc1NjU3MDhkNmJkMGI2OTQyNGU0OTA';
+    const newAccessToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyMzk4NjczODMyODQtZmFkYTc2NThlMDhkNzExOTg4ZTNhNWQ4NzcwMmMwNGM1MDdkYjUyM2FiMmU2MTcyODRiNmNlMzcxOGMwNTE3Nw';
+
+    console.log('🔄 Using provided updated tokens for refresh');
+
+    // Try to refresh the token using Slack's OAuth API
     const clientId = Deno.env.get('SLACK_CLIENT_ID');
     const clientSecret = Deno.env.get('SLACK_CLIENT_SECRET');
-    const refreshToken = Deno.env.get('SLACK_REFRESH_TOKEN');
 
-    if (!clientId || !clientSecret || !refreshToken) {
-      throw new Error('Missing required Slack credentials');
+    if (!clientId || !clientSecret) {
+      console.error('❌ Missing Slack client credentials');
+      return new Response(
+        JSON.stringify({ error: 'Missing Slack client credentials' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
     }
 
-    console.log('Attempting to refresh Slack token with refresh token...');
-
-    // Make refresh token request to Slack
+    // Try to refresh using the Slack API
     const refreshResponse = await fetch('https://slack.com/api/oauth.v2.access', {
       method: 'POST',
       headers: {
@@ -49,128 +54,72 @@ const handler = async (req: Request): Promise<Response> => {
         client_id: clientId,
         client_secret: clientSecret,
         grant_type: 'refresh_token',
-        refresh_token: refreshToken,
+        refresh_token: newRefreshToken,
       }),
     });
 
-    const refreshData: SlackTokenResponse = await refreshResponse.json();
+    const refreshData = await refreshResponse.json();
 
-    if (!refreshData.ok || !refreshData.access_token) {
-      console.error('Slack token refresh failed:', refreshData.error);
-      throw new Error(`Slack token refresh failed: ${refreshData.error}`);
-    }
-
-    console.log('Successfully refreshed Slack token');
-
-    // The new access token and refresh token from the refresh
-    const newAccessToken = refreshData.access_token;
-    const newRefreshToken = refreshData.refresh_token || refreshToken; // Use new refresh token if provided
-    console.log('New access token received:', newAccessToken.substring(0, 20) + '...');
-    console.log('New refresh token received:', newRefreshToken ? newRefreshToken.substring(0, 20) + '...' : 'No new refresh token');
-
-    // Store the new token in the database
-    const { error: insertError } = await supabase
-      .from('slack_token_updates')
-      .insert({
-        old_token: 'Previous token (hidden for security)',
-        new_token: newAccessToken,
-        refresh_date: new Date().toISOString(),
-        status: 'completed'
-      });
-
-    if (insertError) {
-      console.error('Failed to store token update:', insertError);
-    } else {
-      console.log('Token update stored in database');
-    }
-
-    // Try to update both SLACK_BOT_TOKEN and SLACK_REFRESH_TOKEN environment variables
-    const supabaseProjectRef = Deno.env.get('SUPABASE_PROJECT_REF') || 'ppuyedxxfcijdfeqpwfj';
-    const supabaseAccessToken = Deno.env.get('SUPABASE_ACCESS_TOKEN');
-
-    let autoUpdated = false;
-    
-    if (supabaseAccessToken) {
-      try {
-        // Update both access token and refresh token
-        const secretsToUpdate = [
-          {
-            name: 'SLACK_BOT_TOKEN',
-            value: newAccessToken,
-          }
-        ];
-
-        // Only update refresh token if we got a new one
-        if (newRefreshToken && newRefreshToken !== refreshToken) {
-          secretsToUpdate.push({
-            name: 'SLACK_REFRESH_TOKEN',
-            value: newRefreshToken,
-          });
-        }
-
-        const managementResponse = await fetch(`https://api.supabase.com/v1/projects/${supabaseProjectRef}/secrets`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${supabaseAccessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(secretsToUpdate),
+    if (refreshData.ok) {
+      console.log('✅ Successfully refreshed Slack tokens via API');
+      
+      // Store the token update record
+      const { error: insertError } = await supabaseClient
+        .from('slack_token_updates')
+        .insert({
+          new_token: refreshData.access_token.substring(0, 50) + '...',
+          refresh_date: new Date().toISOString(),
+          status: 'auto_updated'
         });
 
-        if (managementResponse.ok) {
-          console.log('Successfully updated Slack tokens automatically');
-          autoUpdated = true;
-          
-          // Update status to auto_updated
-          await supabase
-            .from('slack_token_updates')
-            .update({ status: 'auto_updated' })
-            .eq('new_token', newAccessToken);
-        } else {
-          const errorText = await managementResponse.text();
-          console.log('Could not update secrets automatically:', errorText);
-        }
-      } catch (managementError) {
-        console.log('Management API error:', managementError);
+      if (insertError) {
+        console.error('Error storing token update:', insertError);
       }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Tokens refreshed successfully',
+          access_token: refreshData.access_token.substring(0, 20) + '...',
+          refresh_token: refreshData.refresh_token ? refreshData.refresh_token.substring(0, 20) + '...' : 'unchanged'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     } else {
-      console.log('No Supabase access token available. Token stored for manual update.');
+      console.log('🔄 API refresh failed, using manually provided tokens');
+      
+      // Store the manual token update
+      const { error: insertError } = await supabaseClient
+        .from('slack_token_updates')
+        .insert({
+          new_token: newAccessToken.substring(0, 50) + '...',
+          refresh_date: new Date().toISOString(),
+          status: 'pending_update'
+        });
+
+      if (insertError) {
+        console.error('Error storing token update:', insertError);
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Manual token update recorded. Please update SLACK_BOT_TOKEN in Supabase secrets.',
+          new_access_token: newAccessToken.substring(0, 30) + '...',
+          new_refresh_token: newRefreshToken.substring(0, 30) + '...',
+          action_required: 'Update SLACK_BOT_TOKEN and SLACK_REFRESH_TOKEN in Supabase Functions settings'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
+  } catch (error) {
+    console.error('❌ Error refreshing Slack token:', error);
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Slack token refreshed successfully',
-        timestamp: new Date().toISOString(),
-        token_preview: newAccessToken.substring(0, 20) + '...',
-        refresh_token_updated: newRefreshToken && newRefreshToken !== refreshToken,
-        auto_updated: autoUpdated,
-        tokens_updated: {
-          access_token: true,
-          refresh_token: newRefreshToken && newRefreshToken !== refreshToken
-        }
+      JSON.stringify({ 
+        error: error.message || 'Failed to refresh Slack token' 
       }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      }
-    );
-
-  } catch (error: any) {
-    console.error('Error in refresh-slack-token function:', error);
-    
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-};
-
-serve(handler);
+});

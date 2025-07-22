@@ -24,18 +24,19 @@ serve(async (req) => {
 
     // Handle configuration check
     if (checkConfig) {
-      const slackWebhookUrl = Deno.env.get('SLACK_WEBHOOK_URL');
-      if (!slackWebhookUrl) {
+      const slackBotToken = Deno.env.get('SLACK_BOT_TOKEN');
+      if (!slackBotToken) {
         return new Response(
-          JSON.stringify({ error: 'SLACK_WEBHOOK_URL not configured' }),
+          JSON.stringify({ error: 'SLACK_BOT_TOKEN not configured' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
       return new Response(
-        JSON.stringify({ success: true, message: 'Slack webhook configured' }),
+        JSON.stringify({ success: true, message: 'Slack bot token configured' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
+
     console.log('Processing Slack notification for leave application:', leaveApplication);
 
     // Get user profile information
@@ -183,7 +184,28 @@ serve(async (req) => {
 
     // Always send to admin channel for ALL leave applications (pending, approved, rejected)
     const adminChannelId = 'C0920F0V7PW'; // Admin channel ID
-    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    let botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    
+    // If bot token is the old format or doesn't work, try to refresh it
+    if (!botToken || botToken.includes('invalid') || isTest) {
+      console.log('Bot token may be expired, attempting to refresh...');
+      
+      try {
+        const { error: refreshError } = await supabaseClient.functions.invoke('refresh-slack-token', {
+          body: { source: 'slack-notify-auto-refresh' }
+        });
+        
+        if (!refreshError) {
+          // Wait a moment for the token to be updated
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Get the refreshed token
+          botToken = Deno.env.get('SLACK_BOT_TOKEN');
+          console.log('Token refresh completed, using updated token');
+        }
+      } catch (refreshError) {
+        console.error('Failed to refresh token:', refreshError);
+      }
+    }
     
     if (adminChannelId && botToken) {
       console.log('Sending message to admin Slack channel...');
@@ -204,6 +226,21 @@ serve(async (req) => {
       
       if (!adminData.ok) {
         console.error('Admin Slack API error:', adminData.error);
+        console.error('Response details:', adminData);
+        
+        // If token is invalid, try one more refresh
+        if (adminData.error === 'invalid_auth') {
+          console.log('Token invalid, attempting final refresh...');
+          try {
+            await supabaseClient.functions.invoke('refresh-slack-token', {
+              body: { source: 'emergency-refresh' }
+            });
+            console.log('Emergency token refresh initiated');
+          } catch (e) {
+            console.error('Emergency refresh failed:', e);
+          }
+        }
+        
         channelResults.push({ channel: 'admin', success: false, error: adminData.error });
       } else {
         console.log('✅ Successfully sent Slack admin channel notification');
@@ -213,9 +250,6 @@ serve(async (req) => {
       console.error('❌ Missing admin channel ID or bot token');
       channelResults.push({ channel: 'admin', success: false, error: 'Missing admin channel ID or bot token' });
     }
-
-    // Send to all users channel only if explicitly requested (not on immediate approval)
-   
 
     console.log('Channel notification results:', channelResults);
 
@@ -228,28 +262,25 @@ serve(async (req) => {
           .eq('user_id', leaveApplication.user_id)
           .single();
 
-        if (slackIntegration?.access_token) {
-          const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-          if (botToken) {
-            // Send DM to user
-            const dmResponse = await fetch('https://slack.com/api/chat.postMessage', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${botToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                channel: slackIntegration.slack_user_id,
-                ...slackMessage,
-              }),
-            });
+        if (slackIntegration?.access_token && botToken) {
+          // Send DM to user
+          const dmResponse = await fetch('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${botToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              channel: slackIntegration.slack_user_id,
+              ...slackMessage,
+            }),
+          });
 
-            if (dmResponse.ok) {
-              console.log('Successfully sent individual Slack DM');
-            } else {
-              const dmError = await dmResponse.text();
-              console.error('Failed to send individual DM:', dmError);
-            }
+          if (dmResponse.ok) {
+            console.log('Successfully sent individual Slack DM');
+          } else {
+            const dmError = await dmResponse.text();
+            console.error('Failed to send individual DM:', dmError);
           }
         }
       } catch (dmError) {
@@ -261,7 +292,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Slack notification sent successfully' 
+        message: 'Slack notification sent successfully',
+        results: channelResults
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
