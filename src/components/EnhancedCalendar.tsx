@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
-import EnhancedLeaveApplicationForm from './EnhancedLeaveApplicationForm';
+import { EnhancedLeaveApplicationForm } from './EnhancedLeaveApplicationForm';
 
 interface LeaveApplication {
   id: string;

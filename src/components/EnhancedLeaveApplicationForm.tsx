@@ -492,3 +492,4 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
 };
 
 export { EnhancedLeaveApplicationForm };
+export default EnhancedLeaveApplicationForm;
