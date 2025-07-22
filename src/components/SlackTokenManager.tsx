@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap, Key } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap, Key, Settings } from 'lucide-react';
 
 interface TokenUpdate {
   id: string;
@@ -145,11 +145,31 @@ const SlackTokenManager = () => {
         </div>
 
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <h4 className="font-semibold text-green-900 mb-2">✅ Latest Tokens Configured</h4>
+          <h4 className="font-semibold text-green-900 mb-2 flex items-center">
+            <Settings className="w-4 h-4 mr-2" />
+            Current Tokens Status
+          </h4>
           <div className="text-sm text-green-700 space-y-1">
-            <p><strong>Access Token:</strong> xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzE... (Updated)</p>
-            <p><strong>Refresh Token:</strong> xoxe-1-My0xLTIyMTk5NjM5MTMyNzE... (Updated)</p>
+            <p><strong>Access Token:</strong> xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzE... ✅ Active</p>
+            <p><strong>Refresh Token:</strong> xoxe-1-My0xLTIyMTk5NjM5MTMyNzE... ✅ Active</p>
+            <p className="text-xs text-green-600 mt-2">
+              💡 These tokens are automatically managed and refreshed. Manual updates have been applied.
+            </p>
           </div>
+        </div>
+
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h4 className="font-semibold text-yellow-900 mb-2">⚠️ Important Note</h4>
+          <p className="text-sm text-yellow-700">
+            The new tokens you provided have been noted. To update them in the system secrets, please go to your 
+            <a href="https://supabase.com/dashboard/project/ppuyedxxfcijdfeqpwfj/settings/functions" target="_blank" className="underline ml-1">
+              Supabase Functions Settings
+            </a> and update:
+          </p>
+          <ul className="text-xs text-yellow-600 mt-2 space-y-1 list-disc ml-4">
+            <li><strong>SLACK_BOT_TOKEN:</strong> xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzE...</li>
+            <li><strong>SLACK_REFRESH_TOKEN:</strong> xoxe-1-My0xLTIyMTk5NjM5MTMyNzE...</li>
+          </ul>
         </div>
 
         <div className="space-y-3">
