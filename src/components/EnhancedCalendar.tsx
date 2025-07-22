@@ -285,7 +285,7 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
         
         {/* Leave Application Dialog */}
         <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-          <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 flex flex-col overflow-hidden">
+          <DialogContent className="max-w-4xl w-[95vw] h-[85vh] p-0 flex flex-col overflow-hidden">
             <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
               <DialogTitle className="flex items-center space-x-2">
                 <Clock className="h-5 w-5 text-purple-600" />
@@ -293,7 +293,7 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
               </DialogTitle>
               {selectedDate && (
                 <p className="text-sm text-gray-600">
-                  Selected date: {format(selectedDate, 'MMMM dd, yyyy')}
+                  Selected date: {format(selectedDate, "MMMM dd, yyyy")}
                 </p>
               )}
             </DialogHeader>
