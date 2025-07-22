@@ -62,9 +62,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Successfully refreshed Slack token');
 
-    // The new access token from the refresh
+    // The new access token and refresh token from the refresh
     const newAccessToken = refreshData.access_token;
+    const newRefreshToken = refreshData.refresh_token || refreshToken; // Use new refresh token if provided
     console.log('New access token received:', newAccessToken.substring(0, 20) + '...');
+    console.log('New refresh token received:', newRefreshToken ? newRefreshToken.substring(0, 20) + '...' : 'No new refresh token');
 
     // Store the new token in the database
     const { error: insertError } = await supabase
@@ -82,39 +84,54 @@ const handler = async (req: Request): Promise<Response> => {
       console.log('Token update stored in database');
     }
 
-    // Try to update the SLACK_BOT_TOKEN environment variable
+    // Try to update both SLACK_BOT_TOKEN and SLACK_REFRESH_TOKEN environment variables
     const supabaseProjectRef = Deno.env.get('SUPABASE_PROJECT_REF') || 'ppuyedxxfcijdfeqpwfj';
     const supabaseAccessToken = Deno.env.get('SUPABASE_ACCESS_TOKEN');
 
+    let autoUpdated = false;
+    
     if (supabaseAccessToken) {
       try {
+        // Update both access token and refresh token
+        const secretsToUpdate = [
+          {
+            name: 'SLACK_BOT_TOKEN',
+            value: newAccessToken,
+          }
+        ];
+
+        // Only update refresh token if we got a new one
+        if (newRefreshToken && newRefreshToken !== refreshToken) {
+          secretsToUpdate.push({
+            name: 'SLACK_REFRESH_TOKEN',
+            value: newRefreshToken,
+          });
+        }
+
         const managementResponse = await fetch(`https://api.supabase.com/v1/projects/${supabaseProjectRef}/secrets`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${supabaseAccessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify([
-            {
-              name: 'SLACK_BOT_TOKEN',
-              value: newAccessToken,
-            },
-          ]),
+          body: JSON.stringify(secretsToUpdate),
         });
 
         if (managementResponse.ok) {
-          console.log('Successfully updated SLACK_BOT_TOKEN secret automatically');
+          console.log('Successfully updated Slack tokens automatically');
+          autoUpdated = true;
           
-          // Update status to completed
+          // Update status to auto_updated
           await supabase
             .from('slack_token_updates')
             .update({ status: 'auto_updated' })
             .eq('new_token', newAccessToken);
         } else {
-          console.log('Could not update secret automatically. Manual update required.');
+          const errorText = await managementResponse.text();
+          console.log('Could not update secrets automatically:', errorText);
         }
       } catch (managementError) {
-        console.log('Management API not available. Token stored for manual update.');
+        console.log('Management API error:', managementError);
       }
     } else {
       console.log('No Supabase access token available. Token stored for manual update.');
@@ -126,7 +143,12 @@ const handler = async (req: Request): Promise<Response> => {
         message: 'Slack token refreshed successfully',
         timestamp: new Date().toISOString(),
         token_preview: newAccessToken.substring(0, 20) + '...',
-        auto_updated: !!supabaseAccessToken
+        refresh_token_updated: newRefreshToken && newRefreshToken !== refreshToken,
+        auto_updated: autoUpdated,
+        tokens_updated: {
+          access_token: true,
+          refresh_token: newRefreshToken && newRefreshToken !== refreshToken
+        }
       }),
       {
         status: 200,

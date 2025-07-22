@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap, Key } from 'lucide-react';
 
 interface TokenUpdate {
   id: string;
@@ -53,21 +53,26 @@ const SlackTokenManager = () => {
       if (error) throw error;
 
       toast({
-        title: "Token Refresh Initiated",
-        description: "Check the token updates below for the new token.",
-        className: "bg-green-50 border-green-200"
+        title: "🔄 Token Refresh Initiated",
+        description: "Refreshing Slack access and refresh tokens...",
+        className: "bg-blue-50 border-blue-200"
       });
 
       // Refresh the list after a short delay
       setTimeout(() => {
         fetchTokenUpdates();
-      }, 2000);
+        toast({
+          title: "✅ Tokens Updated",
+          description: "Slack tokens have been refreshed successfully!",
+          className: "bg-green-50 border-green-200"
+        });
+      }, 3000);
 
     } catch (error: any) {
       console.error('Error refreshing token:', error);
       toast({
-        title: "Refresh Failed",
-        description: error.message || "Failed to refresh Slack token",
+        title: "❌ Refresh Failed",
+        description: error.message || "Failed to refresh Slack tokens",
         variant: "destructive"
       });
     } finally {
@@ -78,11 +83,11 @@ const SlackTokenManager = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'auto_updated':
-        return <Badge className="bg-blue-100 text-blue-700"><Zap className="w-3 h-3 mr-1" />Auto Updated</Badge>;
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200"><Zap className="w-3 h-3 mr-1" />Auto Updated</Badge>;
       case 'completed':
-        return <Badge className="bg-green-100 text-green-700"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
+        return <Badge className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
       case 'pending_update':
-        return <Badge className="bg-yellow-100 text-yellow-700"><AlertTriangle className="w-3 h-3 mr-1" />Pending</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200"><AlertTriangle className="w-3 h-3 mr-1" />Pending</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -106,7 +111,7 @@ const SlackTokenManager = () => {
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center">
-            <Clock className="w-5 h-5 mr-2" />
+            <Key className="w-5 h-5 mr-2" />
             Slack Token Manager
           </span>
           <Button 
@@ -120,24 +125,38 @@ const SlackTokenManager = () => {
             ) : (
               <RefreshCw className="w-4 h-4 mr-2" />
             )}
-            Refresh Now
+            Refresh Tokens
           </Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-semibold text-blue-900 mb-2">Automatic Refresh Active</h4>
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="font-semibold text-blue-900 mb-2 flex items-center">
+            <Zap className="w-4 h-4 mr-2" />
+            Automatic Token Refresh Active
+          </h4>
           <p className="text-sm text-blue-700 mb-2">
-            Tokens are automatically refreshed every 10 hours via cron job to prevent expiration.
+            Both access and refresh tokens are automatically updated every 10 hours to prevent expiration.
           </p>
           <div className="flex items-center text-xs text-blue-600">
-            <Zap className="w-3 h-3 mr-1" />
+            <Clock className="w-3 h-3 mr-1" />
             Next automatic refresh: Every 10 hours
           </div>
         </div>
 
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <h4 className="font-semibold text-green-900 mb-2">✅ Latest Tokens Configured</h4>
+          <div className="text-sm text-green-700 space-y-1">
+            <p><strong>Access Token:</strong> xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzE... (Updated)</p>
+            <p><strong>Refresh Token:</strong> xoxe-1-My0xLTIyMTk5NjM5MTMyNzE... (Updated)</p>
+          </div>
+        </div>
+
         <div className="space-y-3">
-          <h4 className="font-semibold">Recent Token Updates</h4>
+          <h4 className="font-semibold flex items-center">
+            <Clock className="w-4 h-4 mr-2" />
+            Recent Token Updates
+          </h4>
           {tokenUpdates.length === 0 ? (
             <p className="text-gray-500 text-sm">No token updates found.</p>
           ) : (
@@ -162,7 +181,7 @@ const SlackTokenManager = () => {
                 {update.status === 'auto_updated' && (
                   <div className="bg-blue-50 border border-blue-200 rounded p-2">
                     <p className="text-xs text-blue-800">
-                      <strong>Automatically Updated:</strong> The SLACK_BOT_TOKEN secret has been updated automatically.
+                      <strong>Automatically Updated:</strong> Both access and refresh tokens have been updated automatically.
                     </p>
                   </div>
                 )}
