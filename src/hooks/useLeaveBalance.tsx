@@ -13,6 +13,20 @@ interface LeaveBalance {
   carried_forward?: number;
 }
 
+// Create a type for the RPC response
+interface LeaveBalanceResponse {
+  leave_type?: string;
+  duration_type?: 'days' | 'hours';
+  monthly_allowance?: number;
+  used_this_month: number;
+  remaining_this_month: number;
+  annual_allowance?: number;
+  carried_forward?: number;
+  allocated_balance?: number;
+  used_balance?: number;
+  remaining_balance?: number;
+}
+
 export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) => {
   const { user } = useUser();
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
@@ -148,8 +162,18 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
           // Type guard to ensure data is properly typed
           if (data && typeof data === 'object' && !Array.isArray(data)) {
-            const typedData = data as unknown as LeaveBalance;
-            setBalance(typedData);
+            const typedData = data as unknown as LeaveBalanceResponse;
+            
+            // Map the response to our LeaveBalance interface
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: 'days',
+              monthly_allowance: typedData.monthly_allowance || typedData.allocated_balance || 0,
+              used_this_month: typedData.used_this_month || typedData.used_balance || 0,
+              remaining_this_month: typedData.remaining_this_month || typedData.remaining_balance || 0,
+              annual_allowance: typedData.annual_allowance || typedData.allocated_balance,
+              carried_forward: typedData.carried_forward
+            });
           } else {
             setError('Invalid balance data received');
           }
@@ -172,8 +196,17 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
           // Type guard to ensure data is properly typed
           if (data && typeof data === 'object' && !Array.isArray(data)) {
-            const typedData = data as unknown as LeaveBalance;
-            setBalance(typedData);
+            const typedData = data as unknown as LeaveBalanceResponse;
+            
+            // Map the response to our LeaveBalance interface
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: 'days',
+              monthly_allowance: typedData.monthly_allowance || typedData.allocated_balance || 1.5,
+              used_this_month: typedData.used_this_month || typedData.used_balance || 0,
+              remaining_this_month: typedData.remaining_this_month || typedData.remaining_balance || 0,
+              carried_forward: typedData.carried_forward || 0
+            });
           } else {
             setError('Invalid balance data received');
           }

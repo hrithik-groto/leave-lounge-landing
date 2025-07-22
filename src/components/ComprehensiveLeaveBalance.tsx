@@ -22,6 +22,15 @@ interface ComprehensiveLeaveBalanceProps {
   refreshTrigger?: number;
 }
 
+// Create an interface for the RPC response
+interface MonthlyLeaveBalanceResponse {
+  used_this_month: number;
+  remaining_this_month: number;
+  carried_forward: number;
+  allocated_balance?: number;
+  monthly_allocation?: number;
+}
+
 export const ComprehensiveLeaveBalance: React.FC<ComprehensiveLeaveBalanceProps> = ({
   refreshTrigger
 }) => {
@@ -146,11 +155,19 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
 
           if (error) throw error;
 
-          setUsage({
-            used: data.used_this_month || 0,
-            remaining: data.remaining_this_month || 0,
-            carryForward: data.carried_forward || 0
-          });
+          // Properly type and access the response data
+          if (data && typeof data === 'object') {
+            const balanceData = data as unknown as MonthlyLeaveBalanceResponse;
+            
+            setUsage({
+              used: balanceData.used_this_month || 0,
+              remaining: balanceData.remaining_this_month || 0,
+              carryForward: balanceData.carried_forward || 0
+            });
+          } else {
+            console.error('Invalid response format from get_monthly_leave_balance');
+            setUsage({ used: 0, remaining: leaveType.monthlyAllowance, carryForward: 0 });
+          }
         } else {
           // For other leave types, calculate from actual records
           const { data: leaves, error } = await supabase

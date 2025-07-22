@@ -30,6 +30,15 @@ interface CompanyHoliday {
   date: string;
 }
 
+// Create an interface for the RPC response
+interface MonthlyLeaveBalanceResponse {
+  used_this_month: number;
+  remaining_this_month: number;
+  carried_forward: number;
+  allocated_balance?: number;
+  monthly_allocation?: number;
+}
+
 interface EnhancedLeaveApplicationFormProps {
   onSuccess?: () => void;
 }
@@ -133,11 +142,24 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
         if (error) throw error;
 
-        setCurrentUsage({
-          [selectedLeaveType.id]: data.used_this_month || 0,
-          [`${selectedLeaveType.id}_remaining`]: data.remaining_this_month || 0,
-          [`${selectedLeaveType.id}_carried_forward`]: data.carried_forward || 0
-        });
+        // Properly type and access the response data
+        if (data && typeof data === 'object') {
+          const balanceData = data as unknown as MonthlyLeaveBalanceResponse;
+          
+          setCurrentUsage({
+            [selectedLeaveType.id]: balanceData.used_this_month || 0,
+            [`${selectedLeaveType.id}_remaining`]: balanceData.remaining_this_month || 0,
+            [`${selectedLeaveType.id}_carried_forward`]: balanceData.carried_forward || 0
+          });
+        } else {
+          console.error('Invalid response format from get_monthly_leave_balance');
+          // Set default values
+          setCurrentUsage({
+            [selectedLeaveType.id]: 0,
+            [`${selectedLeaveType.id}_remaining`]: 1.5,
+            [`${selectedLeaveType.id}_carried_forward`]: 0
+          });
+        }
       }
       else if (selectedLeaveType.label === 'Work From Home') {
         // Work From Home: 2 days per month, no carryforward
