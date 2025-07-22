@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar";
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
@@ -47,6 +49,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
   const [reason, setReason] = useState('');
   const [selectedLeaveType, setSelectedLeaveType] = useState('');
   const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDayPeriod, setHalfDayPeriod] = useState<'morning' | 'afternoon'>('morning');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
@@ -133,6 +136,14 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
     }
   };
 
+  const getHalfDayTimes = () => {
+    if (halfDayPeriod === 'morning') {
+      return { start: '10:00', end: '14:00' };
+    } else {
+      return { start: '14:00', end: '18:30' };
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -185,6 +196,10 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
     setIsSubmitting(true);
 
     try {
+      console.log('Submitting leave application...');
+      
+      const halfDayTimes = getHalfDayTimes();
+      
       const leaveData = {
         user_id: user.id,
         start_date: startDate.toISOString().split('T')[0],
@@ -197,11 +212,13 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
         status: selectedLeaveTypeData?.requires_approval ? 'pending' : 'approved',
         leave_duration_type: isShortLeave ? 'hours' : 'days',
         hours_requested: isShortLeave ? duration : null,
-        leave_time_start: isShortLeave ? startTime : null,
-        leave_time_end: isShortLeave ? endTime : null,
+        leave_time_start: isShortLeave ? startTime : (isPaidLeave && isHalfDay ? halfDayTimes.start : null),
+        leave_time_end: isShortLeave ? endTime : (isPaidLeave && isHalfDay ? halfDayTimes.end : null),
         is_half_day: isPaidLeave ? isHalfDay : false,
-        actual_days_used: isPaidLeave && isHalfDay ? 0.5 : duration
+        actual_days_used: isPaidLeave && isHalfDay ? 0.5 : (isShortLeave ? duration / 8 : duration)
       };
+
+      console.log('Leave data being submitted:', leaveData);
 
       // Ensure user profile exists
       let { data: profile } = await supabase
@@ -243,6 +260,8 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
         throw error;
       }
 
+      console.log('Leave application submitted successfully:', newLeaveApplication);
+
       // Send Slack notification
       try {
         await supabase.functions.invoke('slack-notify', {
@@ -255,9 +274,12 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       // Create in-app notification for admin
       try {
         const adminUserId = 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
-        const leaveTypeText = isPaidLeave && isHalfDay ? `${selectedLeaveTypeData?.label} (Half Day)` : selectedLeaveTypeData?.label;
+        const leaveTypeText = isPaidLeave && isHalfDay ? 
+          `${selectedLeaveTypeData?.label} (${halfDayPeriod === 'morning' ? 'Morning' : 'Afternoon'} Half Day)` : 
+          selectedLeaveTypeData?.label;
+        
         const dateText = isShortLeave ? `${startDate.toLocaleDateString()} (${startTime}-${endTime})` : 
-                        isPaidLeave && isHalfDay ? startDate.toLocaleDateString() : 
+                        isPaidLeave && isHalfDay ? `${startDate.toLocaleDateString()} (${halfDayTimes.start}-${halfDayTimes.end})` : 
                         `${startDate.toLocaleDateString()} to ${(endDate || startDate).toLocaleDateString()}`;
         
         await supabase
@@ -287,7 +309,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       });
 
       const successMessage = isPaidLeave && isHalfDay ? 
-        `Your ${selectedLeaveTypeData?.label} (Half Day) application has been submitted successfully!` :
+        `Your ${selectedLeaveTypeData?.label} (${halfDayPeriod === 'morning' ? 'Morning' : 'Afternoon'} Half Day) application has been submitted successfully!` :
         `Your ${selectedLeaveTypeData?.label} application has been submitted successfully!`;
 
       toast({
@@ -304,6 +326,7 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
       setReason('');
       setSelectedLeaveType('');
       setIsHalfDay(false);
+      setHalfDayPeriod('morning');
       setLeaveBalance(null);
 
       if (onSuccess) {
@@ -371,15 +394,41 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
 
           {/* Half Day Option for Paid Leave */}
           {isPaidLeave && (
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="half-day" 
-                checked={isHalfDay}
-                onCheckedChange={(checked) => setIsHalfDay(checked === true)}
-              />
-              <Label htmlFor="half-day" className="text-sm">
-                Half Day (0.5 days) - Office hours: 10:00 AM to 2:00 PM
-              </Label>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="half-day" 
+                  checked={isHalfDay}
+                  onCheckedChange={(checked) => setIsHalfDay(checked === true)}
+                />
+                <Label htmlFor="half-day" className="text-sm">
+                  Half Day (0.5 days)
+                </Label>
+              </div>
+              
+              {isHalfDay && (
+                <div className="ml-6 space-y-3">
+                  <Label className="text-sm font-medium">Select Half Day Period:</Label>
+                  <RadioGroup 
+                    value={halfDayPeriod} 
+                    onValueChange={(value: 'morning' | 'afternoon') => setHalfDayPeriod(value)}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="morning" id="morning" />
+                      <Label htmlFor="morning" className="text-sm">
+                        Morning Half (10:00 AM - 2:00 PM)
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="afternoon" id="afternoon" />
+                      <Label htmlFor="afternoon" className="text-sm">
+                        Afternoon Half (2:00 PM - 6:30 PM)
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              )}
             </div>
           )}
 
@@ -523,7 +572,9 @@ const EnhancedLeaveApplicationForm = ({ onSuccess, preselectedDate }: EnhancedLe
               <p className="text-sm text-gray-700">
                 <strong>Duration:</strong> {calculateLeaveDuration()} {selectedLeaveTypeData.duration_type}
                 {isPaidLeave && isHalfDay && (
-                  <span className="text-blue-600 ml-2">(Half Day)</span>
+                  <span className="text-blue-600 ml-2">
+                    ({halfDayPeriod === 'morning' ? 'Morning' : 'Afternoon'} Half Day)
+                  </span>
                 )}
               </p>
             </div>

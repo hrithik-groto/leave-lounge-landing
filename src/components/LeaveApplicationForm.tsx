@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Calendar } from "@/components/ui/calendar"
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { format } from 'date-fns';
@@ -24,6 +26,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
   const [reason, setReason] = useState('');
   const [selectedLeaveType, setSelectedLeaveType] = useState('');
   const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDayPeriod, setHalfDayPeriod] = useState<'morning' | 'afternoon'>('morning');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<Array<{id: string, label: string, color: string}>>([]);
   const { toast } = useToast();
@@ -54,6 +57,14 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
   const selectedLeaveTypeData = leaveTypes.find(type => type.id === selectedLeaveType);
   const isPaidLeave = selectedLeaveTypeData?.label === 'Paid Leave';
+
+  const getHalfDayTimes = () => {
+    if (halfDayPeriod === 'morning') {
+      return { start: '10:00', end: '14:00' };
+    } else {
+      return { start: '14:00', end: '18:30' };
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +110,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
     try {
       console.log('Submitting leave application...');
       
+      const halfDayTimes = getHalfDayTimes();
       const actualDaysUsed = isPaidLeave && isHalfDay ? 0.5 : 
                             Math.ceil(Math.abs(endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       
@@ -111,8 +123,12 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
         applied_at: new Date().toISOString(),
         status: 'pending',
         is_half_day: isPaidLeave ? isHalfDay : false,
-        actual_days_used: actualDaysUsed
+        actual_days_used: actualDaysUsed,
+        leave_time_start: isPaidLeave && isHalfDay ? halfDayTimes.start : null,
+        leave_time_end: isPaidLeave && isHalfDay ? halfDayTimes.end : null
       };
+
+      console.log('Leave data being submitted:', leaveData);
 
       // First ensure user profile exists and get profile data
       let { data: profile } = await supabase
@@ -206,9 +222,13 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
         }
 
         // Now create the notification
-        const leaveTypeText = isPaidLeave && isHalfDay ? `${selectedLeaveTypeData?.label} (Half Day)` : selectedLeaveTypeData?.label;
-        const dateText = isPaidLeave && isHalfDay ? startDate.toLocaleDateString() : 
-                        `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`;
+        const leaveTypeText = isPaidLeave && isHalfDay ? 
+          `${selectedLeaveTypeData?.label} (${halfDayPeriod === 'morning' ? 'Morning' : 'Afternoon'} Half Day)` : 
+          selectedLeaveTypeData?.label;
+        
+        const dateText = isPaidLeave && isHalfDay ? 
+          `${startDate.toLocaleDateString()} (${halfDayTimes.start}-${halfDayTimes.end})` : 
+          `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`;
         
         const { error: notificationError } = await supabase
           .from('notifications')
@@ -230,7 +250,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
       // Show success message
       const successMessage = isPaidLeave && isHalfDay ? 
-        "Your half-day leave application has been submitted successfully and admin has been notified!" :
+        `Your ${halfDayPeriod} half-day leave application has been submitted successfully and admin has been notified!` :
         "Your application has been submitted successfully and admin has been notified!";
 
       toast({
@@ -245,6 +265,7 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
       setReason('');
       setSelectedLeaveType('');
       setIsHalfDay(false);
+      setHalfDayPeriod('morning');
 
       // Call success callback
       if (onSuccess) {
@@ -290,15 +311,41 @@ const LeaveApplicationForm = ({ onSuccess }: LeaveApplicationFormProps) => {
 
       {/* Half Day Option for Paid Leave */}
       {isPaidLeave && (
-        <div className="flex items-center space-x-2">
-          <Checkbox 
-            id="half-day" 
-            checked={isHalfDay}
-            onCheckedChange={(checked) => setIsHalfDay(checked === true)}
-          />
-          <Label htmlFor="half-day" className="text-sm">
-            Half Day (0.5 days) - Office hours: 10:00 AM to 2:00 PM
-          </Label>
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="half-day" 
+              checked={isHalfDay}
+              onCheckedChange={(checked) => setIsHalfDay(checked === true)}
+            />
+            <Label htmlFor="half-day" className="text-sm">
+              Half Day (0.5 days)
+            </Label>
+          </div>
+          
+          {isHalfDay && (
+            <div className="ml-6 space-y-3">
+              <Label className="text-sm font-medium">Select Half Day Period:</Label>
+              <RadioGroup 
+                value={halfDayPeriod} 
+                onValueChange={(value: 'morning' | 'afternoon') => setHalfDayPeriod(value)}
+                className="space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="morning" id="morning" />
+                  <Label htmlFor="morning" className="text-sm">
+                    Morning Half (10:00 AM - 2:00 PM)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="afternoon" id="afternoon" />
+                  <Label htmlFor="afternoon" className="text-sm">
+                    Afternoon Half (2:00 PM - 6:30 PM)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
         </div>
       )}
 
