@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Clock, Calendar, User } from 'lucide-react';
@@ -18,10 +19,10 @@ interface LeaveApplication {
   leave_types?: {
     label: string;
     color: string;
-  };
+  } | null;
   profiles?: {
     name: string;
-  };
+  } | null;
   hours_requested?: number;
   leave_duration_type?: string;
 }

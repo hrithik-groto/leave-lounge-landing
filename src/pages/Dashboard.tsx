@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import ComprehensiveLeaveBalance from '@/components/ComprehensiveLeaveBalance';
+import { ComprehensiveLeaveBalance } from '@/components/ComprehensiveLeaveBalance';
 import QuickActions from '@/components/QuickActions';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
@@ -131,7 +132,7 @@ const Dashboard = () => {
           {/* Left Column - Leave Balance and Quick Actions */}
           <div className="lg:col-span-1 space-y-6">
             <ComprehensiveLeaveBalance refreshTrigger={refreshTrigger} />
-            <QuickActions onLeaveSubmitted={handleLeaveSubmitted} />
+            <QuickActions />
             <NotificationBell />
           </div>
 
