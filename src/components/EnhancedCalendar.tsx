@@ -285,8 +285,8 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
         
         {/* Leave Application Dialog */}
         <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
+          <DialogContent className="max-w-4xl w-[95vw] h-[90vh] max-h-[800px] p-0 flex flex-col">
+            <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
               <DialogTitle className="flex items-center space-x-2">
                 <Clock className="h-5 w-5 text-purple-600" />
                 <span>Apply for Leave</span>
@@ -298,13 +298,15 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
               )}
             </DialogHeader>
             
-            <EnhancedLeaveApplicationForm
-              onSuccess={() => {
-                setIsApplyDialogOpen(false);
-                fetchLeaveApplications();
-                onRefresh?.();
-              }}
-            />
+            <div className="flex-1 overflow-hidden">
+              <EnhancedLeaveApplicationForm
+                onSuccess={() => {
+                  setIsApplyDialogOpen(false);
+                  fetchLeaveApplications();
+                  onRefresh?.();
+                }}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       </CardContent>

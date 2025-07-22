@@ -17,7 +17,6 @@ import { format, addDays, isSameDay, isAfter, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
-import { ComprehensiveLeaveBalance } from "./ComprehensiveLeaveBalance";
 
 interface LeaveType {
   id: string;
@@ -50,7 +49,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   const [hoursRequested, setHoursRequested] = useState(1);
   const [holidayName, setHolidayName] = useState("");
   const [meetingDetails, setMeetingDetails] = useState("");
-  const [balanceRefreshTrigger, setBalanceRefreshTrigger] = useState(0);
   const [currentUsage, setCurrentUsage] = useState<{[key: string]: number}>({});
 
   const selectedLeaveType = leaveTypes.find(lt => lt.id === leaveTypeId);
@@ -64,7 +62,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     if (selectedLeaveType && user?.id) {
       fetchCurrentUsage();
     }
-  }, [selectedLeaveType, user?.id, balanceRefreshTrigger]);
+  }, [selectedLeaveType, user?.id]);
 
   const fetchLeaveTypes = async () => {
     try {
@@ -176,7 +174,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       case 'Paid Leave': return 1.5;
       case 'Short Leave': return 4;
       case 'Work From Home': return 2;
-      case 'Annual Leave': return 18; // This is annual, not monthly
+      case 'Annual Leave': return 18;
       default: return 0;
     }
   };
@@ -189,7 +187,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     const requestedAmount = calculateLeaveDuration();
     
     if (selectedLeaveType.label === 'Annual Leave') {
-      return true; // Handle annual leave separately
+      return true;
     }
     
     return (used + requestedAmount) <= monthlyAllowance;
@@ -204,7 +202,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     const requestedAmount = calculateLeaveDuration();
     
     if (selectedLeaveType.label === 'Annual Leave') {
-      return null; // Handle annual leave validation separately
+      return null;
     }
     
     if (remaining <= 0) {
@@ -299,7 +297,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       setHoursRequested(1);
       setHolidayName("");
       setMeetingDetails("");
-      setBalanceRefreshTrigger(prev => prev + 1);
 
       if (onSuccess) {
         onSuccess();
@@ -316,20 +313,17 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   const validationMessage = getValidationMessage();
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+    <div className="w-full h-full flex flex-col">
+      <Card className="flex-1 flex flex-col">
+        <CardHeader className="flex-shrink-0 pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <CalendarIcon className="h-5 w-5" />
             Apply for Leave
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ScrollArea className="max-h-[80vh] w-full">
-            <div className="space-y-6 pr-4">
-              {/* Comprehensive Leave Balance Display */}
-              <ComprehensiveLeaveBalance refreshTrigger={balanceRefreshTrigger} />
-
+        <CardContent className="flex-1 overflow-hidden p-0">
+          <ScrollArea className="h-full px-6 pb-6">
+            <div className="space-y-6">
               {/* Validation Message */}
               {validationMessage && (
                 <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -496,7 +490,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     placeholder="Please provide a reason for your leave request..."
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    className="min-h-[80px]"
+                    className="min-h-[80px] resize-none"
                     required
                   />
                 </div>
@@ -525,13 +519,15 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                 </div>
 
                 {/* Submit Button */}
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={isSubmitting || !canApplyForLeave()}
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
-                </Button>
+                <div className="pt-4">
+                  <Button 
+                    type="submit" 
+                    className="w-full" 
+                    disabled={isSubmitting || !canApplyForLeave()}
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
+                  </Button>
+                </div>
               </form>
             </div>
           </ScrollArea>
