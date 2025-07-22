@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 
@@ -27,24 +28,16 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get current tokens from secrets
-    const currentBotToken = Deno.env.get('SLACK_BOT_TOKEN');
+    // Get credentials from environment
     const clientId = Deno.env.get('SLACK_CLIENT_ID');
     const clientSecret = Deno.env.get('SLACK_CLIENT_SECRET');
+    const refreshToken = Deno.env.get('SLACK_REFRESH_TOKEN');
 
-    if (!currentBotToken || !clientId || !clientSecret) {
+    if (!clientId || !clientSecret || !refreshToken) {
       throw new Error('Missing required Slack credentials');
     }
 
-    // Extract refresh token from the bot token (format: xoxe.xoxb-...)
-    const tokenParts = currentBotToken.split('.');
-    if (tokenParts.length !== 2 || !tokenParts[0].startsWith('xoxe')) {
-      throw new Error('Invalid bot token format');
-    }
-    
-    const refreshToken = tokenParts[0]; // xoxe part is the refresh token
-
-    console.log('Attempting to refresh Slack token...');
+    console.log('Attempting to refresh Slack token with refresh token...');
 
     // Make refresh token request to Slack
     const refreshResponse = await fetch('https://slack.com/api/oauth.v2.access', {
@@ -72,20 +65,11 @@ const handler = async (req: Request): Promise<Response> => {
     // Format the new bot token (combine refresh token with new access token)
     const newBotToken = `${refreshToken}.${refreshData.access_token}`;
 
-    // Update the SLACK_BOT_TOKEN secret in Supabase
-    // Note: This would require a management API call or manual update
-    // For now, we'll log the new token and return it
-    console.log('New bot token generated successfully');
-    
-    // Here you would typically update the secret via Supabase Management API
-    // Since we can't directly update secrets from edge functions,
-    // we'll store it in a database table for manual update or use a webhook
-
-    // Store the new token in a secure table for retrieval
+    // Store the new token in the database for manual update
     const { error: insertError } = await supabase
       .from('slack_token_updates')
       .insert({
-        old_token: currentBotToken.substring(0, 20) + '...',
+        old_token: 'Previous token (hidden for security)',
         new_token: newBotToken,
         refresh_date: new Date().toISOString(),
         status: 'pending_update'
@@ -95,12 +79,49 @@ const handler = async (req: Request): Promise<Response> => {
       console.error('Failed to store token update:', insertError);
     }
 
+    // Attempt to update the SLACK_BOT_TOKEN environment variable
+    // Note: This would require the Supabase Management API
+    console.log('New bot token generated successfully');
+    console.log('Token preview:', newBotToken.substring(0, 30) + '...');
+
+    // Try to call the management API to update the secret
+    try {
+      const managementResponse = await fetch(`https://api.supabase.com/v1/projects/${Deno.env.get('SUPABASE_PROJECT_REF')}/secrets`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ACCESS_TOKEN')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          {
+            name: 'SLACK_BOT_TOKEN',
+            value: newBotToken,
+          },
+        ]),
+      });
+
+      if (managementResponse.ok) {
+        console.log('Successfully updated SLACK_BOT_TOKEN secret');
+        
+        // Update status to completed
+        await supabase
+          .from('slack_token_updates')
+          .update({ status: 'completed' })
+          .eq('new_token', newBotToken);
+      } else {
+        console.log('Could not update secret automatically. Manual update required.');
+      }
+    } catch (managementError) {
+      console.log('Management API not available. Token stored for manual update.');
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Slack token refreshed successfully',
         timestamp: new Date().toISOString(),
-        token_preview: newBotToken.substring(0, 20) + '...'
+        token_preview: newBotToken.substring(0, 30) + '...',
+        requires_manual_update: true
       }),
       {
         status: 200,
