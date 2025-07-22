@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { CalendarIcon, Clock, AlertCircle, XCircle, CheckCircle } from "lucide-react";
-import { format, addDays, isSameDay, isAfter, isBefore } from "date-fns";
+import { format, addDays, isSameDay, isAfter, isBefore, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
@@ -322,6 +323,12 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     );
   };
 
+  // Helper function to check if a date is in the past (before today)
+  const isDateInPast = (date: Date) => {
+    const today = startOfDay(new Date());
+    return isBefore(startOfDay(date), today);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -525,7 +532,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                             mode="single"
                             selected={startDate}
                             onSelect={setStartDate}
-                            disabled={(date) => isBefore(date, new Date()) || isWeekend(date) || isCompanyHoliday(date)}
+                            disabled={(date) => isDateInPast(date) || isWeekend(date) || isCompanyHoliday(date)}
                             initialFocus
                           />
                         </PopoverContent>
