@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,10 +20,10 @@ interface LeaveApplication {
   leave_types?: {
     label: string;
     color: string;
-  };
+  } | null;
   profiles?: {
     name: string;
-  };
+  } | null;
   hours_requested?: number;
   leave_duration_type?: string;
 }
@@ -43,9 +44,9 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
   const { user } = useUser();
   const [processingApplications, setProcessingApplications] = useState<Set<string>>(new Set());
 
-  const { data: userApplications, isLoading, isError, error } = useQuery<LeaveApplication[]>({
+  const { data: userApplications, isLoading, isError, error } = useQuery({
     queryKey: ['leave-applications', user?.id, refreshTrigger],
-    queryFn: async () => {
+    queryFn: async (): Promise<LeaveApplication[]> => {
       if (!user?.id) return [];
 
       const { data, error } = await supabase
@@ -68,7 +69,19 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
         throw error;
       }
 
-      return data || [];
+      return (data || []).map(item => ({
+        id: item.id,
+        start_date: item.start_date,
+        end_date: item.end_date,
+        reason: item.reason || '',
+        status: item.status || 'pending',
+        applied_at: item.applied_at || '',
+        user_id: item.user_id,
+        leave_types: item.leave_types || null,
+        profiles: item.profiles || null,
+        hours_requested: item.hours_requested || undefined,
+        leave_duration_type: item.leave_duration_type || undefined
+      }));
     },
   });
 
