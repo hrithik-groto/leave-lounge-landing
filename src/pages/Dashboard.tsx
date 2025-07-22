@@ -11,7 +11,7 @@ import { UserButton } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import NotificationBell from '@/components/NotificationBell';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import EnhancedLeaveApplicationForm from '@/components/EnhancedLeaveApplicationForm';
+import { EnhancedLeaveApplicationForm } from '@/components/EnhancedLeaveApplicationForm';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
 import SlackOAuthButton from '@/components/SlackOAuthButton';
@@ -139,7 +139,6 @@ const Dashboard = () => {
     calendarRef.current?.openApplyDialog();
   };
 
-
   const handleRevertLeave = async (applicationId: string) => {
     try {
       const { error } = await supabase
@@ -173,7 +172,7 @@ const Dashboard = () => {
   const renderNavbar = () => (
     <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex flex-wrap gap-2 sm:space-x-6 justify-center sm:justify-start">{/* ... keep existing code ... */}
+        <div className="flex flex-wrap gap-2 sm:space-x-6 justify-center sm:justify-start">
           <button
             onClick={() => setCurrentPage('dashboard')}
             className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 hover:scale-105 ${

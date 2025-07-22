@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,8 @@ interface LeaveBalance {
   monthly_allowance: number;
   used_this_month: number;
   remaining_this_month: number;
+  annual_allowance?: number;
+  carried_forward?: number;
 }
 
 interface EnhancedLeaveApplicationFormProps {
@@ -120,7 +123,9 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
           duration_type: (data as any).duration_type || 'days',
           monthly_allowance: Number((data as any).monthly_allowance) || 0,
           used_this_month: Number((data as any).used_this_month) || 0,
-          remaining_this_month: Number((data as any).remaining_this_month) || 0
+          remaining_this_month: Number((data as any).remaining_this_month) || 0,
+          annual_allowance: Number((data as any).annual_allowance) || undefined,
+          carried_forward: Number((data as any).carried_forward) || undefined
         };
         
         setLeaveBalances(prev => ({
@@ -194,6 +199,33 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
     return requestedAmount <= currentBalance.remaining_this_month;
   };
 
+  const renderLeaveBalanceInfo = () => {
+    if (!currentBalance) return null;
+
+    const isAnnualLeave = currentBalance.leave_type === 'Annual Leave';
+    
+    return (
+      <div className="text-sm text-muted-foreground space-y-1">
+        {isAnnualLeave ? (
+          <>
+            <div>Annual allowance: {currentBalance.annual_allowance || currentBalance.monthly_allowance} days</div>
+            <div>Used this year: {currentBalance.used_this_month} days</div>
+            <div>Remaining: {currentBalance.remaining_this_month} days</div>
+          </>
+        ) : (
+          <>
+            <div>Monthly allowance: {currentBalance.monthly_allowance} {currentBalance.duration_type}</div>
+            <div>Used this month: {currentBalance.used_this_month} {currentBalance.duration_type}</div>
+            <div>Remaining: {currentBalance.remaining_this_month} {currentBalance.duration_type}</div>
+            {currentBalance.carried_forward !== undefined && currentBalance.carried_forward > 0 && (
+              <div>Carried forward: {currentBalance.carried_forward} days</div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -231,9 +263,9 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
         hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : null,
         holiday_name: holidayName.trim() || null,
         meeting_details: meetingDetails.trim() || null,
-        leave_time_start: (isHalfDay && selectedLeaveType?.label === 'Paid Leave') ? 
+        leave_time_start: (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) ? 
           (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
-        leave_time_end: (isHalfDay && selectedLeaveType?.label === 'Paid Leave') ? 
+        leave_time_end: (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) ? 
           (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
       };
 
@@ -306,11 +338,7 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
                   ))}
                 </SelectContent>
               </Select>
-              {currentBalance && (
-                <div className="text-sm text-muted-foreground">
-                  Remaining this month: {currentBalance.remaining_this_month} {currentBalance.duration_type}
-                </div>
-              )}
+              {currentBalance && renderLeaveBalanceInfo()}
             </div>
 
             {/* Date Selection */}
@@ -370,8 +398,8 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
               </div>
             </div>
 
-            {/* Half Day Option for Paid Leave */}
-            {selectedLeaveType?.label === 'Paid Leave' && startDate && endDate && isSameDay(startDate, endDate) && (
+            {/* Half Day Option for Paid Leave and Annual Leave */}
+            {(selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') && startDate && endDate && isSameDay(startDate, endDate) && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox
