@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -55,11 +54,11 @@ const AllUsersOnLeave = () => {
           reason,
           leave_type_id,
           user_id,
-          profiles:user_id (
+          profiles!user_id(
             name,
             email
           ),
-          leave_types:leave_type_id (
+          leave_types!leave_type_id(
             label,
             color
           )
