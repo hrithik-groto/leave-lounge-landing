@@ -17,13 +17,13 @@ interface LeaveApplication {
   reason?: string;
   leave_type_id?: string;
   user_id: string;
-  profiles?: {
-    name: string;
-    email: string;
+  profiles: {
+    name: string | null;
+    email: string | null;
   } | null;
-  leave_types?: {
-    label: string;
-    color: string;
+  leave_types: {
+    label: string | null;
+    color: string | null;
   } | null;
 }
 
@@ -41,29 +41,40 @@ const AllUsersOnLeave = () => {
       setLoading(true);
       console.log('Fetching users on leave...');
       
-      // Get today's date for filtering current leaves
       const today = new Date();
       const todayString = format(today, 'yyyy-MM-dd');
       const nextWeekString = format(addDays(today, includeUpcoming ? 7 : 0), 'yyyy-MM-dd');
 
-      const { data, error } = await supabase
+      const { data: leaveData, error } = await supabase
         .from('leave_applied_users')
         .select(`
-          *,
-          profiles:user_id (name, email),
-          leave_types:leave_type_id (label, color)
+          id,
+          start_date,
+          end_date,
+          status,
+          reason,
+          leave_type_id,
+          user_id,
+          profiles:user_id (
+            name,
+            email
+          ),
+          leave_types:leave_type_id (
+            label,
+            color
+          )
         `)
         .eq('status', 'approved')
-        .lte('start_date', nextWeekString)  // Leave starts before or on next week
-        .gte('end_date', todayString)      // Leave ends today or after
+        .lte('start_date', nextWeekString)
+        .gte('end_date', todayString)
         .order('start_date', { ascending: true });
 
       if (error) {
         console.error('Error fetching leave applications:', error);
         toast.error('Failed to load users on leave');
       } else {
-        console.log('Leaves fetched:', data);
-        setAllLeaveApplications(data as LeaveApplication[] || []);
+        console.log('Leaves fetched:', leaveData);
+        setAllLeaveApplications(leaveData as LeaveApplication[]);
       }
     } catch (error) {
       console.error('Error:', error);
