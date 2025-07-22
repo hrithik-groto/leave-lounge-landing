@@ -113,11 +113,18 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
 
       if (error) throw error;
       
-      // Fix the type issue by ensuring data is properly typed as LeaveBalance
       if (data && typeof data === 'object' && !Array.isArray(data)) {
+        const balanceData: LeaveBalance = {
+          leave_type: (data as any).leave_type || '',
+          duration_type: (data as any).duration_type || 'days',
+          monthly_allowance: Number((data as any).monthly_allowance) || 0,
+          used_this_month: Number((data as any).used_this_month) || 0,
+          remaining_this_month: Number((data as any).remaining_this_month) || 0
+        };
+        
         setLeaveBalances(prev => ({
           ...prev,
-          [leaveTypeId]: data as LeaveBalance
+          [leaveTypeId]: balanceData
         }));
       }
     } catch (error) {
@@ -256,7 +263,6 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
 
       toast.success('Leave application submitted successfully!');
       
-      // Reset form
       setStartDate(undefined);
       setEndDate(undefined);
       setLeaveTypeId("");
