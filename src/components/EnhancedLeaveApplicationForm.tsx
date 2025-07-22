@@ -314,8 +314,8 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
           Submit your leave application with all the necessary details
         </CardDescription>
       </CardHeader>
-      <CardContent className="max-h-[70vh]">
-        <ScrollArea className="h-full pr-4">
+      <CardContent>
+        <div className="max-h-[calc(80vh-120px)] overflow-y-auto">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Leave Type Selection */}
             <div className="space-y-2">
@@ -505,15 +505,17 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
               </div>
             )}
 
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isSubmitting || !validateLeaveBalance()}
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit Application'}
-            </Button>
+            <div className="pt-4 border-t">
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isSubmitting || !validateLeaveBalance()}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Application'}
+              </Button>
+            </div>
           </form>
-        </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   );

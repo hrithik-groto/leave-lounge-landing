@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,16 @@ interface LeaveType {
   color: string;
 }
 
+interface LeaveBalance {
+  leave_type: string;
+  duration_type: string;
+  monthly_allowance: number;
+  used_this_month: number;
+  remaining_this_month: number;
+  annual_allowance?: number;
+  carried_forward?: number;
+}
+
 export const LeaveApplicationForm = () => {
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -31,12 +42,19 @@ export const LeaveApplicationForm = () => {
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [halfDayPeriod, setHalfDayPeriod] = useState<'morning' | 'afternoon'>('morning');
   const [hoursRequested, setHoursRequested] = useState<number>(0);
+  const [leaveBalances, setLeaveBalances] = useState<Record<string, LeaveBalance>>({});
 
   const { user } = useUser();
 
   useEffect(() => {
     fetchLeaveTypes();
   }, []);
+
+  useEffect(() => {
+    if (leaveTypeId) {
+      fetchLeaveBalance(leaveTypeId);
+    }
+  }, [leaveTypeId]);
 
   const fetchLeaveTypes = async () => {
     try {
@@ -53,7 +71,40 @@ export const LeaveApplicationForm = () => {
     }
   };
 
+  const fetchLeaveBalance = async (leaveTypeId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase.rpc('get_monthly_leave_balance', {
+        p_user_id: user.id,
+        p_leave_type_id: leaveTypeId,
+      });
+
+      if (error) throw error;
+      
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        const balanceData: LeaveBalance = {
+          leave_type: (data as any).leave_type || '',
+          duration_type: (data as any).duration_type || 'days',
+          monthly_allowance: Number((data as any).monthly_allowance) || 0,
+          used_this_month: Number((data as any).used_this_month) || 0,
+          remaining_this_month: Number((data as any).remaining_this_month) || 0,
+          annual_allowance: Number((data as any).annual_allowance) || undefined,
+          carried_forward: Number((data as any).carried_forward) || undefined
+        };
+        
+        setLeaveBalances(prev => ({
+          ...prev,
+          [leaveTypeId]: balanceData
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching leave balance:', error);
+    }
+  };
+
   const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
+  const currentBalance = leaveBalances[leaveTypeId];
 
   const calculateLeaveDuration = () => {
     if (!startDate || !endDate) return 0;
@@ -69,6 +120,40 @@ export const LeaveApplicationForm = () => {
     const timeDiff = endDate.getTime() - startDate.getTime();
     const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
     return daysDiff;
+  };
+
+  const validateLeaveBalance = () => {
+    if (!currentBalance || !selectedLeaveType) return true;
+    
+    const requestedAmount = calculateLeaveDuration();
+    return requestedAmount <= currentBalance.remaining_this_month;
+  };
+
+  const renderLeaveBalanceInfo = () => {
+    if (!currentBalance) return null;
+
+    const isAnnualLeave = currentBalance.leave_type === 'Annual Leave';
+    
+    return (
+      <div className="text-sm text-muted-foreground space-y-1 mt-2">
+        {isAnnualLeave ? (
+          <>
+            <div>Annual allowance: {currentBalance.annual_allowance || currentBalance.monthly_allowance} days</div>
+            <div>Used this year: {currentBalance.used_this_month} days</div>
+            <div>Remaining: {currentBalance.remaining_this_month} days</div>
+          </>
+        ) : (
+          <>
+            <div>Monthly allowance: {currentBalance.monthly_allowance} {currentBalance.duration_type}</div>
+            <div>Used this month: {currentBalance.used_this_month} {currentBalance.duration_type}</div>
+            <div>Remaining: {currentBalance.remaining_this_month} {currentBalance.duration_type}</div>
+            {currentBalance.carried_forward !== undefined && currentBalance.carried_forward > 0 && (
+              <div>Carried forward: {currentBalance.carried_forward} days</div>
+            )}
+          </>
+        )}
+      </div>
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,6 +174,11 @@ export const LeaveApplicationForm = () => {
       return;
     }
 
+    if (!validateLeaveBalance()) {
+      toast.error('Insufficient leave balance for this request');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -100,9 +190,9 @@ export const LeaveApplicationForm = () => {
         reason: reason.trim(),
         is_half_day: isHalfDay,
         hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : null,
-        leave_time_start: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
+        leave_time_start: isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') ? 
           (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
-        leave_time_end: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
+        leave_time_end: isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') ? 
           (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
       });
 
@@ -116,9 +206,9 @@ export const LeaveApplicationForm = () => {
           reason: reason.trim(),
           is_half_day: isHalfDay,
           hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : null,
-          leave_time_start: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
+          leave_time_start: isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') ? 
             (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
-          leave_time_end: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
+          leave_time_end: isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') ? 
             (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
         })
         .select();
@@ -149,7 +239,7 @@ export const LeaveApplicationForm = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
+    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md max-h-[80vh] overflow-y-auto">
       <h2 className="text-2xl font-bold mb-6 text-center">Apply for Leave</h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -174,6 +264,7 @@ export const LeaveApplicationForm = () => {
               ))}
             </SelectContent>
           </Select>
+          {currentBalance && renderLeaveBalanceInfo()}
         </div>
 
         {/* Date Selection */}
@@ -231,8 +322,8 @@ export const LeaveApplicationForm = () => {
           </Popover>
         </div>
 
-        {/* Half Day Option for Paid Leave */}
-        {selectedLeaveType?.label === 'Paid Leave' && startDate && endDate && isSameDay(startDate, endDate) && (
+        {/* Half Day Option for Paid Leave and Annual Leave */}
+        {(selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') && startDate && endDate && isSameDay(startDate, endDate) && (
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -303,12 +394,23 @@ export const LeaveApplicationForm = () => {
             <div className="text-sm font-medium">
               Duration: {calculateLeaveDuration()} {selectedLeaveType.label === 'Short Leave' ? 'hours' : 'days'}
             </div>
+            {currentBalance && (
+              <div className="text-sm text-gray-600">
+                Remaining after this request: {currentBalance.remaining_this_month - calculateLeaveDuration()} {currentBalance.duration_type}
+              </div>
+            )}
           </div>
         )}
 
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Submitting...' : 'Submit Application'}
-        </Button>
+        <div className="pt-4">
+          <Button 
+            type="submit" 
+            className="w-full" 
+            disabled={isSubmitting || !validateLeaveBalance()}
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit Application'}
+          </Button>
+        </div>
       </form>
     </div>
   );

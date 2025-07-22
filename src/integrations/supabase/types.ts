@@ -763,6 +763,50 @@ export type Database = {
         }
         Relationships: []
       }
+      user_annual_leave_balances: {
+        Row: {
+          allocated_balance: number
+          created_at: string
+          id: string
+          leave_type_id: string
+          remaining_balance: number | null
+          updated_at: string
+          used_balance: number
+          user_id: string
+          year: number
+        }
+        Insert: {
+          allocated_balance?: number
+          created_at?: string
+          id?: string
+          leave_type_id: string
+          remaining_balance?: number | null
+          updated_at?: string
+          used_balance?: number
+          user_id: string
+          year: number
+        }
+        Update: {
+          allocated_balance?: number
+          created_at?: string
+          id?: string
+          leave_type_id?: string
+          remaining_balance?: number | null
+          updated_at?: string
+          used_balance?: number
+          user_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_annual_leave_balances_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_leave_balances: {
         Row: {
           allocated_days: number | null
@@ -896,6 +940,10 @@ export type Database = {
           p_month?: number
           p_year?: number
         }
+        Returns: Json
+      }
+      get_or_create_annual_balance: {
+        Args: { p_user_id: string; p_leave_type_id: string; p_year?: number }
         Returns: Json
       }
       get_or_create_monthly_balance: {
