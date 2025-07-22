@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,10 +19,10 @@ interface LeaveApplication {
   leave_types?: {
     label: string;
     color: string;
-  } | null;
+  };
   profiles?: {
     name: string;
-  } | null;
+  };
   hours_requested?: number;
   leave_duration_type?: string;
 }
@@ -44,9 +43,9 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
   const { user } = useUser();
   const [processingApplications, setProcessingApplications] = useState<Set<string>>(new Set());
 
-  const { data: userApplications = [], isLoading, isError, error } = useQuery({
+  const { data: userApplications, isLoading, isError, error } = useQuery<LeaveApplication[]>({
     queryKey: ['leave-applications', user?.id, refreshTrigger],
-    queryFn: async (): Promise<LeaveApplication[]> => {
+    queryFn: async () => {
       if (!user?.id) return [];
 
       const { data, error } = await supabase
@@ -69,18 +68,13 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
         throw error;
       }
 
-      // Transform the data to match our interface
-      return (data || []).map(item => ({
-        ...item,
-        leave_types: item.leave_types || null,
-        profiles: item.profiles || null
-      }));
+      return data || [];
     },
   });
 
-  const pendingApplications = userApplications.filter(app => app.status === 'pending');
-  const approvedApplications = userApplications.filter(app => app.status === 'approved');
-  const rejectedApplications = userApplications.filter(app => app.status === 'rejected');
+  const pendingApplications = userApplications?.filter(app => app.status === 'pending') || [];
+  const approvedApplications = userApplications?.filter(app => app.status === 'approved') || [];
+  const rejectedApplications = userApplications?.filter(app => app.status === 'rejected') || [];
 
   return (
     <Card>
