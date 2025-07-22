@@ -313,16 +313,16 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
   return (
     <div className="w-full h-full flex flex-col">
-      <Card className="flex-1 flex flex-col">
+      <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader className="flex-shrink-0 pb-4">
           <CardTitle className="flex items-center gap-2 text-lg">
             <CalendarIcon className="h-5 w-5" />
             Apply for Leave
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-hidden p-0">
-          <ScrollArea className="h-full max-h-[calc(80vh-10rem)] px-6 pb-6">
-            <div className="space-y-6">
+        <CardContent className="flex-1 p-0 flex flex-col">
+          <ScrollArea className="flex-1 px-6">
+            <div className="space-y-6 pb-6">
               {/* Validation Message */}
               {validationMessage && (
                 <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -331,7 +331,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form id="leave-form" onSubmit={handleSubmit} className="space-y-6">
                 {/* Leave Type Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="leave-type">Leave Type *</Label>
@@ -516,20 +516,21 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     />
                   </div>
                 </div>
-
-                {/* Submit Button */}
-                <div className="pt-4">
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    disabled={isSubmitting || !canApplyForLeave()}
-                  >
-                    {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
-                  </Button>
-                </div>
               </form>
             </div>
           </ScrollArea>
+          
+          {/* Fixed Submit Button */}
+          <div className="flex-shrink-0 p-6 pt-4 border-t bg-background">
+            <Button 
+              type="submit"
+              form="leave-form" 
+              className="w-full" 
+              disabled={isSubmitting || !canApplyForLeave()}
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
