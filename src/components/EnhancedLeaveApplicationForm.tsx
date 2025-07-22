@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface LeaveType {
   id: string;
@@ -219,39 +220,28 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
     setIsSubmitting(true);
 
     try {
-      console.log('Submitting leave application with data:', {
+      // Prepare the submission data with proper null handling
+      const submissionData = {
         user_id: user.id,
         start_date: format(startDate, 'yyyy-MM-dd'),
         end_date: format(endDate, 'yyyy-MM-dd'),
         leave_type_id: leaveTypeId,
         reason: reason.trim(),
-        is_half_day: isHalfDay,
+        is_half_day: isHalfDay || false,
         hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : null,
-        holiday_name: holidayName || null,
-        meeting_details: meetingDetails || null,
-        leave_time_start: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
+        holiday_name: holidayName.trim() || null,
+        meeting_details: meetingDetails.trim() || null,
+        leave_time_start: (isHalfDay && selectedLeaveType?.label === 'Paid Leave') ? 
           (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
-        leave_time_end: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
+        leave_time_end: (isHalfDay && selectedLeaveType?.label === 'Paid Leave') ? 
           (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
-      });
+      };
+
+      console.log('Submitting leave application with data:', submissionData);
 
       const { data, error } = await supabase
         .from('leave_applied_users')
-        .insert({
-          user_id: user.id,
-          start_date: format(startDate, 'yyyy-MM-dd'),
-          end_date: format(endDate, 'yyyy-MM-dd'),
-          leave_type_id: leaveTypeId,
-          reason: reason.trim(),
-          is_half_day: isHalfDay,
-          hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : null,
-          holiday_name: holidayName || null,
-          meeting_details: meetingDetails || null,
-          leave_time_start: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
-            (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
-          leave_time_end: isHalfDay && selectedLeaveType?.label === 'Paid Leave' ? 
-            (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
-        })
+        .insert(submissionData)
         .select();
 
       if (error) {
@@ -292,211 +282,213 @@ const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> 
           Submit your leave application with all the necessary details
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Leave Type Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="leave-type">Leave Type *</Label>
-            <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select leave type" />
-              </SelectTrigger>
-              <SelectContent>
-                {leaveTypes.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: type.color }}
-                      />
-                      {type.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {currentBalance && (
-              <div className="text-sm text-muted-foreground">
-                Remaining this month: {currentBalance.remaining_this_month} {currentBalance.duration_type}
+      <CardContent className="max-h-[70vh]">
+        <ScrollArea className="h-full pr-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Leave Type Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="leave-type">Leave Type *</Label>
+              <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select leave type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {leaveTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: type.color }}
+                        />
+                        {type.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {currentBalance && (
+                <div className="text-sm text-muted-foreground">
+                  Remaining this month: {currentBalance.remaining_this_month} {currentBalance.duration_type}
+                </div>
+              )}
+            </div>
+
+            {/* Date Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !startDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate ? format(startDate, "PPP") : "Pick start date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate}
+                      onSelect={setStartDate}
+                      disabled={(date) => isBefore(date, new Date())}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>End Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !endDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {endDate ? format(endDate, "PPP") : "Pick end date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate}
+                      onSelect={setEndDate}
+                      disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, new Date())}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            {/* Half Day Option for Paid Leave */}
+            {selectedLeaveType?.label === 'Paid Leave' && startDate && endDate && isSameDay(startDate, endDate) && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="half-day"
+                    checked={isHalfDay}
+                    onCheckedChange={(checked) => setIsHalfDay(checked === true)}
+                  />
+                  <Label htmlFor="half-day" className="text-sm font-medium">
+                    Apply for half day (0.5 days)
+                  </Label>
+                </div>
+
+                {isHalfDay && (
+                  <div className="space-y-3 pl-6">
+                    <Label className="text-sm font-medium">Select Half Day Period:</Label>
+                    <RadioGroup value={halfDayPeriod} onValueChange={(value) => setHalfDayPeriod(value as 'morning' | 'afternoon')}>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="morning" id="morning" />
+                        <Label htmlFor="morning" className="text-sm">
+                          Morning (10:00 AM - 2:00 PM)
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="afternoon" id="afternoon" />
+                        <Label htmlFor="afternoon" className="text-sm">
+                          Afternoon (2:00 PM - 6:30 PM)
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                )}
               </div>
             )}
-          </div>
 
-          {/* Date Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Start Date *</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !startDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {startDate ? format(startDate, "PPP") : "Pick start date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={startDate}
-                    onSelect={setStartDate}
-                    disabled={(date) => isBefore(date, new Date())}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label>End Date *</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !endDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {endDate ? format(endDate, "PPP") : "Pick end date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={endDate}
-                    onSelect={setEndDate}
-                    disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, new Date())}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          {/* Half Day Option for Paid Leave */}
-          {selectedLeaveType?.label === 'Paid Leave' && startDate && endDate && isSameDay(startDate, endDate) && (
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="half-day"
-                  checked={isHalfDay}
-                  onCheckedChange={(checked) => setIsHalfDay(checked === true)}
+            {/* Hours for Short Leave */}
+            {selectedLeaveType?.label === 'Short Leave' && (
+              <div className="space-y-2">
+                <Label htmlFor="hours">Hours Requested *</Label>
+                <Input
+                  id="hours"
+                  type="number"
+                  min="0.5"
+                  max="4"
+                  step="0.5"
+                  value={hoursRequested}
+                  onChange={(e) => setHoursRequested(parseFloat(e.target.value) || 0)}
+                  placeholder="Enter hours (0.5 to 4)"
                 />
-                <Label htmlFor="half-day" className="text-sm font-medium">
-                  Apply for half day (0.5 days)
-                </Label>
               </div>
+            )}
 
-              {isHalfDay && (
-                <div className="space-y-3 pl-6">
-                  <Label className="text-sm font-medium">Select Half Day Period:</Label>
-                  <RadioGroup value={halfDayPeriod} onValueChange={(value) => setHalfDayPeriod(value as 'morning' | 'afternoon')}>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="morning" id="morning" />
-                      <Label htmlFor="morning" className="text-sm">
-                        Morning (10:00 AM - 2:00 PM)
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="afternoon" id="afternoon" />
-                      <Label htmlFor="afternoon" className="text-sm">
-                        Afternoon (2:00 PM - 6:30 PM)
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-              )}
-            </div>
-          )}
+            {/* Additional Fields */}
+            {selectedLeaveType?.label === 'Work From Home' && (
+              <div className="space-y-2">
+                <Label htmlFor="meeting-details">Meeting Details (Optional)</Label>
+                <Textarea
+                  id="meeting-details"
+                  value={meetingDetails}
+                  onChange={(e) => setMeetingDetails(e.target.value)}
+                  placeholder="Describe any important meetings or tasks for the day"
+                  rows={3}
+                />
+              </div>
+            )}
 
-          {/* Hours for Short Leave */}
-          {selectedLeaveType?.label === 'Short Leave' && (
+            {startDate && isHolidayDate(startDate) && (
+              <div className="space-y-2">
+                <Label htmlFor="holiday-name">Holiday Name</Label>
+                <Input
+                  id="holiday-name"
+                  value={holidayName}
+                  onChange={(e) => setHolidayName(e.target.value)}
+                  placeholder={getHolidayForDate(startDate)?.name || "Enter holiday name"}
+                />
+              </div>
+            )}
+
+            {/* Reason */}
             <div className="space-y-2">
-              <Label htmlFor="hours">Hours Requested *</Label>
-              <Input
-                id="hours"
-                type="number"
-                min="0.5"
-                max="4"
-                step="0.5"
-                value={hoursRequested}
-                onChange={(e) => setHoursRequested(parseFloat(e.target.value) || 0)}
-                placeholder="Enter hours (0.5 to 4)"
-              />
-            </div>
-          )}
-
-          {/* Additional Fields */}
-          {selectedLeaveType?.label === 'Work From Home' && (
-            <div className="space-y-2">
-              <Label htmlFor="meeting-details">Meeting Details (Optional)</Label>
+              <Label htmlFor="reason">Reason *</Label>
               <Textarea
-                id="meeting-details"
-                value={meetingDetails}
-                onChange={(e) => setMeetingDetails(e.target.value)}
-                placeholder="Describe any important meetings or tasks for the day"
-                rows={3}
+                id="reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Please provide a reason for your leave"
+                rows={4}
+                required
               />
             </div>
-          )}
 
-          {startDate && isHolidayDate(startDate) && (
-            <div className="space-y-2">
-              <Label htmlFor="holiday-name">Holiday Name</Label>
-              <Input
-                id="holiday-name"
-                value={holidayName}
-                onChange={(e) => setHolidayName(e.target.value)}
-                placeholder={getHolidayForDate(startDate)?.name || "Enter holiday name"}
-              />
-            </div>
-          )}
-
-          {/* Reason */}
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason *</Label>
-            <Textarea
-              id="reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Please provide a reason for your leave"
-              rows={4}
-              required
-            />
-          </div>
-
-          {/* Leave Duration Display */}
-          {startDate && endDate && selectedLeaveType && (
-            <div className="bg-muted p-4 rounded-lg">
-              <div className="text-sm font-medium mb-2">Leave Duration Summary:</div>
-              <div className="text-sm">
-                Duration: {calculateLeaveDuration()} {selectedLeaveType.label === 'Short Leave' ? 'hours' : 'days'}
-              </div>
-              {currentBalance && (
+            {/* Leave Duration Display */}
+            {startDate && endDate && selectedLeaveType && (
+              <div className="bg-muted p-4 rounded-lg">
+                <div className="text-sm font-medium mb-2">Leave Duration Summary:</div>
                 <div className="text-sm">
-                  Remaining after this request: {currentBalance.remaining_this_month - calculateLeaveDuration()} {currentBalance.duration_type}
+                  Duration: {calculateLeaveDuration()} {selectedLeaveType.label === 'Short Leave' ? 'hours' : 'days'}
                 </div>
-              )}
-            </div>
-          )}
+                {currentBalance && (
+                  <div className="text-sm">
+                    Remaining after this request: {currentBalance.remaining_this_month - calculateLeaveDuration()} {currentBalance.duration_type}
+                  </div>
+                )}
+              </div>
+            )}
 
-          <Button 
-            type="submit" 
-            className="w-full" 
-            disabled={isSubmitting || !validateLeaveBalance()}
-          >
-            {isSubmitting ? 'Submitting...' : 'Submit Application'}
-          </Button>
-        </form>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isSubmitting || !validateLeaveBalance()}
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit Application'}
+            </Button>
+          </form>
+        </ScrollArea>
       </CardContent>
     </Card>
   );
 };
 
-export default EnhancedLeaveApplicationForm;
+export { EnhancedLeaveApplicationForm };
