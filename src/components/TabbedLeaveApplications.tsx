@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,12 +20,20 @@ interface LeaveApplication {
   leave_types?: {
     label: string;
     color: string;
-  };
+  } | null;
   profiles?: {
     name: string;
-  };
+  } | null;
   hours_requested?: number;
   leave_duration_type?: string;
+  actual_days_used?: number;
+  approved_at?: string;
+  approved_by?: string;
+  is_half_day?: boolean;
+  leave_time_start?: string;
+  leave_time_end?: string;
+  meeting_details?: string;
+  holiday_name?: string;
 }
 
 interface TabbedLeaveApplicationsProps {
@@ -43,7 +52,7 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
   const { user } = useUser();
   const [processingApplications, setProcessingApplications] = useState<Set<string>>(new Set());
 
-  const { data: userApplications, isLoading, isError, error } = useQuery<LeaveApplication[]>({
+  const { data: userApplications, isLoading, isError, error } = useQuery({
     queryKey: ['leave-applications', user?.id, refreshTrigger],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -68,8 +77,9 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
         throw error;
       }
 
-      return data || [];
+      return (data || []) as LeaveApplication[];
     },
+    enabled: !!user?.id,
   });
 
   const pendingApplications = userApplications?.filter(app => app.status === 'pending') || [];
