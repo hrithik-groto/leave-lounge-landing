@@ -38,9 +38,10 @@ interface LeaveBalance {
 
 interface EnhancedLeaveApplicationFormProps {
   onSuccess?: () => void;
+  preselectedDate?: Date | null;
 }
 
-export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> = ({ onSuccess }) => {
+const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> = ({ onSuccess, preselectedDate }) => {
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [leaveTypeId, setLeaveTypeId] = useState<string>("");
@@ -60,7 +61,11 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   useEffect(() => {
     fetchLeaveTypes();
     fetchCompanyHolidays();
-  }, []);
+    if (preselectedDate) {
+      setStartDate(preselectedDate);
+      setEndDate(preselectedDate);
+    }
+  }, [preselectedDate]);
 
   useEffect(() => {
     if (leaveTypeId) {
@@ -108,10 +113,13 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
       if (error) throw error;
       
-      setLeaveBalances(prev => ({
-        ...prev,
-        [leaveTypeId]: data
-      }));
+      // Fix the type issue by ensuring data is properly typed as LeaveBalance
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        setLeaveBalances(prev => ({
+          ...prev,
+          [leaveTypeId]: data as LeaveBalance
+        }));
+      }
     } catch (error) {
       console.error('Error fetching leave balance:', error);
     }
@@ -484,3 +492,5 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     </Card>
   );
 };
+
+export default EnhancedLeaveApplicationForm;
