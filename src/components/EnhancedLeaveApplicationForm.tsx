@@ -11,11 +11,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { CalendarIcon, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, Clock, AlertCircle, AlertTriangle } from "lucide-react";
 import { format, addDays, isSameDay, isAfter, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
+import { useLeaveOverlapValidation } from "@/hooks/useLeaveOverlapValidation";
 
 interface LeaveType {
   id: string;
@@ -30,7 +31,6 @@ interface CompanyHoliday {
   date: string;
 }
 
-// Create an interface for the RPC response
 interface MonthlyLeaveBalanceResponse {
   used_this_month: number;
   remaining_this_month: number;
@@ -45,6 +45,8 @@ interface EnhancedLeaveApplicationFormProps {
 
 export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> = ({ onSuccess }) => {
   const { user } = useUser();
+  const { validateLeaveOverlap } = useLeaveOverlapValidation();
+  
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [leaveTypeId, setLeaveTypeId] = useState("");
@@ -58,6 +60,15 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   const [holidayName, setHolidayName] = useState("");
   const [meetingDetails, setMeetingDetails] = useState("");
   const [currentUsage, setCurrentUsage] = useState<{[key: string]: number}>({});
+  const [overlapValidation, setOverlapValidation] = useState<{
+    canApply: boolean;
+    errorMessage?: string;
+    availableTimeSlots: Array<{
+      period: 'morning' | 'afternoon' | 'full';
+      startTime: string;
+      endTime: string;
+    }>;
+  } | null>(null);
 
   const selectedLeaveType = leaveTypes.find(lt => lt.id === leaveTypeId);
 
@@ -71,6 +82,25 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       fetchCurrentUsage();
     }
   }, [selectedLeaveType, user?.id]);
+
+  useEffect(() => {
+    if (startDate && endDate) {
+      validateOverlap();
+    } else {
+      setOverlapValidation(null);
+    }
+  }, [startDate, endDate, isHalfDay, halfDayPeriod]);
+
+  const validateOverlap = async () => {
+    if (!startDate || !endDate) return;
+    
+    try {
+      const validation = await validateLeaveOverlap(startDate, endDate, isHalfDay, halfDayPeriod);
+      setOverlapValidation(validation);
+    } catch (error) {
+      console.error('Error validating overlap:', error);
+    }
+  };
 
   const fetchLeaveTypes = async () => {
     try {
@@ -110,7 +140,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       const currentYear = new Date().getFullYear();
 
       if (selectedLeaveType.label === 'Short Leave') {
-        // Short Leave: 4 hours per month, no carryforward
         const { data: shortLeaves, error } = await supabase
           .from('leave_applied_users')
           .select('hours_requested, status')
@@ -131,7 +160,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
         setCurrentUsage({[selectedLeaveType.id]: totalHoursUsed});
       } 
       else if (selectedLeaveType.label === 'Paid Leave') {
-        // Paid Leave: 1.5 days per month with carryforward
         const { data, error } = await supabase
           .rpc('get_monthly_leave_balance', {
             p_user_id: user.id,
@@ -142,7 +170,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
         if (error) throw error;
 
-        // Properly type and access the response data
         if (data && typeof data === 'object') {
           const balanceData = data as unknown as MonthlyLeaveBalanceResponse;
           
@@ -153,7 +180,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
           });
         } else {
           console.error('Invalid response format from get_monthly_leave_balance');
-          // Set default values
           setCurrentUsage({
             [selectedLeaveType.id]: 0,
             [`${selectedLeaveType.id}_remaining`]: 1.5,
@@ -162,7 +188,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
         }
       }
       else if (selectedLeaveType.label === 'Work From Home') {
-        // Work From Home: 2 days per month, no carryforward
         const { data: leaves, error } = await supabase
           .from('leave_applied_users')
           .select('actual_days_used, is_half_day, start_date, end_date, status')
@@ -190,7 +215,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
         setCurrentUsage({[selectedLeaveType.id]: totalDaysUsed});
       }
       else {
-        // Annual Leave: Annual balance, processed by RPC function
         const { data: leaves, error } = await supabase
           .from('leave_applied_users')
           .select('actual_days_used, is_half_day, start_date, end_date, status')
@@ -244,7 +268,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       case 'Paid Leave': return 1.5;
       case 'Short Leave': return 4;
       case 'Work From Home': return 2;
-      case 'Annual Leave': return 18; // Annual allowance
+      case 'Annual Leave': return 18;
       default: return 0;
     }
   };
@@ -252,33 +276,37 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   const canApplyForLeave = () => {
     if (!selectedLeaveType) return false;
     
+    if (overlapValidation && !overlapValidation.canApply) {
+      return false;
+    }
+    
     const monthlyAllowance = getMonthlyAllowance();
     const used = currentUsage[selectedLeaveType.id] || 0;
     const requestedAmount = calculateLeaveDuration();
     
     if (selectedLeaveType.label === 'Annual Leave') {
-      // For Annual Leave, we'll let the database trigger enforce the limits
       return true;
     }
     
     if (selectedLeaveType.label === 'Paid Leave') {
-      // For Paid Leave, use the remaining balance that includes carried forward
       const remaining = currentUsage[`${selectedLeaveType.id}_remaining`] || (monthlyAllowance - used);
       return requestedAmount <= remaining;
     }
     
-    // For Short Leave and Work From Home, enforce monthly limits without carryforward
     return (used + requestedAmount) <= monthlyAllowance;
   };
 
   const getValidationMessage = () => {
     if (!selectedLeaveType) return null;
     
+    if (overlapValidation && !overlapValidation.canApply) {
+      return overlapValidation.errorMessage;
+    }
+    
     const monthlyAllowance = getMonthlyAllowance();
     const used = currentUsage[selectedLeaveType.id] || 0;
     let remaining = monthlyAllowance - used;
     
-    // For Paid Leave, use the calculated remaining that includes carried forward
     if (selectedLeaveType.label === 'Paid Leave') {
       remaining = currentUsage[`${selectedLeaveType.id}_remaining`] || remaining;
     }
@@ -286,7 +314,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     const requestedAmount = calculateLeaveDuration();
     
     if (selectedLeaveType.label === 'Annual Leave') {
-      return null; // Annual Leave validation is handled by the database
+      return null;
     }
     
     if (remaining <= 0) {
@@ -381,6 +409,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       setHoursRequested(1);
       setHolidayName("");
       setMeetingDetails("");
+      setOverlapValidation(null);
 
       if (onSuccess) {
         onSuccess();
@@ -409,7 +438,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
           <div className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1">
               <div className="space-y-6 p-6">
-                {/* Validation Message */}
                 {validationMessage && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                     <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
@@ -417,8 +445,25 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                   </div>
                 )}
 
+                {overlapValidation && overlapValidation.availableTimeSlots.length > 0 && isSameDay(startDate!, endDate!) && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-1">Available time slots for {format(startDate!, 'MMM dd, yyyy')}:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {overlapValidation.availableTimeSlots.map((slot, index) => (
+                          <li key={index}>
+                            {slot.period === 'full' ? 'Full day' : 
+                             slot.period === 'morning' ? 'Morning (10:00 AM - 2:00 PM)' : 
+                             'Afternoon (2:00 PM - 6:30 PM)'}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
                 <form id="leave-form" onSubmit={handleSubmit} className="space-y-6">
-                  {/* Leave Type Selection */}
                   <div className="space-y-2">
                     <Label htmlFor="leave-type">Leave Type *</Label>
                     <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
@@ -441,7 +486,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     </Select>
                   </div>
 
-                  {/* Date Selection */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Start Date *</Label>
@@ -503,7 +547,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     </div>
                   </div>
 
-                  {/* Half Day Option for Paid Leave and Annual Leave */}
                   {(selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') && 
                   startDate && endDate && isSameDay(startDate, endDate) && (
                     <div className="space-y-3">
@@ -535,7 +578,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     </div>
                   )}
 
-                  {/* Hours Requested for Short Leave */}
                   {selectedLeaveType?.label === 'Short Leave' && (
                     <div className="space-y-2">
                       <Label htmlFor="hours">Hours Requested *</Label>
@@ -558,7 +600,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     </div>
                   )}
 
-                  {/* Duration Display */}
                   {startDate && endDate && (
                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
                       <p className="text-sm">
@@ -567,7 +608,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     </div>
                   )}
 
-                  {/* Reason */}
                   <div className="space-y-2">
                     <Label htmlFor="reason">Reason *</Label>
                     <Textarea
@@ -580,7 +620,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                     />
                   </div>
 
-                  {/* Optional Fields */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="holiday-name">Holiday/Event Name (Optional)</Label>
@@ -607,7 +646,6 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
             </ScrollArea>
           </div>
           
-          {/* Fixed Submit Button - Always visible at the bottom */}
           <div className="flex-shrink-0 p-6 pt-4 border-t bg-background sticky bottom-0 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
             <Button 
               type="submit"
