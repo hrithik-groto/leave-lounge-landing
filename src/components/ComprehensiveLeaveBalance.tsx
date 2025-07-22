@@ -15,6 +15,7 @@ interface LeaveTypeConfig {
   monthlyAllowance: number;
   unit: string;
   color: string;
+  carryForward: boolean;
 }
 
 interface ComprehensiveLeaveBalanceProps {
@@ -46,7 +47,8 @@ export const ComprehensiveLeaveBalance: React.FC<ComprehensiveLeaveBalanceProps>
           icon: type.label === 'Short Leave' ? Clock : type.label === 'Work From Home' ? Home : Calendar,
           monthlyAllowance: type.label === 'Paid Leave' ? 1.5 : type.label === 'Short Leave' ? 4 : 2,
           unit: type.label === 'Short Leave' ? 'hours' : 'days',
-          color: type.color || '#3B82F6'
+          color: type.color || '#3B82F6',
+          carryForward: type.label === 'Paid Leave' // Only Paid Leave gets carried forward
         })) || [];
 
         setLeaveTypes(leaveTypeConfigs);
@@ -96,7 +98,7 @@ interface LeaveBalanceCardProps {
 
 const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshTrigger }) => {
   const { user } = useUser();
-  const [usage, setUsage] = useState({ used: 0, remaining: 0 });
+  const [usage, setUsage] = useState({ used: 0, remaining: 0, carryForward: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -129,7 +131,25 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
 
           setUsage({
             used: totalHoursUsed,
-            remaining: Math.max(0, leaveType.monthlyAllowance - totalHoursUsed)
+            remaining: Math.max(0, leaveType.monthlyAllowance - totalHoursUsed),
+            carryForward: 0 // No carry forward for Short Leave
+          });
+        } else if (leaveType.label === 'Paid Leave') {
+          // For Paid Leave, use the monthly balance system with carryforward
+          const { data, error } = await supabase
+            .rpc('get_monthly_leave_balance', {
+              p_user_id: user.id,
+              p_leave_type_id: leaveType.id,
+              p_month: currentMonth,
+              p_year: currentYear
+            });
+
+          if (error) throw error;
+
+          setUsage({
+            used: data.used_this_month || 0,
+            remaining: data.remaining_this_month || 0,
+            carryForward: data.carried_forward || 0
           });
         } else {
           // For other leave types, calculate from actual records
@@ -160,12 +180,13 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
 
           setUsage({
             used: totalDaysUsed,
-            remaining: Math.max(0, leaveType.monthlyAllowance - totalDaysUsed)
+            remaining: Math.max(0, leaveType.monthlyAllowance - totalDaysUsed),
+            carryForward: 0 // No carry forward for Work From Home
           });
         }
       } catch (error) {
         console.error(`Error fetching ${leaveType.label} usage:`, error);
-        setUsage({ used: 0, remaining: leaveType.monthlyAllowance });
+        setUsage({ used: 0, remaining: leaveType.monthlyAllowance, carryForward: 0 });
       } finally {
         setLoading(false);
       }
@@ -224,6 +245,15 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
               {usage.remaining} {leaveType.unit}
             </Badge>
           </div>
+
+          {leaveType.carryForward && usage.carryForward > 0 && (
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Carried Forward:</span>
+              <span className="text-sm font-medium text-blue-600">
+                +{usage.carryForward} {leaveType.unit}
+              </span>
+            </div>
+          )}
         </div>
 
         {usage.remaining <= 0 && (
@@ -240,6 +270,18 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
         {leaveType.label === 'Short Leave' && usage.remaining > 0 && (
           <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600">
             You have {usage.remaining} hour{usage.remaining !== 1 ? 's' : ''} of short leave remaining this month.
+          </div>
+        )}
+
+        {leaveType.label === 'Paid Leave' && usage.carryForward > 0 && (
+          <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-600">
+            Unused leave from last month has been carried forward.
+          </div>
+        )}
+        
+        {leaveType.label === 'Work From Home' && usage.remaining > 0 && (
+          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600">
+            You have {usage.remaining} day{usage.remaining !== 1 ? 's' : ''} of work from home remaining this month.
           </div>
         )}
       </CardContent>

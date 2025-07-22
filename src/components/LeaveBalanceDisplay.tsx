@@ -106,7 +106,9 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
               ? 'Monthly short leave quota exhausted. Wait for next month to get 4 new short leaves.'
               : balance.leave_type === 'Paid Leave' 
                 ? 'Monthly limit reached. Wait for next month to apply for paid leave.'
-                : 'Leave quota exhausted.'
+                : balance.leave_type === 'Work From Home'
+                  ? 'Work From Home quota exhausted for this month. Wait for next month.'
+                  : 'Leave quota exhausted.'
             }
           </div>
         )}
@@ -114,6 +116,18 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
         {balance.leave_type === 'Short Leave' && balance.remaining_this_month > 0 && (
           <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600">
             You have {balance.remaining_this_month} hour{balance.remaining_this_month !== 1 ? 's' : ''} of short leave remaining this month.
+          </div>
+        )}
+
+        {balance.leave_type === 'Paid Leave' && balance.carried_forward && balance.carried_forward > 0 && (
+          <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-600">
+            Unused leave from last month has been carried forward.
+          </div>
+        )}
+        
+        {balance.leave_type === 'Work From Home' && balance.remaining_this_month > 0 && (
+          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600">
+            You have {balance.remaining_this_month} day{balance.remaining_this_month !== 1 ? 's' : ''} of work from home remaining this month.
           </div>
         )}
       </CardContent>

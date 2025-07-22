@@ -101,6 +101,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       const currentYear = new Date().getFullYear();
 
       if (selectedLeaveType.label === 'Short Leave') {
+        // Short Leave: 4 hours per month, no carryforward
         const { data: shortLeaves, error } = await supabase
           .from('leave_applied_users')
           .select('hours_requested, status')
@@ -119,7 +120,55 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
         }, 0) || 0;
 
         setCurrentUsage({[selectedLeaveType.id]: totalHoursUsed});
-      } else {
+      } 
+      else if (selectedLeaveType.label === 'Paid Leave') {
+        // Paid Leave: 1.5 days per month with carryforward
+        const { data, error } = await supabase
+          .rpc('get_monthly_leave_balance', {
+            p_user_id: user.id,
+            p_leave_type_id: selectedLeaveType.id,
+            p_month: currentMonth,
+            p_year: currentYear
+          });
+
+        if (error) throw error;
+
+        setCurrentUsage({
+          [selectedLeaveType.id]: data.used_this_month || 0,
+          [`${selectedLeaveType.id}_remaining`]: data.remaining_this_month || 0,
+          [`${selectedLeaveType.id}_carried_forward`]: data.carried_forward || 0
+        });
+      }
+      else if (selectedLeaveType.label === 'Work From Home') {
+        // Work From Home: 2 days per month, no carryforward
+        const { data: leaves, error } = await supabase
+          .from('leave_applied_users')
+          .select('actual_days_used, is_half_day, start_date, end_date, status')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', selectedLeaveType.id)
+          .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+          .lt('start_date', currentMonth === 12 
+            ? `${currentYear + 1}-01-01` 
+            : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+          .in('status', ['approved', 'pending']);
+
+        if (error) throw error;
+
+        const totalDaysUsed = leaves?.reduce((total, leave) => {
+          if (leave.actual_days_used) {
+            return total + leave.actual_days_used;
+          }
+          if (leave.is_half_day) {
+            return total + 0.5;
+          }
+          const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+          return total + daysDiff;
+        }, 0) || 0;
+
+        setCurrentUsage({[selectedLeaveType.id]: totalDaysUsed});
+      }
+      else {
+        // Annual Leave: Annual balance, processed by RPC function
         const { data: leaves, error } = await supabase
           .from('leave_applied_users')
           .select('actual_days_used, is_half_day, start_date, end_date, status')
@@ -173,7 +222,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       case 'Paid Leave': return 1.5;
       case 'Short Leave': return 4;
       case 'Work From Home': return 2;
-      case 'Annual Leave': return 18;
+      case 'Annual Leave': return 18; // Annual allowance
       default: return 0;
     }
   };
@@ -186,9 +235,17 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     const requestedAmount = calculateLeaveDuration();
     
     if (selectedLeaveType.label === 'Annual Leave') {
+      // For Annual Leave, we'll let the database trigger enforce the limits
       return true;
     }
     
+    if (selectedLeaveType.label === 'Paid Leave') {
+      // For Paid Leave, use the remaining balance that includes carried forward
+      const remaining = currentUsage[`${selectedLeaveType.id}_remaining`] || (monthlyAllowance - used);
+      return requestedAmount <= remaining;
+    }
+    
+    // For Short Leave and Work From Home, enforce monthly limits without carryforward
     return (used + requestedAmount) <= monthlyAllowance;
   };
 
@@ -197,11 +254,17 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     
     const monthlyAllowance = getMonthlyAllowance();
     const used = currentUsage[selectedLeaveType.id] || 0;
-    const remaining = monthlyAllowance - used;
+    let remaining = monthlyAllowance - used;
+    
+    // For Paid Leave, use the calculated remaining that includes carried forward
+    if (selectedLeaveType.label === 'Paid Leave') {
+      remaining = currentUsage[`${selectedLeaveType.id}_remaining`] || remaining;
+    }
+    
     const requestedAmount = calculateLeaveDuration();
     
     if (selectedLeaveType.label === 'Annual Leave') {
-      return null;
+      return null; // Annual Leave validation is handled by the database
     }
     
     if (remaining <= 0) {

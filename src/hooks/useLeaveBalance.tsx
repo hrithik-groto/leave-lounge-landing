@@ -83,8 +83,103 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             used_this_month: totalHoursUsed,
             remaining_this_month: remainingHours
           });
-        } else {
-          // For other leave types, use the existing RPC function
+        } 
+        // For Work From Home, calculate from actual records without carryforward
+        else if (leaveTypeLabel === 'Work From Home') {
+          const currentMonth = new Date().getMonth() + 1;
+          const currentYear = new Date().getFullYear();
+
+          // Get all WFH applications for current month
+          const { data: wfhLeaves, error: wfhLeavesError } = await supabase
+            .from('leave_applied_users')
+            .select('actual_days_used, is_half_day, start_date, end_date, status')
+            .eq('user_id', user.id)
+            .eq('leave_type_id', leaveTypeId)
+            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+            .lt('start_date', currentMonth === 12 
+              ? `${currentYear + 1}-01-01` 
+              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+            .in('status', ['approved', 'pending']);
+
+          if (wfhLeavesError) {
+            console.error('Error fetching WFH leaves:', wfhLeavesError);
+            setError(wfhLeavesError.message);
+            return;
+          }
+
+          // Calculate total days used
+          const totalDaysUsed = wfhLeaves?.reduce((total, leave) => {
+            if (leave.actual_days_used) {
+              return total + leave.actual_days_used;
+            }
+            if (leave.is_half_day) {
+              return total + 0.5;
+            }
+            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+            return total + daysDiff;
+          }, 0) || 0;
+
+          const monthlyAllowanceDays = 2; // 2 days per month for WFH
+          const remainingDays = Math.max(0, monthlyAllowanceDays - totalDaysUsed);
+
+          setBalance({
+            leave_type: leaveTypeLabel,
+            duration_type: 'days',
+            monthly_allowance: monthlyAllowanceDays,
+            used_this_month: totalDaysUsed,
+            remaining_this_month: remainingDays
+          });
+        } 
+        // For Annual Leave, use the existing RPC function
+        else if (leaveTypeLabel === 'Annual Leave') {
+          const { data, error: balanceError } = await supabase
+            .rpc('get_monthly_leave_balance', {
+              p_user_id: user.id,
+              p_leave_type_id: leaveTypeId,
+              p_month: new Date().getMonth() + 1,
+              p_year: new Date().getFullYear()
+            });
+
+          if (balanceError) {
+            console.error('Error fetching annual leave balance:', balanceError);
+            setError(balanceError.message);
+            return;
+          }
+
+          // Type guard to ensure data is properly typed
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const typedData = data as unknown as LeaveBalance;
+            setBalance(typedData);
+          } else {
+            setError('Invalid balance data received');
+          }
+        }
+        // For Paid Leave, use the monthly balance system with carryforward
+        else if (leaveTypeLabel === 'Paid Leave') {
+          const { data, error: balanceError } = await supabase
+            .rpc('get_monthly_leave_balance', {
+              p_user_id: user.id,
+              p_leave_type_id: leaveTypeId,
+              p_month: new Date().getMonth() + 1,
+              p_year: new Date().getFullYear()
+            });
+
+          if (balanceError) {
+            console.error('Error fetching paid leave balance:', balanceError);
+            setError(balanceError.message);
+            return;
+          }
+
+          // Type guard to ensure data is properly typed
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const typedData = data as unknown as LeaveBalance;
+            setBalance(typedData);
+          } else {
+            setError('Invalid balance data received');
+          }
+        }
+        // Default case for any other leave types
+        else {
           const { data, error: balanceError } = await supabase
             .rpc('get_monthly_leave_balance', {
               p_user_id: user.id,
