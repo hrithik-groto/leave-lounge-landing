@@ -64,7 +64,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
           const currentMonth = new Date().getMonth() + 1;
           const currentYear = new Date().getFullYear();
 
-          // Get all short leave applications for current month (only approved and pending)
+          // Get all short leave applications for current month
           const { data: shortLeaves, error: shortLeavesError } = await supabase
             .from('leave_applied_users')
             .select('hours_requested, status')
@@ -82,7 +82,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             return;
           }
 
-          // Calculate total hours used (excluding cancelled/rejected applications)
+          // Calculate total hours used
           const totalHoursUsed = shortLeaves?.reduce((total, leave) => {
             return total + (leave.hours_requested || 1);
           }, 0) || 0;
@@ -103,7 +103,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
           const currentMonth = new Date().getMonth() + 1;
           const currentYear = new Date().getFullYear();
 
-          // Get all WFH applications for current month (only approved and pending)
+          // Get all WFH applications for current month
           const { data: wfhLeaves, error: wfhLeavesError } = await supabase
             .from('leave_applied_users')
             .select('actual_days_used, is_half_day, start_date, end_date, status')
@@ -121,7 +121,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             return;
           }
 
-          // Calculate total days used (excluding cancelled/rejected applications)
+          // Calculate total days used
           const totalDaysUsed = wfhLeaves?.reduce((total, leave) => {
             if (leave.actual_days_used) {
               return total + leave.actual_days_used;
