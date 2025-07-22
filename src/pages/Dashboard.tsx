@@ -1,4 +1,5 @@
 
+
 import { useUser } from "@clerk/clerk-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -77,7 +78,7 @@ const Dashboard = () => {
         
         return {
           leave_type: type,
-          balance: data as LeaveBalance
+          balance: data as unknown as LeaveBalance
         };
       });
 
@@ -113,6 +114,27 @@ const Dashboard = () => {
 
   const handleLeaveFormSuccess = () => {
     setIsLeaveFormOpen(false);
+  };
+
+  const handleQuickActionClick = (actionText: string) => {
+    console.log('Quick action clicked:', actionText);
+    // You can add specific logic here for each action
+  };
+
+  const handleRevertApplication = async (applicationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('leave_applied_users')
+        .update({ status: 'pending' })
+        .eq('id', applicationId);
+
+      if (error) throw error;
+      
+      // Refresh applications data
+      // The query will automatically refetch due to the queryKey dependency
+    } catch (error) {
+      console.error('Error reverting application:', error);
+    }
   };
 
   if (!user) {
@@ -153,7 +175,7 @@ const Dashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <QuickActions />
+        <QuickActions onActionClick={handleQuickActionClick} />
 
         {/* Leave Balances */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -267,7 +289,10 @@ const Dashboard = () => {
         </div>
 
         {/* Applications Table */}
-        <TabbedLeaveApplications />
+        <TabbedLeaveApplications 
+          applications={applications || []}
+          onRevert={handleRevertApplication}
+        />
       </div>
     </div>
   );
