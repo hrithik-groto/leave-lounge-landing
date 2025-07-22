@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
 
 interface TokenUpdate {
   id: string;
@@ -77,6 +77,8 @@ const SlackTokenManager = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'auto_updated':
+        return <Badge className="bg-blue-100 text-blue-700"><Zap className="w-3 h-3 mr-1" />Auto Updated</Badge>;
       case 'completed':
         return <Badge className="bg-green-100 text-green-700"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
       case 'pending_update':
@@ -124,11 +126,14 @@ const SlackTokenManager = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-semibold text-blue-900 mb-2">Automatic Refresh</h4>
-          <p className="text-sm text-blue-700">
-            Tokens are automatically refreshed every 10 hours via cron job. 
-            Manual refresh is available if needed.
+          <h4 className="font-semibold text-blue-900 mb-2">Automatic Refresh Active</h4>
+          <p className="text-sm text-blue-700 mb-2">
+            Tokens are automatically refreshed every 10 hours via cron job to prevent expiration.
           </p>
+          <div className="flex items-center text-xs text-blue-600">
+            <Zap className="w-3 h-3 mr-1" />
+            Next automatic refresh: Every 10 hours
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -151,6 +156,13 @@ const SlackTokenManager = () => {
                   <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
                     <p className="text-xs text-yellow-800">
                       <strong>Action Required:</strong> Please update the SLACK_BOT_TOKEN secret manually with this new token.
+                    </p>
+                  </div>
+                )}
+                {update.status === 'auto_updated' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                    <p className="text-xs text-blue-800">
+                      <strong>Automatically Updated:</strong> The SLACK_BOT_TOKEN secret has been updated automatically.
                     </p>
                   </div>
                 )}

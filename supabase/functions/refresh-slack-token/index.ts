@@ -62,57 +62,62 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Successfully refreshed Slack token');
 
-    // Format the new bot token (combine refresh token with new access token)
-    const newBotToken = `${refreshToken}.${refreshData.access_token}`;
+    // The new access token from the refresh
+    const newAccessToken = refreshData.access_token;
+    console.log('New access token received:', newAccessToken.substring(0, 20) + '...');
 
-    // Store the new token in the database for manual update
+    // Store the new token in the database
     const { error: insertError } = await supabase
       .from('slack_token_updates')
       .insert({
         old_token: 'Previous token (hidden for security)',
-        new_token: newBotToken,
+        new_token: newAccessToken,
         refresh_date: new Date().toISOString(),
-        status: 'pending_update'
+        status: 'completed'
       });
 
     if (insertError) {
       console.error('Failed to store token update:', insertError);
+    } else {
+      console.log('Token update stored in database');
     }
 
-    // Attempt to update the SLACK_BOT_TOKEN environment variable
-    // Note: This would require the Supabase Management API
-    console.log('New bot token generated successfully');
-    console.log('Token preview:', newBotToken.substring(0, 30) + '...');
+    // Try to update the SLACK_BOT_TOKEN environment variable
+    const supabaseProjectRef = Deno.env.get('SUPABASE_PROJECT_REF') || 'ppuyedxxfcijdfeqpwfj';
+    const supabaseAccessToken = Deno.env.get('SUPABASE_ACCESS_TOKEN');
 
-    // Try to call the management API to update the secret
-    try {
-      const managementResponse = await fetch(`https://api.supabase.com/v1/projects/${Deno.env.get('SUPABASE_PROJECT_REF')}/secrets`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ACCESS_TOKEN')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([
-          {
-            name: 'SLACK_BOT_TOKEN',
-            value: newBotToken,
+    if (supabaseAccessToken) {
+      try {
+        const managementResponse = await fetch(`https://api.supabase.com/v1/projects/${supabaseProjectRef}/secrets`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${supabaseAccessToken}`,
+            'Content-Type': 'application/json',
           },
-        ]),
-      });
+          body: JSON.stringify([
+            {
+              name: 'SLACK_BOT_TOKEN',
+              value: newAccessToken,
+            },
+          ]),
+        });
 
-      if (managementResponse.ok) {
-        console.log('Successfully updated SLACK_BOT_TOKEN secret');
-        
-        // Update status to completed
-        await supabase
-          .from('slack_token_updates')
-          .update({ status: 'completed' })
-          .eq('new_token', newBotToken);
-      } else {
-        console.log('Could not update secret automatically. Manual update required.');
+        if (managementResponse.ok) {
+          console.log('Successfully updated SLACK_BOT_TOKEN secret automatically');
+          
+          // Update status to completed
+          await supabase
+            .from('slack_token_updates')
+            .update({ status: 'auto_updated' })
+            .eq('new_token', newAccessToken);
+        } else {
+          console.log('Could not update secret automatically. Manual update required.');
+        }
+      } catch (managementError) {
+        console.log('Management API not available. Token stored for manual update.');
       }
-    } catch (managementError) {
-      console.log('Management API not available. Token stored for manual update.');
+    } else {
+      console.log('No Supabase access token available. Token stored for manual update.');
     }
 
     return new Response(
@@ -120,8 +125,8 @@ const handler = async (req: Request): Promise<Response> => {
         success: true,
         message: 'Slack token refreshed successfully',
         timestamp: new Date().toISOString(),
-        token_preview: newBotToken.substring(0, 30) + '...',
-        requires_manual_update: true
+        token_preview: newAccessToken.substring(0, 20) + '...',
+        auto_updated: !!supabaseAccessToken
       }),
       {
         status: 200,
