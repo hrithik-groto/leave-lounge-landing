@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, Users, User } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from 'date-fns';
@@ -298,7 +299,6 @@ const EnhancedCalendar = forwardRef<EnhancedCalendarRef, EnhancedCalendarProps>(
             </DialogHeader>
             
             <EnhancedLeaveApplicationForm
-              preselectedDate={selectedDate}
               onSuccess={() => {
                 setIsApplyDialogOpen(false);
                 fetchLeaveApplications();

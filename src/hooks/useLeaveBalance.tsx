@@ -44,7 +44,13 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
           return;
         }
 
-        setBalance(data);
+        // Type guard to ensure data is properly typed
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          const typedData = data as LeaveBalance;
+          setBalance(typedData);
+        } else {
+          setError('Invalid balance data received');
+        }
       } catch (err) {
         console.error('Error in fetchBalance:', err);
         setError('Failed to fetch leave balance');

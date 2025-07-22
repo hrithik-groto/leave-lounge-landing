@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,11 @@ interface CompanyHoliday {
   date: string;
 }
 
-export const EnhancedLeaveApplicationForm = () => {
+interface EnhancedLeaveApplicationFormProps {
+  onSuccess?: () => void;
+}
+
+export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> = ({ onSuccess }) => {
   const { user } = useUser();
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -211,6 +216,10 @@ export const EnhancedLeaveApplicationForm = () => {
       setMeetingDetails("");
       setBalanceRefreshTrigger(prev => prev + 1);
 
+      if (onSuccess) {
+        onSuccess();
+      }
+
     } catch (error) {
       console.error('Error submitting leave application:', error);
       toast.error('An unexpected error occurred');
@@ -341,7 +350,7 @@ export const EnhancedLeaveApplicationForm = () => {
                 <Checkbox 
                   id="half-day" 
                   checked={isHalfDay}
-                  onCheckedChange={setIsHalfDay}
+                  onCheckedChange={(checked) => setIsHalfDay(checked === true)}
                 />
                 <Label htmlFor="half-day">Half Day Leave</Label>
               </div>

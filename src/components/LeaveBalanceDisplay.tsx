@@ -44,10 +44,10 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
     );
   }
 
-  const getStatusColor = () => {
+  const getStatusColor = (): "destructive" | "default" | "secondary" | "outline" => {
     const remaining = balance.remaining_this_month;
     if (remaining <= 0) return 'destructive';
-    if (remaining <= balance.monthly_allowance * 0.3) return 'warning';
+    if (remaining <= balance.monthly_allowance * 0.3) return 'secondary';
     return 'default';
   };
 
