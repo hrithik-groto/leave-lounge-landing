@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -259,146 +260,159 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const availableLeaveTypes = getAvailableLeaveTypes();
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto">
-      <div className="space-y-2">
-        <Label htmlFor="leave-type">Leave Type *</Label>
-        <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select leave type" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableLeaveTypes.map((type) => (
-              <SelectItem key={type.id} value={type.id}>
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: type.color }}
-                  />
-                  {type.label}
-                  {type.label === 'Additional work from home' && (
-                    <span className="text-xs text-orange-600 font-medium">(Activated)</span>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
-            {availableLeaveTypes.length === 0 && wfhBalanceChecked && (
-              <SelectItem value="disabled" disabled>
-                No leave types available
-              </SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-        
-        {selectedLeaveType?.label === 'Additional work from home' && (
-          <div className="mt-2 p-3 rounded-md text-sm bg-green-50 border border-green-200 text-green-800">
-            <div className="flex items-center gap-2">
+    <div className="max-h-[80vh] overflow-y-auto">
+      <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto p-4">
+        <div className="space-y-2">
+          <Label htmlFor="leave-type">Leave Type *</Label>
+          <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select leave type" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableLeaveTypes.map((type) => (
+                <SelectItem key={type.id} value={type.id}>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: type.color }}
+                    />
+                    {type.label}
+                    {type.label === 'Additional work from home' && (
+                      <span className="text-xs text-orange-600 font-medium">(Activated)</span>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+              {availableLeaveTypes.length === 0 && wfhBalanceChecked && (
+                <SelectItem value="disabled" disabled>
+                  No leave types available
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          
+          {selectedLeaveType?.label === 'Additional work from home' && wfhRemaining > 0 && (
+            <div className="mt-2 p-3 rounded-md text-sm bg-yellow-50 border border-yellow-200 text-yellow-800">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                <span>
+                  Your current Work from Home quota is still left, please use those first.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {selectedLeaveType?.label === 'Additional work from home' && wfhRemaining <= 0 && (
+            <div className="mt-2 p-3 rounded-md text-sm bg-green-50 border border-green-200 text-green-800">
+              <div className="flex items-center gap-2">
+                <span>
+                  ✓ Additional Work From Home is now available as your regular WFH quota (2 days/month) has been exhausted. You can apply for unlimited additional WFH days.
+                </span>
+              </div>
+              <div className="mt-2 pt-2 border-t border-green-300">
+                <span className="font-medium">Additional WFH used this month: {additionalWfhUsed} days</span>
+              </div>
+            </div>
+          )}
+
+          {selectedLeaveType?.label === 'Work From Home' && wfhBalanceChecked && (
+            <div className="mt-2 p-3 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-800">
               <span>
-                ✓ Additional Work From Home is now available as your regular WFH quota (2 days/month) has been exhausted. You can apply for unlimited additional WFH days.
+                You have {wfhRemaining} days of regular Work From Home remaining this month (2 days/month limit).
               </span>
             </div>
-            <div className="mt-2 pt-2 border-t border-green-300">
-              <span className="font-medium">Additional WFH used this month: {additionalWfhUsed} days</span>
+          )}
+
+          {wfhRemaining <= 0 && wfhBalanceChecked && !selectedLeaveType && (
+            <div className="mt-2 p-3 rounded-md text-sm bg-orange-50 border border-orange-200 text-orange-800">
+              <span>
+                Your regular Work From Home quota is exhausted. "Additional work from home" is now available in the dropdown with no monthly limit.
+              </span>
             </div>
-          </div>
-        )}
+          )}
 
-        {selectedLeaveType?.label === 'Work From Home' && wfhBalanceChecked && (
-          <div className="mt-2 p-3 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-800">
-            <span>
-              You have {wfhRemaining} days of regular Work From Home remaining this month (2 days/month limit).
-            </span>
-          </div>
-        )}
+          {wfhLoading && (
+            <div className="mt-2 p-3 rounded-md text-sm bg-gray-50 border border-gray-200 text-gray-600">
+              <span>Checking Work From Home balance...</span>
+            </div>
+          )}
+        </div>
 
-        {wfhRemaining <= 0 && wfhBalanceChecked && !selectedLeaveType && (
-          <div className="mt-2 p-3 rounded-md text-sm bg-orange-50 border border-orange-200 text-orange-800">
-            <span>
-              Your regular Work From Home quota is exhausted. "Additional work from home" is now available in the dropdown with no monthly limit.
-            </span>
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Start Date *</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !startDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "PPP") : "Pick start date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={setStartDate}
+                disabled={(date) => isBefore(date, new Date())}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
 
-        {wfhLoading && (
-          <div className="mt-2 p-3 rounded-md text-sm bg-gray-50 border border-gray-200 text-gray-600">
-            <span>Checking Work From Home balance...</span>
-          </div>
-        )}
-      </div>
+        <div className="space-y-2">
+          <Label>End Date *</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !endDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "PPP") : "Pick end date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={endDate}
+                onSelect={setEndDate}
+                disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, new Date())}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
 
-      <div className="space-y-2">
-        <Label>Start Date *</Label>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-full justify-start text-left font-normal",
-                !startDate && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {startDate ? format(startDate, "PPP") : "Pick start date"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={startDate}
-              onSelect={setStartDate}
-              disabled={(date) => isBefore(date, new Date())}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="reason">Reason *</Label>
+          <Textarea
+            id="reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Please provide a reason for your leave"
+            rows={4}
+            required
+          />
+        </div>
 
-      <div className="space-y-2">
-        <Label>End Date *</Label>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-full justify-start text-left font-normal",
-                !endDate && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {endDate ? format(endDate, "PPP") : "Pick end date"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={endDate}
-              onSelect={setEndDate}
-              disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, new Date())}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="reason">Reason *</Label>
-        <Textarea
-          id="reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Please provide a reason for your leave"
-          rows={4}
-          required
-        />
-      </div>
-
-      <Button 
-        type="submit" 
-        className="w-full" 
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? 'Submitting...' : 'Submit Application'}
-      </Button>
-    </form>
+        <Button 
+          type="submit" 
+          className="w-full" 
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Submitting...' : 'Submit Application'}
+        </Button>
+      </form>
+    </div>
   );
 };
 

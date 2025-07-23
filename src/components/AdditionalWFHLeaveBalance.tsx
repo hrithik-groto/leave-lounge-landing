@@ -47,7 +47,6 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
     return null;
   }
 
-  const wfhRemaining = balance.wfh_remaining || 0;
   const usedThisMonth = balance.used_this_month || 0;
 
   return (
@@ -64,11 +63,6 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
       <CardContent className="pt-0 space-y-3">
         <div className="grid grid-cols-1 gap-2">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Monthly Limit:</span>
-            <span className="font-medium text-sm text-green-600">Unlimited</span>
-          </div>
-          
-          <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Applied This Month:</span>
             <span className="font-medium text-sm">{usedThisMonth} days</span>
           </div>
@@ -79,10 +73,6 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
               Available
             </Badge>
           </div>
-        </div>
-
-        <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-600">
-          ✓ Additional Work From Home is now available as your regular WFH quota (2 days/month) has been exhausted. You can apply for unlimited additional WFH days.
         </div>
       </CardContent>
     </Card>
