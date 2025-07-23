@@ -26,7 +26,7 @@ const Hero = () => {
         ]}
         className={cn(
           "[mask-image:radial-gradient(500px_circle_at_center,white,transparent)]",
-          "inset-x-0 inset-y-[-30%] h-[200%] skew-y-12 fill-primary/10 stroke-primary/20",
+          "inset-x-0 inset-y-[-30%] h-[200%] skew-y-12 fill-muted/30 stroke-muted/50",
         )}
       />
       
