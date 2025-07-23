@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -421,7 +420,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
               <Checkbox 
                 id="halfDay" 
                 checked={isHalfDay} 
-                onCheckedChange={setIsHalfDay}
+                onCheckedChange={(checked) => setIsHalfDay(checked === true)}
               />
               <Label htmlFor="halfDay">Half Day Leave</Label>
             </div>
