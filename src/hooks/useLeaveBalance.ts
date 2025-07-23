@@ -22,7 +22,10 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.id || !leaveTypeId) return;
+    if (!user?.id || !leaveTypeId) {
+      setLoading(false);
+      return;
+    }
 
     const fetchBalance = async () => {
       try {
@@ -33,6 +36,8 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
         const month = currentDate.getMonth() + 1;
         const year = currentDate.getFullYear();
 
+        console.log('Fetching balance for:', { userId: user.id, leaveTypeId, month, year });
+
         const { data, error: rpcError } = await supabase
           .rpc('get_monthly_leave_balance', {
             p_user_id: user.id,
@@ -42,20 +47,40 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
           });
 
         if (rpcError) {
-          console.error('Error fetching leave balance:', rpcError);
-          setError('Failed to load balance');
+          console.error('RPC Error:', rpcError);
+          setError('Failed to load balance: ' + rpcError.message);
           return;
         }
 
+        console.log('RPC response:', data);
+
         // Properly handle the type conversion from Supabase Json to LeaveBalance
         if (data && typeof data === 'object' && !Array.isArray(data)) {
-          setBalance(data as unknown as LeaveBalance);
+          // Validate that the data has the expected structure
+          const typedData = data as unknown as LeaveBalance;
+          
+          // Ensure all required fields are present and properly typed
+          const validatedBalance: LeaveBalance = {
+            leave_type: typedData.leave_type || 'Unknown',
+            duration_type: typedData.duration_type || 'days',
+            monthly_allowance: Number(typedData.monthly_allowance) || 0,
+            used_this_month: Number(typedData.used_this_month) || 0,
+            remaining_this_month: Number(typedData.remaining_this_month) || 0,
+            carried_forward: typedData.carried_forward ? Number(typedData.carried_forward) : undefined,
+            annual_allowance: typedData.annual_allowance ? Number(typedData.annual_allowance) : undefined,
+            can_apply: typedData.can_apply,
+            wfh_remaining: typedData.wfh_remaining ? Number(typedData.wfh_remaining) : undefined
+          };
+
+          console.log('Validated balance:', validatedBalance);
+          setBalance(validatedBalance);
         } else {
-          setError('Invalid balance data received');
+          console.error('Invalid data structure:', data);
+          setError('Invalid balance data received from server');
         }
       } catch (err) {
         console.error('Error in useLeaveBalance:', err);
-        setError('Failed to load balance');
+        setError('Failed to load balance: ' + (err instanceof Error ? err.message : 'Unknown error'));
       } finally {
         setLoading(false);
       }
