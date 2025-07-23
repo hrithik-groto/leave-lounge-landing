@@ -28,7 +28,7 @@ const Index = () => {
         window.history.replaceState({}, document.title, window.location.pathname);
         setTimeout(() => {
           navigate('/dashboard');
-        }, 1000); // Give user time to see the success message
+        }, 1500); // Give user time to see the success message
       } else {
         // Regular redirect to dashboard for authenticated users
         navigate('/dashboard');
@@ -36,14 +36,22 @@ const Index = () => {
     }
   }, [user, isLoaded, navigate, toast]);
 
+  // Show loading state while Clerk is loading
   if (!isLoaded) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
+  // Show loading state while redirecting authenticated users
   if (user) {
-    // Show a loading state while redirecting
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Redirecting to dashboard...</p>
@@ -52,6 +60,7 @@ const Index = () => {
     );
   }
 
+  // Show landing page for unauthenticated users
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
       <Header />

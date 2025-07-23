@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useUser } from '@clerk/clerk-react';
 import { Slack, CheckCircle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,12 +22,7 @@ const SlackOAuthButton = () => {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('slack_connected') === 'true') {
         setIsConnected(true);
-        toast({
-          title: "🎉 Slack Connected!",
-          description: "Your Slack account has been successfully connected!",
-          className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-        });
-        // Clean up URL
+        // Clean up URL immediately
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     };
@@ -45,7 +39,7 @@ const SlackOAuthButton = () => {
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [user, toast]);
+  }, [user]);
 
   const checkSlackConnection = async () => {
     if (!user) return;
