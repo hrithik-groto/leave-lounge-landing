@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +80,13 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
       fetchCurrentUsage();
     }
   }, [selectedLeaveType, user?.id]);
+
+  // Auto-sync end date with start date for Short Leave
+  useEffect(() => {
+    if (selectedLeaveType?.label === 'Short Leave' && startDate) {
+      setEndDate(startDate);
+    }
+  }, [selectedLeaveType, startDate]);
 
   const fetchLeaveTypes = async () => {
     try {
@@ -541,34 +547,50 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
                     <div className="space-y-2">
                       <Label>End Date *</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
+                      {selectedLeaveType?.label === 'Short Leave' ? (
+                        <div className="relative">
                           <Button
                             variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !endDate && "text-muted-foreground"
-                            )}
+                            className="w-full justify-start text-left font-normal bg-gray-50"
+                            disabled
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {endDate ? format(endDate, "PPP") : "Pick end date"}
+                            {endDate ? format(endDate, "PPP") : "Same as start date"}
                           </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={endDate}
-                            onSelect={setEndDate}
-                            disabled={(date) => 
-                              !startDate || 
-                              isBefore(date, startDate) || 
-                              isWeekend(date) || 
-                              isCompanyHoliday(date)
-                            }
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Short leave applications are limited to single day. For multiple days, create separate applications.
+                          </p>
+                        </div>
+                      ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !endDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {endDate ? format(endDate, "PPP") : "Pick end date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={setEndDate}
+                              disabled={(date) => 
+                                !startDate || 
+                                isBefore(date, startDate) || 
+                                isWeekend(date) || 
+                                isCompanyHoliday(date)
+                              }
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      )}
                     </div>
                   </div>
 
