@@ -180,11 +180,255 @@ serve(async (req) => {
         }
 
         // Get all leave types
-        const { data: leaveTypes } = await supabase
+        const { data: leaveTypes, error: leaveTypesError } = await supabase
           .from('leave_types')
           .select('*')
           .eq('is_active', true)
           .order('label');
+
+        if (leaveTypesError) {
+          console.error('❌ Error fetching leave types:', leaveTypesError);
+          return new Response('Failed to fetch leave types', { status: 500 });
+        }
+
+        // Helper function to calculate leave balance directly
+        const calculateLeaveBalance = async (leaveTypeId: string, leaveTypeLabel: string) => {
+          const currentMonth = new Date().getMonth() + 1;
+          const currentYear = new Date().getFullYear();
+
+          try {
+            if (leaveTypeLabel === 'Additional work from home') {
+              // For Additional WFH, check annual usage and WFH availability
+              const { data: wfhLeaveType } = await supabase
+                .from('leave_types')
+                .select('id')
+                .eq('label', 'Work From Home')
+                .single();
+
+              // Check current month WFH usage
+              const { data: wfhLeaves } = await supabase
+                .from('leave_applied_users')
+                .select('actual_days_used, is_half_day, start_date, end_date, status')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', wfhLeaveType?.id || '')
+                .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+                .lt('start_date', currentMonth === 12 
+                  ? `${currentYear + 1}-01-01` 
+                  : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+                .in('status', ['approved', 'pending']);
+
+              const wfhUsed = wfhLeaves?.reduce((total, leave) => {
+                if (leave.actual_days_used) return total + leave.actual_days_used;
+                if (leave.is_half_day) return total + 0.5;
+                return total + Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+              }, 0) || 0;
+
+              const wfhRemaining = Math.max(0, 2 - wfhUsed);
+
+              // Check annual Additional WFH usage
+              const { data: additionalWfhLeaves } = await supabase
+                .from('leave_applied_users')
+                .select('actual_days_used, is_half_day, start_date, end_date, status')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .gte('start_date', `${currentYear}-01-01`)
+                .lt('start_date', `${currentYear + 1}-01-01`)
+                .in('status', ['approved', 'pending']);
+
+              const additionalWfhUsed = additionalWfhLeaves?.reduce((total, leave) => {
+                if (leave.actual_days_used) return total + leave.actual_days_used;
+                if (leave.is_half_day) return total + 0.5;
+                return total + Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+              }, 0) || 0;
+
+              const additionalWfhRemaining = Math.max(0, 24 - additionalWfhUsed);
+              const canApply = wfhRemaining <= 0 && additionalWfhRemaining > 0;
+
+              return {
+                remaining: additionalWfhRemaining,
+                used: additionalWfhUsed,
+                allowance: 24,
+                canApply,
+                wfhRemaining,
+                period: 'year'
+              };
+
+            } else if (leaveTypeLabel === 'Short Leave') {
+              const { data: shortLeaves } = await supabase
+                .from('leave_applied_users')
+                .select('hours_requested, status')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+                .lt('start_date', currentMonth === 12 
+                  ? `${currentYear + 1}-01-01` 
+                  : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+                .in('status', ['approved', 'pending']);
+
+              const hoursUsed = shortLeaves?.reduce((total, leave) => total + (leave.hours_requested || 1), 0) || 0;
+              const hoursRemaining = Math.max(0, 4 - hoursUsed);
+
+              return {
+                remaining: hoursRemaining,
+                used: hoursUsed,
+                allowance: 4,
+                canApply: hoursRemaining > 0,
+                period: 'month',
+                unit: 'hours'
+              };
+
+            } else if (leaveTypeLabel === 'Work From Home') {
+              const { data: wfhLeaves } = await supabase
+                .from('leave_applied_users')
+                .select('actual_days_used, is_half_day, start_date, end_date, status')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+                .lt('start_date', currentMonth === 12 
+                  ? `${currentYear + 1}-01-01` 
+                  : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+                .in('status', ['approved', 'pending']);
+
+              const daysUsed = wfhLeaves?.reduce((total, leave) => {
+                if (leave.actual_days_used) return total + leave.actual_days_used;
+                if (leave.is_half_day) return total + 0.5;
+                return total + Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+              }, 0) || 0;
+
+              const daysRemaining = Math.max(0, 2 - daysUsed);
+
+              return {
+                remaining: daysRemaining,
+                used: daysUsed,
+                allowance: 2,
+                canApply: daysRemaining > 0,
+                period: 'month',
+                unit: 'days'
+              };
+
+            } else if (leaveTypeLabel === 'Paid Leave') {
+              // Get monthly balance using the RPC function
+              const { data: balanceData } = await supabase
+                .rpc('get_or_create_monthly_balance', {
+                  p_user_id: slackIntegration.user_id,
+                  p_leave_type_id: leaveTypeId,
+                  p_year: currentYear,
+                  p_month: currentMonth
+                });
+
+              if (balanceData) {
+                const remaining = Math.max(0, (balanceData.allocated_balance || 1.5) - (balanceData.used_balance || 0));
+                return {
+                  remaining,
+                  used: balanceData.used_balance || 0,
+                  allowance: balanceData.allocated_balance || 1.5,
+                  carriedForward: balanceData.carried_forward || 0,
+                  canApply: remaining > 0,
+                  period: 'month',
+                  unit: 'days'
+                };
+              }
+
+              // Fallback calculation
+              const { data: paidLeaves } = await supabase
+                .from('leave_applied_users')
+                .select('actual_days_used, is_half_day, start_date, end_date, status')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+                .lt('start_date', currentMonth === 12 
+                  ? `${currentYear + 1}-01-01` 
+                  : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+                .in('status', ['approved', 'pending']);
+
+              const daysUsed = paidLeaves?.reduce((total, leave) => {
+                if (leave.actual_days_used) return total + leave.actual_days_used;
+                if (leave.is_half_day) return total + 0.5;
+                return total + Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+              }, 0) || 0;
+
+              const daysRemaining = Math.max(0, 1.5 - daysUsed);
+
+              return {
+                remaining: daysRemaining,
+                used: daysUsed,
+                allowance: 1.5,
+                canApply: daysRemaining > 0,
+                period: 'month',
+                unit: 'days'
+              };
+
+            } else if (leaveTypeLabel === 'Annual Leave') {
+              // Get annual balance using the RPC function
+              const { data: balanceData } = await supabase
+                .rpc('get_or_create_annual_balance', {
+                  p_user_id: slackIntegration.user_id,
+                  p_leave_type_id: leaveTypeId,
+                  p_year: currentYear
+                });
+
+              if (balanceData) {
+                const remaining = Math.max(0, (balanceData.allocated_balance || 18) - (balanceData.used_balance || 0));
+                return {
+                  remaining,
+                  used: balanceData.used_balance || 0,
+                  allowance: balanceData.allocated_balance || 18,
+                  canApply: remaining > 0,
+                  period: 'year',
+                  unit: 'days'
+                };
+              }
+
+              // Fallback calculation
+              const { data: annualLeaves } = await supabase
+                .from('leave_applied_users')
+                .select('actual_days_used, is_half_day, start_date, end_date, status')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .gte('start_date', `${currentYear}-01-01`)
+                .lt('start_date', `${currentYear + 1}-01-01`)
+                .in('status', ['approved', 'pending']);
+
+              const daysUsed = annualLeaves?.reduce((total, leave) => {
+                if (leave.actual_days_used) return total + leave.actual_days_used;
+                if (leave.is_half_day) return total + 0.5;
+                return total + Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+              }, 0) || 0;
+
+              const daysRemaining = Math.max(0, 18 - daysUsed);
+
+              return {
+                remaining: daysRemaining,
+                used: daysUsed,
+                allowance: 18,
+                canApply: daysRemaining > 0,
+                period: 'year',
+                unit: 'days'
+              };
+            }
+
+            return {
+              remaining: 0,
+              used: 0,
+              allowance: 0,
+              canApply: false,
+              period: 'month',
+              unit: 'days'
+            };
+
+          } catch (error) {
+            console.error(`❌ Error calculating balance for ${leaveTypeLabel}:`, error);
+            return {
+              remaining: 0,
+              used: 0,
+              allowance: 0,
+              canApply: false,
+              period: 'month',
+              unit: 'days',
+              error: true
+            };
+          }
+        };
 
         // Build comprehensive leave balance summary and available options
         const leaveTypeOptions = [];
@@ -192,92 +436,57 @@ serve(async (req) => {
         let hasAvailableLeave = false;
         
         for (const leaveType of leaveTypes || []) {
-          // Get balance for each leave type
-          const { data: balanceData } = await supabase
-            .rpc('get_monthly_leave_balance', {
-              p_user_id: slackIntegration.user_id,
-              p_leave_type_id: leaveType.id,
-              p_month: new Date().getMonth() + 1,
-              p_year: new Date().getFullYear()
-            });
-
+          console.log(`🔍 Processing leave type: ${leaveType.label}`);
+          
+          const balance = await calculateLeaveBalance(leaveType.id, leaveType.label);
+          
           let balanceText = '';
           let isExhausted = false;
           let summaryText = '';
           let statusEmoji = '';
 
-          if (balanceData) {
-            if (leaveType.label === 'Additional work from home') {
-              // For Additional WFH, show annual balance and check if applicable
-              const canApply = balanceData.can_apply || false;
-              const remainingThisYear = balanceData.remaining_this_year || 0;
-              const wfhRemaining = balanceData.wfh_remaining || 0;
-              
-              if (!canApply) {
-                if (wfhRemaining > 0) {
-                  balanceText = ` (Use regular WFH first: ${wfhRemaining} days left)`;
-                  isExhausted = true;
-                  statusEmoji = '⚠️';
-                  summaryText = `⚠️ *Additional WFH:* Use regular WFH first (${wfhRemaining} days left)`;
-                } else if (remainingThisYear <= 0) {
-                  balanceText = ` (Annual quota exhausted: 0/24 days left)`;
-                  isExhausted = true;
-                  statusEmoji = '❌';
-                  summaryText = `❌ *Additional WFH:* Annual quota exhausted (0/24 days left)`;
-                }
-              } else {
-                balanceText = ` (${remainingThisYear}/24 days left this year)`;
-                statusEmoji = remainingThisYear > 0 ? '✅' : '❌';
-                summaryText = `${statusEmoji} *Additional WFH:* ${remainingThisYear}/24 days left this year`;
-                isExhausted = remainingThisYear <= 0;
+          if (balance.error) {
+            balanceText = ' (Error loading balance)';
+            isExhausted = true;
+            statusEmoji = '❌';
+            summaryText = `❌ *${leaveType.label}:* Error loading balance`;
+          } else if (leaveType.label === 'Additional work from home') {
+            if (!balance.canApply) {
+              if (balance.wfhRemaining && balance.wfhRemaining > 0) {
+                balanceText = ` (Use regular WFH first: ${balance.wfhRemaining} days left)`;
+                isExhausted = true;
+                statusEmoji = '⚠️';
+                summaryText = `⚠️ *Additional WFH:* Use regular WFH first (${balance.wfhRemaining} days left)`;
+              } else if (balance.remaining <= 0) {
+                balanceText = ` (Annual quota exhausted: 0/24 days left)`;
+                isExhausted = true;
+                statusEmoji = '❌';
+                summaryText = `❌ *Additional WFH:* Annual quota exhausted (0/24 days left)`;
               }
-            } else if (leaveType.label === 'Short Leave') {
-              const remaining = balanceData.remaining_this_month || 0;
-              balanceText = ` (${remaining}/4 hours left this month)`;
-              isExhausted = remaining <= 0;
-              statusEmoji = remaining > 0 ? '✅' : '❌';
-              summaryText = `${statusEmoji} *Short Leave:* ${remaining}/4 hours left this month`;
-            } else if (leaveType.label === 'Work From Home') {
-              const remaining = balanceData.remaining_this_month || 0;
-              balanceText = ` (${remaining}/2 days left this month)`;
-              isExhausted = remaining <= 0;
-              statusEmoji = remaining > 0 ? '✅' : '❌';
-              summaryText = `${statusEmoji} *Work From Home:* ${remaining}/2 days left this month`;
-            } else if (leaveType.label === 'Paid Leave') {
-              const remaining = balanceData.remaining_this_month || 0;
-              const monthly = balanceData.monthly_allowance || 1.5;
-              balanceText = ` (${remaining}/${monthly} days left this month)`;
-              isExhausted = remaining <= 0;
-              statusEmoji = remaining > 0 ? '✅' : '❌';
-              summaryText = `${statusEmoji} *Paid Leave:* ${remaining}/${monthly} days left this month`;
-            } else if (leaveType.label === 'Annual Leave') {
-              const remaining = balanceData.remaining_this_month || 0;
-              const annual = balanceData.annual_allowance || 18;
-              balanceText = ` (${remaining}/${annual} days left this year)`;
-              isExhausted = remaining <= 0;
-              statusEmoji = remaining > 0 ? '✅' : '❌';
-              summaryText = `${statusEmoji} *Annual Leave:* ${remaining}/${annual} days left this year`;
             } else {
-              const remaining = balanceData.remaining_this_month || 0;
-              const unit = balanceData.duration_type === 'hours' ? 'hours' : 'days';
-              const allowance = balanceData.monthly_allowance || balanceData.annual_allowance || 0;
-              balanceText = ` (${remaining}/${allowance} ${unit} left)`;
-              isExhausted = remaining <= 0;
-              statusEmoji = remaining > 0 ? '✅' : '❌';
-              summaryText = `${statusEmoji} *${leaveType.label}:* ${remaining}/${allowance} ${unit} left`;
+              balanceText = ` (${balance.remaining}/24 days left this year)`;
+              statusEmoji = balance.remaining > 0 ? '✅' : '❌';
+              summaryText = `${statusEmoji} *Additional WFH:* ${balance.remaining}/24 days left this year`;
+              isExhausted = balance.remaining <= 0;
             }
           } else {
-            // No balance data available
-            isExhausted = true;
-            statusEmoji = '❓';
-            summaryText = `❓ *${leaveType.label}:* Balance unavailable`;
+            const unit = balance.unit || 'days';
+            const period = balance.period === 'year' ? 'year' : 'month';
+            balanceText = ` (${balance.remaining}/${balance.allowance} ${unit} left this ${period})`;
+            isExhausted = balance.remaining <= 0;
+            statusEmoji = balance.remaining > 0 ? '✅' : '❌';
+            summaryText = `${statusEmoji} *${leaveType.label}:* ${balance.remaining}/${balance.allowance} ${unit} left this ${period}`;
+            
+            if (balance.carriedForward && balance.carriedForward > 0) {
+              summaryText += ` (+ ${balance.carriedForward} carried forward)`;
+            }
           }
 
           // Add to balance summary
           balanceSummaryItems.push(summaryText);
 
           // Only add to options if not exhausted
-          if (!isExhausted) {
+          if (!isExhausted && balance.canApply !== false) {
             leaveTypeOptions.push({
               text: {
                 type: 'plain_text',
@@ -563,57 +772,6 @@ serve(async (req) => {
       const startDateObj = new Date(startDate);
       const endDateObj = new Date(endDate);
       const daysDiff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24)) + 1;
-
-      // Validate balance before submission with comprehensive checks
-      const { data: currentBalance } = await supabase
-        .rpc('get_monthly_leave_balance', {
-          p_user_id: actualUserId,
-          p_leave_type_id: leaveTypeId,
-          p_month: new Date().getMonth() + 1,
-          p_year: new Date().getFullYear()
-        });
-
-      if (currentBalance) {
-        let remainingBalance = 0;
-        let errorMessage = '';
-
-        if (leaveType.label === 'Additional work from home') {
-          if (!currentBalance.can_apply) {
-            const wfhRemaining = currentBalance.wfh_remaining || 0;
-            if (wfhRemaining > 0) {
-              errorMessage = `❌ Please use your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`;
-            } else {
-              errorMessage = '❌ Your annual Additional Work From Home quota (24 days) has been exhausted.';
-            }
-          } else {
-            remainingBalance = currentBalance.remaining_this_year || 0;
-            if (daysDiff > remainingBalance) {
-              errorMessage = `❌ Insufficient balance. You can only apply for ${remainingBalance} more days this year. Requested: ${daysDiff} days.`;
-            }
-          }
-        } else {
-          remainingBalance = currentBalance.remaining_this_month || 0;
-          if (remainingBalance <= 0) {
-            const unit = currentBalance.duration_type === 'hours' ? 'hours' : 'days';
-            const period = leaveType.label === 'Annual Leave' ? 'year' : 'month';
-            errorMessage = `❌ Your ${leaveType.label} quota is exhausted for this ${period}. No ${unit} remaining.`;
-          } else if (leaveType.label !== 'Short Leave' && daysDiff > remainingBalance) {
-            errorMessage = `❌ Insufficient balance. You have ${remainingBalance} days remaining. Requested: ${daysDiff} days.`;
-          }
-        }
-
-        if (errorMessage) {
-          return new Response(JSON.stringify({
-            response_action: 'errors',
-            errors: {
-              leave_type_block: errorMessage
-            }
-          }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-      }
 
       // Insert leave application
       const { data: leaveApplication, error: insertError } = await supabase
