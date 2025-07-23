@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -89,66 +90,68 @@ export const useLeaveOverlapValidation = (
         fullDay: true
       };
 
-      // Check for conflicts day by day
-      const currentDate = new Date(startDate);
-      while (currentDate <= endDate) {
+      // For single day applications, check available slots
+      if (isSameDay(startDate, endDate)) {
         const dayConflicts = conflicts.filter(leave => {
           const leaveStart = new Date(leave.start_date);
           const leaveEnd = new Date(leave.end_date);
-          return currentDate >= leaveStart && currentDate <= leaveEnd;
+          return isSameDay(startDate, leaveStart) || (startDate >= leaveStart && startDate <= leaveEnd);
         });
 
         if (dayConflicts.length > 0) {
-          // Check if applying for the same day
-          if (isSameDay(startDate, endDate)) {
-            // Single day application
-            const dayConflict = dayConflicts[0];
-            
-            if (!dayConflict.is_half_day) {
-              // Existing full day leave - cannot apply for anything
-              canApply = false;
-              message = `You already have a full day leave on ${format(currentDate, 'PPP')}`;
-              availableSlots = {
-                morning: false,
-                afternoon: false,
-                fullDay: false
-              };
-              break;
-            } else {
-              // Existing half day leave
-              const existingPeriod = dayConflict.leave_time_start === '10:00:00' ? 'morning' : 'afternoon';
-              
-              if (isHalfDay && halfDayPeriod === existingPeriod) {
-                // Trying to apply for the same half day period
-                canApply = false;
-                message = `You already have a ${existingPeriod} leave on ${format(currentDate, 'PPP')}`;
-              } else if (!isHalfDay) {
-                // Trying to apply for full day when half day exists
-                canApply = false;
-                message = `You already have a ${existingPeriod} leave on ${format(currentDate, 'PPP')}. Cannot apply for full day.`;
-              }
-              
-              // Update available slots
-              availableSlots = {
-                morning: existingPeriod !== 'morning',
-                afternoon: existingPeriod !== 'afternoon',
-                fullDay: false
-              };
-            }
-          } else {
-            // Multi-day application with conflicts
+          const fullDayConflict = dayConflicts.find(leave => !leave.is_half_day);
+          
+          if (fullDayConflict) {
+            // Full day conflict - no slots available
             canApply = false;
-            message = `You have existing leave applications that overlap with the selected dates`;
+            message = `You already have a full day leave on ${format(startDate, 'PPP')}`;
             availableSlots = {
               morning: false,
               afternoon: false,
               fullDay: false
             };
-            break;
+          } else {
+            // Only half day conflicts
+            const morningConflict = dayConflicts.find(leave => 
+              leave.is_half_day && leave.leave_time_start === '10:00:00'
+            );
+            const afternoonConflict = dayConflicts.find(leave => 
+              leave.is_half_day && leave.leave_time_start === '14:00:00'
+            );
+
+            availableSlots = {
+              morning: !morningConflict,
+              afternoon: !afternoonConflict,
+              fullDay: false // Can't apply full day if any half day exists
+            };
+
+            // Check if the requested slot is available
+            if (isHalfDay && halfDayPeriod) {
+              const requestedSlotTaken = (halfDayPeriod === 'morning' && morningConflict) || 
+                                       (halfDayPeriod === 'afternoon' && afternoonConflict);
+              
+              if (requestedSlotTaken) {
+                canApply = false;
+                message = `You already have a ${halfDayPeriod} leave on ${format(startDate, 'PPP')}`;
+              }
+            } else if (!isHalfDay) {
+              // Trying to apply full day when half days exist
+              canApply = false;
+              message = `You already have partial leave on ${format(startDate, 'PPP')}. Cannot apply for full day.`;
+            }
           }
         }
-
-        currentDate.setDate(currentDate.getDate() + 1);
+      } else {
+        // Multi-day application
+        if (conflicts.length > 0) {
+          canApply = false;
+          message = 'You have existing leave applications that overlap with the selected dates';
+          availableSlots = {
+            morning: false,
+            afternoon: false,
+            fullDay: false
+          };
+        }
       }
 
       setValidationResult({

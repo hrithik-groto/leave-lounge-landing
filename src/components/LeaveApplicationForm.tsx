@@ -8,11 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, AlertTriangle } from "lucide-react";
-import { format, isAfter, isBefore } from "date-fns";
+import { format, isAfter, isBefore, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
 import { toast } from "sonner";
+import { useLeaveOverlapValidation } from "@/hooks/useLeaveOverlapValidation";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface LeaveType {
   id: string;
@@ -35,9 +37,20 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const [wfhLoading, setWfhLoading] = useState(false);
   const [wfhBalanceChecked, setWfhBalanceChecked] = useState(false);
   const [additionalWfhUsed, setAdditionalWfhUsed] = useState(0);
+  const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDayPeriod, setHalfDayPeriod] = useState<'morning' | 'afternoon'>('morning');
+  const [hoursRequested, setHoursRequested] = useState<number>(1);
 
   const { user } = useUser();
   const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
+  
+  // Use overlap validation hook
+  const { validationResult, loading: validationLoading } = useLeaveOverlapValidation(
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDayPeriod
+  );
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -48,6 +61,13 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
       checkWFHBalance();
     }
   }, [user?.id]);
+
+  // Auto-set end date to start date for half-day leaves
+  useEffect(() => {
+    if (isHalfDay && startDate) {
+      setEndDate(startDate);
+    }
+  }, [isHalfDay, startDate]);
 
   const fetchLeaveTypes = async () => {
     try {
@@ -169,17 +189,14 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
 
   // Filter leave types based on WFH exhaustion
   const getAvailableLeaveTypes = () => {
-    if (!wfhBalanceChecked) return []; // Don't show any leave types while loading
+    if (!wfhBalanceChecked) return [];
     
     return leaveTypes.filter(type => {
-      // Show all leave types except Additional work from home
       if (type.label !== 'Additional work from home') {
         return true;
       }
       
-      // Only show Additional work from home if regular WFH is exhausted (remaining <= 0)
       const canShowAdditionalWFH = wfhRemaining <= 0;
-      console.log('Can show Additional WFH:', canShowAdditionalWFH, 'WFH remaining:', wfhRemaining);
       return canShowAdditionalWFH;
     });
   };
@@ -202,13 +219,36 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
       return;
     }
 
+    // Check for conflicts
+    if (!validationResult.canApply) {
+      toast.error(validationResult.message || 'Cannot apply for leave on the selected dates');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Calculate days for the application
-      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+      let actualDaysUsed = 1;
+      let leaveTimeStart = null;
+      let leaveTimeEnd = null;
 
-      // Prepare the submission data with proper typing
+      // Handle different leave types
+      if (selectedLeaveType?.label === 'Short Leave') {
+        actualDaysUsed = hoursRequested / 8; // Convert hours to days
+      } else if (isHalfDay) {
+        actualDaysUsed = 0.5;
+        if (halfDayPeriod === 'morning') {
+          leaveTimeStart = '10:00:00';
+          leaveTimeEnd = '14:00:00';
+        } else {
+          leaveTimeStart = '14:00:00';
+          leaveTimeEnd = '18:30:00';
+        }
+      } else {
+        const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+        actualDaysUsed = daysDiff;
+      }
+
       const submissionData = {
         user_id: user.id,
         start_date: format(startDate, 'yyyy-MM-dd'),
@@ -216,9 +256,11 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
         leave_type_id: leaveTypeId,
         reason: reason.trim(),
         status: 'pending' as const,
-        is_half_day: false,
-        actual_days_used: daysDiff,
-        hours_requested: 0
+        is_half_day: isHalfDay,
+        leave_time_start: leaveTimeStart,
+        leave_time_end: leaveTimeEnd,
+        actual_days_used: actualDaysUsed,
+        hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : 0
       };
 
       console.log('Submitting leave application with data:', submissionData);
@@ -242,6 +284,8 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
       setEndDate(undefined);
       setLeaveTypeId("");
       setReason("");
+      setIsHalfDay(false);
+      setHoursRequested(1);
       
       // Refresh WFH balance after submission
       checkWFHBalance();
@@ -262,7 +306,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   return (
     <div className="max-h-[80vh] overflow-y-auto p-1">
       <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto p-4">
-        {/* Show warning if Additional WFH is not available but user has exhausted additional WFH */}
+        {/* WFH Status Messages */}
         {wfhRemaining <= 0 && additionalWfhUsed > 0 && !selectedLeaveType && (
           <div className="p-3 rounded-md text-sm bg-yellow-50 border border-yellow-200 text-yellow-800">
             <div className="flex items-center gap-2">
@@ -303,6 +347,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
             </SelectContent>
           </Select>
           
+          {/* Leave Type Specific Messages */}
           {selectedLeaveType?.label === 'Additional work from home' && wfhRemaining > 0 && (
             <div className="mt-2 p-3 rounded-md text-sm bg-yellow-50 border border-yellow-200 text-yellow-800">
               <div className="flex items-center gap-2">
@@ -350,6 +395,54 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
           )}
         </div>
 
+        {/* Short Leave Hours Input */}
+        {selectedLeaveType?.label === 'Short Leave' && (
+          <div className="space-y-2">
+            <Label htmlFor="hours">Hours Requested *</Label>
+            <Select value={hoursRequested.toString()} onValueChange={(value) => setHoursRequested(parseInt(value))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select hours" />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4].map((hour) => (
+                  <SelectItem key={hour} value={hour.toString()}>
+                    {hour} hour{hour > 1 ? 's' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Half Day Checkbox (only for applicable leave types) */}
+        {selectedLeaveType && !['Short Leave', 'Additional work from home'].includes(selectedLeaveType.label) && (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="halfDay" 
+                checked={isHalfDay} 
+                onCheckedChange={setIsHalfDay}
+              />
+              <Label htmlFor="halfDay">Half Day Leave</Label>
+            </div>
+            
+            {isHalfDay && (
+              <div className="space-y-2">
+                <Label>Half Day Period *</Label>
+                <Select value={halfDayPeriod} onValueChange={(value: 'morning' | 'afternoon') => setHalfDayPeriod(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="morning">Morning (10:00 AM - 2:00 PM)</SelectItem>
+                    <SelectItem value="afternoon">Afternoon (2:00 PM - 6:30 PM)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label>Start Date *</Label>
           <Popover>
@@ -377,32 +470,71 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
           </Popover>
         </div>
 
-        <div className="space-y-2">
-          <Label>End Date *</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal",
-                  !endDate && "text-muted-foreground"
+        {/* End Date (hidden for half day leaves) */}
+        {!isHalfDay && selectedLeaveType?.label !== 'Short Leave' && (
+          <div className="space-y-2">
+            <Label>End Date *</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !endDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {endDate ? format(endDate, "PPP") : "Pick end date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={endDate}
+                  onSelect={setEndDate}
+                  disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, new Date())}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
+
+        {/* Overlap Validation Messages */}
+        {validationLoading && (
+          <div className="p-3 rounded-md text-sm bg-gray-50 border border-gray-200 text-gray-600">
+            <span>Checking for conflicts...</span>
+          </div>
+        )}
+
+        {!validationResult.canApply && validationResult.message && (
+          <div className="p-3 rounded-md text-sm bg-red-50 border border-red-200 text-red-800">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>{validationResult.message}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Show available slots for single day applications */}
+        {startDate && endDate && isSameDay(startDate, endDate) && validationResult.canApply && (
+          <div className="p-3 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-800">
+            <div className="space-y-1">
+              <span className="font-medium">Available slots for {format(startDate, "PPP")}:</span>
+              <div className="flex gap-2">
+                {validationResult.availableSlots.morning && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Morning</span>
                 )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {endDate ? format(endDate, "PPP") : "Pick end date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={endDate}
-                onSelect={setEndDate}
-                disabled={(date) => startDate ? isBefore(date, startDate) : isBefore(date, new Date())}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
+                {validationResult.availableSlots.afternoon && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Afternoon</span>
+                )}
+                {validationResult.availableSlots.fullDay && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Full Day</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="reason">Reason *</Label>
@@ -419,7 +551,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
         <Button 
           type="submit" 
           className="w-full" 
-          disabled={isSubmitting}
+          disabled={isSubmitting || !validationResult.canApply}
         >
           {isSubmitting ? 'Submitting...' : 'Submit Application'}
         </Button>
