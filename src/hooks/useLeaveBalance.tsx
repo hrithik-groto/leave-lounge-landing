@@ -237,7 +237,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             remaining_this_month: remainingDays
           });
         }
-        // For Paid Leave, calculate from actual records directly
+        // For Paid Leave, calculate from actual records directly with proper half-day handling
         else if (leaveTypeLabel === 'Paid Leave') {
           const currentMonth = new Date().getMonth() + 1;
           const currentYear = new Date().getFullYear();
@@ -272,16 +272,42 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             return total + daysDiff;
           }, 0) || 0;
 
-          const monthlyAllowanceDays = 1.5; // 1.5 days per month for Paid Leave
-          const remainingDays = Math.max(0, monthlyAllowanceDays - totalDaysUsed);
+          // Use the RPC function to get proper balance with carryforward
+          const { data: balanceData, error: balanceError } = await supabase
+            .rpc('get_monthly_leave_balance', {
+              p_user_id: user.id,
+              p_leave_type_id: leaveTypeId,
+              p_month: currentMonth,
+              p_year: currentYear
+            });
 
-          setBalance({
-            leave_type: leaveTypeLabel,
-            duration_type: 'days',
-            monthly_allowance: monthlyAllowanceDays,
-            used_this_month: totalDaysUsed,
-            remaining_this_month: remainingDays
-          });
+          if (balanceError) {
+            console.error('Error fetching balance from RPC:', balanceError);
+            // Fallback to direct calculation
+            const monthlyAllowanceDays = 1.5; // 1.5 days per month for Paid Leave
+            const remainingDays = Math.max(0, monthlyAllowanceDays - totalDaysUsed);
+
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: 'days',
+              monthly_allowance: monthlyAllowanceDays,
+              used_this_month: totalDaysUsed,
+              remaining_this_month: remainingDays
+            });
+          } else {
+            // Use RPC response data
+            const typedData = balanceData as unknown as LeaveBalanceResponse;
+            const remainingBalance = Math.max(0, (typedData.remaining_this_month || 0));
+
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: 'days',
+              monthly_allowance: typedData.monthly_allowance || 1.5,
+              used_this_month: typedData.used_this_month || 0,
+              remaining_this_month: remainingBalance,
+              carried_forward: typedData.carried_forward || 0
+            });
+          }
         }
         // For other leave types, use RPC function
         else {
