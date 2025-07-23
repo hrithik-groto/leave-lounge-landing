@@ -89,16 +89,37 @@ serve(async (req) => {
         // Step 2: Asynchronously update modal with real data
         console.log(`🔄 Updating modal with real data...`);
         
-        // Get user profile
-        const { data: profile } = await supabase
+        // Get or create user profile
+        let profile;
+        const { data: existingProfile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single();
 
-        if (!profile) {
-          console.error('❌ User profile not found');
-          return new Response('User not found', { status: 404 });
+        if (!existingProfile) {
+          console.log(`👤 Creating new profile for user: ${user.id}`);
+          // Create the user profile if it doesn't exist
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.profile?.email || `${user.name}@slack.user`,
+              name: user.real_name || user.name || 'Slack User'
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            console.error('❌ Error creating user profile:', createError);
+            return new Response('Failed to create user profile', { status: 500 });
+          }
+          
+          profile = newProfile;
+          console.log(`✅ Created new profile for user: ${user.id}`);
+        } else {
+          profile = existingProfile;
+          console.log(`✅ Found existing profile for user: ${user.id}`);
         }
 
         // Get leave types
