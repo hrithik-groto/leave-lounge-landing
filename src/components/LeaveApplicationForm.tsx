@@ -260,8 +260,20 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const availableLeaveTypes = getAvailableLeaveTypes();
 
   return (
-    <div className="max-h-[80vh] overflow-y-auto">
+    <div className="max-h-[80vh] overflow-y-auto p-1">
       <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto p-4">
+        {/* Show warning if Additional WFH is not available but user has exhausted additional WFH */}
+        {wfhRemaining <= 0 && additionalWfhUsed > 0 && !selectedLeaveType && (
+          <div className="p-3 rounded-md text-sm bg-yellow-50 border border-yellow-200 text-yellow-800">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>
+                You have exhausted your additional work from home quota for this month. Please wait for next month to get 0 new days.
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label htmlFor="leave-type">Leave Type *</Label>
           <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>

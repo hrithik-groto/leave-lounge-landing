@@ -41,10 +41,12 @@ const TabbedLeaveApplications: React.FC<TabbedLeaveApplicationsProps> = ({
         />
       </TabsContent>
 
-      <TabsContent value="leaves-remaining">
-        <div className="space-y-6 p-6">
-          <h2 className="text-2xl font-bold text-gray-900">Leave Balance Overview</h2>
-          <ComprehensiveLeaveBalance />
+      <TabsContent value="leaves-remaining" className="min-h-0">
+        <div className="space-y-4 p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <h2 className="text-xl font-bold text-gray-900 sticky top-0 bg-white pb-2">Leave Balance Overview</h2>
+          <div className="min-h-0 flex-1">
+            <ComprehensiveLeaveBalance />
+          </div>
         </div>
       </TabsContent>
       
