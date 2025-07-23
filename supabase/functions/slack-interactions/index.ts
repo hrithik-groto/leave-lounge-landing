@@ -137,7 +137,7 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     }
     
     return {
-      text: { type: 'plain_text', text: displayText, emoji: true },
+      text: { type: 'plain_text', text: displayText },
       value: type.id
     };
   });
@@ -162,9 +162,9 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
   const modal = {
     type: 'modal',
     callback_id: 'leave_application_modal',
-    title: { type: 'plain_text', text: '🌿 Apply for Leave', emoji: true },
-    submit: { type: 'plain_text', text: 'Apply', emoji: true },
-    close: { type: 'plain_text', text: 'Cancel', emoji: true },
+    title: { type: 'plain_text', text: '🌿 Apply for Leave' },
+    submit: { type: 'plain_text', text: 'Apply' },
+    close: { type: 'plain_text', text: 'Cancel' },
     private_metadata: userId,
     blocks: [
       {
@@ -185,11 +185,11 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
       {
         type: 'input',
         block_id: 'leave_type',
-        label: { type: 'plain_text', text: 'Leave Type', emoji: true },
+        label: { type: 'plain_text', text: 'Leave Type' },
         element: {
           type: 'static_select',
           action_id: 'leave_type_select',
-          placeholder: { type: 'plain_text', text: '🍃 Select a leave type', emoji: true },
+          placeholder: { type: 'plain_text', text: '🍃 Select a leave type' },
           options: leaveOptions
         }
       },
@@ -205,20 +205,20 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
             type: 'datepicker',
             action_id: 'start_date_picker',
             initial_date: new Date().toISOString().split('T')[0],
-            placeholder: { type: 'plain_text', text: 'Today', emoji: true }
+            placeholder: { type: 'plain_text', text: 'Today' }
           },
           {
             type: 'static_select',
             action_id: 'start_time_select',
-            placeholder: { type: 'plain_text', text: 'Start of day', emoji: true },
+            placeholder: { type: 'plain_text', text: 'Start of day' },
             initial_option: {
-              text: { type: 'plain_text', text: 'Start of day (10:00 AM)', emoji: true },
+              text: { type: 'plain_text', text: 'Start of day (10:00 AM)' },
               value: 'start_of_day'
             },
             options: [
-              { text: { type: 'plain_text', text: 'Start of day (10:00 AM)', emoji: true }, value: 'start_of_day' },
-              { text: { type: 'plain_text', text: 'After lunch (2:45 PM)', emoji: true }, value: 'after_lunch' },
-              { text: { type: 'plain_text', text: 'Custom time', emoji: true }, value: 'custom' }
+              { text: { type: 'plain_text', text: 'Start of day (10:00 AM)' }, value: 'start_of_day' },
+              { text: { type: 'plain_text', text: 'After lunch (2:45 PM)' }, value: 'after_lunch' },
+              { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
             ]
           }
         ]
@@ -235,20 +235,20 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
             type: 'datepicker',
             action_id: 'end_date_picker',
             initial_date: new Date().toISOString().split('T')[0],
-            placeholder: { type: 'plain_text', text: 'Today', emoji: true }
+            placeholder: { type: 'plain_text', text: 'Today' }
           },
           {
             type: 'static_select',
             action_id: 'end_time_select',
-            placeholder: { type: 'plain_text', text: 'End of day', emoji: true },
+            placeholder: { type: 'plain_text', text: 'End of day' },
             initial_option: {
-              text: { type: 'plain_text', text: 'End of day (6:30 PM)', emoji: true },
+              text: { type: 'plain_text', text: 'End of day (6:30 PM)' },
               value: 'end_of_day'
             },
             options: [
-              { text: { type: 'plain_text', text: 'End of day (6:30 PM)', emoji: true }, value: 'end_of_day' },
-              { text: { type: 'plain_text', text: 'Before lunch (2:00 PM)', emoji: true }, value: 'before_lunch' },
-              { text: { type: 'plain_text', text: 'Custom time', emoji: true }, value: 'custom' }
+              { text: { type: 'plain_text', text: 'End of day (6:30 PM)' }, value: 'end_of_day' },
+              { text: { type: 'plain_text', text: 'Before lunch (2:00 PM)' }, value: 'before_lunch' },
+              { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
             ]
           }
         ]
@@ -256,12 +256,12 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
       {
         type: 'input',
         block_id: 'reason',
-        label: { type: 'plain_text', text: 'Reason', emoji: true },
+        label: { type: 'plain_text', text: 'Reason' },
         optional: true,
         element: {
           type: 'plain_text_input',
           action_id: 'reason_input',
-          placeholder: { type: 'plain_text', text: 'Add a reason (required)', emoji: true },
+          placeholder: { type: 'plain_text', text: 'Add a reason (required)' },
           multiline: true
         }
       }
@@ -609,8 +609,8 @@ async function handleLeaveSubmission(payload: any, supabaseClient: any) {
       response_action: 'update',
       view: {
         type: 'modal',
-        title: { type: 'plain_text', text: '✅ Leave Applied!', emoji: true },
-        close: { type: 'plain_text', text: 'Close', emoji: true },
+        title: { type: 'plain_text', text: '✅ Leave Applied!' },
+        close: { type: 'plain_text', text: 'Close' },
         blocks: [
           {
             type: 'section',
