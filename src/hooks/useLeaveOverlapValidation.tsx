@@ -88,8 +88,9 @@ export const useLeaveOverlapValidation = (
             p_year: startDate.getFullYear()
           });
 
-        if (balanceData) {
-          remainingBalance = balanceData.remaining_this_month || 0;
+        if (balanceData && typeof balanceData === 'object') {
+          const balance = balanceData as { remaining_this_month: number };
+          remainingBalance = balance.remaining_this_month || 0;
         }
       }
 

@@ -47,7 +47,12 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
           return;
         }
 
-        setBalance(data);
+        // Ensure data is properly typed
+        if (data && typeof data === 'object') {
+          setBalance(data as LeaveBalance);
+        } else {
+          setError('Invalid balance data received');
+        }
       } catch (err) {
         console.error('Error in useLeaveBalance:', err);
         setError('Failed to load balance');
