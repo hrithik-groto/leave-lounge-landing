@@ -33,6 +33,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [wfhRemaining, setWfhRemaining] = useState(0);
   const [wfhLoading, setWfhLoading] = useState(false);
+  const [wfhBalanceChecked, setWfhBalanceChecked] = useState(false);
 
   const { user } = useUser();
   const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
@@ -75,9 +76,14 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
         .eq('label', 'Work From Home')
         .single();
 
-      if (wfhError) throw wfhError;
+      if (wfhError) {
+        console.error('Error finding WFH leave type:', wfhError);
+        setWfhRemaining(0);
+        setWfhBalanceChecked(true);
+        return;
+      }
 
-      // Check WFH balance
+      // Check WFH balance using the RPC function
       const { data: wfhBalance, error: balanceError } = await supabase
         .rpc('get_monthly_leave_balance', {
           p_user_id: user.id,
@@ -86,16 +92,22 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
           p_year: new Date().getFullYear()
         });
 
-      if (balanceError) throw balanceError;
-
-      // Type cast the response properly
-      const typedBalance = wfhBalance as unknown as { remaining_this_month: number };
-      const remaining = typedBalance?.remaining_this_month || 0;
+      if (balanceError) {
+        console.error('Error checking WFH balance:', balanceError);
+        setWfhRemaining(0);
+      } else {
+        // Type cast the response properly
+        const typedBalance = wfhBalance as unknown as { remaining_this_month: number };
+        const remaining = typedBalance?.remaining_this_month || 0;
+        console.log('WFH remaining balance:', remaining);
+        setWfhRemaining(remaining);
+      }
       
-      setWfhRemaining(remaining);
+      setWfhBalanceChecked(true);
     } catch (error) {
       console.error('Error checking WFH status:', error);
       setWfhRemaining(0);
+      setWfhBalanceChecked(true);
     } finally {
       setWfhLoading(false);
     }
@@ -103,14 +115,18 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
 
   // Filter leave types based on WFH exhaustion
   const getAvailableLeaveTypes = () => {
+    if (!wfhBalanceChecked) return leaveTypes; // Show all while loading
+    
     return leaveTypes.filter(type => {
       // Show all leave types except Additional work from home
       if (type.label !== 'Additional work from home') {
         return true;
       }
       
-      // Only show Additional work from home if regular WFH is exhausted
-      return wfhRemaining <= 0;
+      // Only show Additional work from home if regular WFH is exhausted (remaining <= 0)
+      const canShowAdditionalWFH = wfhRemaining <= 0;
+      console.log('Can show Additional WFH:', canShowAdditionalWFH, 'WFH remaining:', wfhRemaining);
+      return canShowAdditionalWFH;
     });
   };
 
@@ -222,11 +238,17 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
           </div>
         )}
 
-        {wfhRemaining > 0 && (
+        {wfhRemaining > 0 && wfhBalanceChecked && (
           <div className="mt-2 p-3 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-800">
             <span>
               You have {wfhRemaining} days of regular Work From Home remaining this month.
             </span>
+          </div>
+        )}
+
+        {wfhLoading && (
+          <div className="mt-2 p-3 rounded-md text-sm bg-gray-50 border border-gray-200 text-gray-600">
+            <span>Checking Work From Home balance...</span>
           </div>
         )}
       </div>

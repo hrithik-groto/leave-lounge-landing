@@ -62,7 +62,7 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
           
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Used This Month:</span>
-            <span className="font-medium text-sm">{balance.used_this_month} days</span>
+            <span className="font-medium text-sm">{balance.used_this_month || 0} days</span>
           </div>
 
           <div className="flex justify-between items-center">
@@ -80,13 +80,13 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
 
         {!canApply && (
           <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
-            You can only apply for Additional Work From Home after exhausting your regular Work From Home quota ({wfhRemaining} days remaining).
+            You can only apply for Additional Work From Home after exhausting your regular Work From Home quota. You still have {wfhRemaining} days of regular WFH remaining.
           </div>
         )}
 
         {canApply && (
           <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-600">
-            You can now apply for Additional Work From Home as your regular WFH quota has been exhausted. No limit on applications.
+            ✓ You can now apply for Additional Work From Home as your regular WFH quota has been exhausted. No limit on applications.
           </div>
         )}
       </CardContent>
