@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { Send, X, MessageCircle, Bot, User, ArrowLeft, Calendar, Clock, Users, HelpCircle, Gamepad2, Lightbulb } from 'lucide-react';
+import { Send, X, MessageCircle, Bot, User, ArrowLeft, Calendar, Clock, Gamepad2, Lightbulb, Brain, HelpCircle } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ const FloatingChatWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showMainMenu, setShowMainMenu] = useState(true);
   const [currentCategory, setCurrentCategory] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('help');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -106,6 +108,7 @@ const FloatingChatWidget = () => {
   const handleBack = () => {
     setShowMainMenu(true);
     setCurrentCategory(null);
+    setActiveTab('help');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -179,82 +182,207 @@ const FloatingChatWidget = () => {
 
           <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
             {showMainMenu ? (
-              <ScrollArea className="flex-1">
-                <div className="p-3 sm:p-4 space-y-4">
-                  <div className="text-center mb-4">
-                    <h3 className="text-base sm:text-lg font-semibold text-primary mb-2">How can I help you?</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground">Choose a category or ask me anything!</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    <Button
-                      variant="outline"
-                      className="h-auto p-2 sm:p-3 flex flex-col items-center gap-1 sm:gap-2 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
-                      onClick={() => handleCategorySelect('timeloo', 'Tell me about Timeloo features')}
-                    >
-                      <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                      <span className="text-xs font-medium">Timeloo Help</span>
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      className="h-auto p-2 sm:p-3 flex flex-col items-center gap-1 sm:gap-2 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
-                      onClick={() => handleCategorySelect('leave', 'How do I apply for leave?')}
-                    >
-                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                      <span className="text-xs font-medium">Leave Help</span>
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      className="h-auto p-2 sm:p-3 flex flex-col items-center gap-1 sm:gap-2 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
-                      onClick={() => handleCategorySelect('games', 'Let\'s play some games!')}
-                    >
-                      <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                      <span className="text-xs font-medium">Games</span>
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      className="h-auto p-2 sm:p-3 flex flex-col items-center gap-1 sm:gap-2 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
-                      onClick={() => handleCategorySelect('facts', 'Tell me a fun fact')}
-                    >
-                      <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                      <span className="text-xs font-medium">Fun Facts</span>
-                    </Button>
-                  </div>
+              <div className="flex-1 overflow-hidden">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                  <TabsList className="grid w-full grid-cols-4 m-2 bg-muted">
+                    <TabsTrigger value="help" className="text-xs">
+                      <HelpCircle className="w-3 h-3 mr-1" />
+                      Help
+                    </TabsTrigger>
+                    <TabsTrigger value="games" className="text-xs">
+                      <Gamepad2 className="w-3 h-3 mr-1" />
+                      Games
+                    </TabsTrigger>
+                    <TabsTrigger value="riddles" className="text-xs">
+                      <Brain className="w-3 h-3 mr-1" />
+                      Riddles
+                    </TabsTrigger>
+                    <TabsTrigger value="facts" className="text-xs">
+                      <Lightbulb className="w-3 h-3 mr-1" />
+                      Facts
+                    </TabsTrigger>
+                  </TabsList>
 
-                  <div className="mt-4">
-                    <p className="text-xs text-muted-foreground text-center mb-2">Quick Actions</p>
-                    <div className="flex flex-wrap gap-1 sm:gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCategorySelect('riddle', 'Give me a riddle')}
-                        className="text-xs hover:bg-primary/10 px-2 py-1"
-                      >
-                        🧩 Riddle
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCategorySelect('math', 'Math problem')}
-                        className="text-xs hover:bg-primary/10 px-2 py-1"
-                      >
-                        🔢 Math
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCategorySelect('help', 'What can you do?')}
-                        className="text-xs hover:bg-primary/10 px-2 py-1"
-                      >
-                        ❓ Help
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </ScrollArea>
+                  <TabsContent value="help" className="flex-1 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      <div className="p-3 sm:p-4 space-y-4">
+                        <div className="text-center mb-4">
+                          <h3 className="text-base sm:text-lg font-semibold text-primary mb-2">How can I help you?</h3>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Choose a category or ask me anything!</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <Button
+                            variant="outline"
+                            className="h-auto p-2 sm:p-3 flex flex-col items-center gap-1 sm:gap-2 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('timeloo', 'Tell me about Timeloo features')}
+                          >
+                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                            <span className="text-xs font-medium">Timeloo Help</span>
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            className="h-auto p-2 sm:p-3 flex flex-col items-center gap-1 sm:gap-2 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('leave', 'How do I apply for leave?')}
+                          >
+                            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                            <span className="text-xs font-medium">Leave Help</span>
+                          </Button>
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="text-xs text-muted-foreground text-center mb-2">Quick Actions</p>
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCategorySelect('help', 'What can you do?')}
+                              className="text-xs hover:bg-primary/10 px-2 py-1"
+                            >
+                              ❓ Help
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCategorySelect('weather', 'What\'s the weather like?')}
+                              className="text-xs hover:bg-primary/10 px-2 py-1"
+                            >
+                              🌤️ Weather
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  <TabsContent value="games" className="flex-1 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      <div className="p-3 sm:p-4 space-y-4">
+                        <div className="text-center mb-4">
+                          <Gamepad2 className="w-8 h-8 text-primary mx-auto mb-2" />
+                          <h3 className="text-base sm:text-lg font-semibold text-primary mb-2">Fun Games</h3>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Choose a game to play!</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('math', 'Give me a math problem')}
+                          >
+                            <span className="text-lg">🔢</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Math Challenge</p>
+                              <p className="text-xs text-muted-foreground">Test your calculation skills</p>
+                            </div>
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('trivia', 'Ask me a trivia question')}
+                          >
+                            <span className="text-lg">🧠</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Trivia Challenge</p>
+                              <p className="text-xs text-muted-foreground">Test your general knowledge</p>
+                            </div>
+                          </Button>
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  <TabsContent value="riddles" className="flex-1 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      <div className="p-3 sm:p-4 space-y-4">
+                        <div className="text-center mb-4">
+                          <Brain className="w-8 h-8 text-primary mx-auto mb-2" />
+                          <h3 className="text-base sm:text-lg font-semibold text-primary mb-2">Brain Teasers</h3>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Challenge your mind with riddles!</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('riddle', 'Give me a riddle')}
+                          >
+                            <span className="text-lg">🧩</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Classic Riddles</p>
+                              <p className="text-xs text-muted-foreground">Think outside the box</p>
+                            </div>
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('riddle', 'Give me a hard riddle')}
+                          >
+                            <span className="text-lg">🤔</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Hard Riddles</p>
+                              <p className="text-xs text-muted-foreground">For the puzzle masters</p>
+                            </div>
+                          </Button>
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  <TabsContent value="facts" className="flex-1 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      <div className="p-3 sm:p-4 space-y-4">
+                        <div className="text-center mb-4">
+                          <Lightbulb className="w-8 h-8 text-primary mx-auto mb-2" />
+                          <h3 className="text-base sm:text-lg font-semibold text-primary mb-2">Amazing Facts</h3>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Discover interesting facts!</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('facts', 'Tell me a fun fact')}
+                          >
+                            <span className="text-lg">🌟</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Random Fun Facts</p>
+                              <p className="text-xs text-muted-foreground">Learn something new</p>
+                            </div>
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('facts', 'Tell me a science fact')}
+                          >
+                            <span className="text-lg">🔬</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Science Facts</p>
+                              <p className="text-xs text-muted-foreground">Explore the world of science</p>
+                            </div>
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            className="w-full h-auto p-3 flex items-center justify-start gap-3 hover:bg-primary/10 hover:border-primary/30 transition-all duration-200"
+                            onClick={() => handleCategorySelect('facts', 'Tell me an animal fact')}
+                          >
+                            <span className="text-lg">🦁</span>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">Animal Facts</p>
+                              <p className="text-xs text-muted-foreground">Amazing animal world</p>
+                            </div>
+                          </Button>
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              </div>
             ) : (
               <>
                 <ScrollArea className="flex-1 px-3 sm:px-4 py-2">
