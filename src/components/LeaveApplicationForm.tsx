@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +30,10 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [wfhRemaining, setWfhRemaining] = useState(0);
+  const [wfhRemaining, setWfhRemaining] = useState(2);
   const [wfhLoading, setWfhLoading] = useState(false);
   const [wfhBalanceChecked, setWfhBalanceChecked] = useState(false);
+  const [additionalWfhUsed, setAdditionalWfhUsed] = useState(0);
 
   const { user } = useUser();
   const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
@@ -83,30 +83,83 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
         return;
       }
 
-      // Check WFH balance using the RPC function
-      const { data: wfhBalance, error: balanceError } = await supabase
-        .rpc('get_monthly_leave_balance', {
-          p_user_id: user.id,
-          p_leave_type_id: wfhLeaveType.id,
-          p_month: new Date().getMonth() + 1,
-          p_year: new Date().getFullYear()
-        });
+      // Get the Additional Work From Home leave type ID
+      const { data: additionalWfhLeaveType, error: additionalWfhError } = await supabase
+        .from('leave_types')
+        .select('id')
+        .eq('label', 'Additional work from home')
+        .single();
 
-      if (balanceError) {
-        console.error('Error checking WFH balance:', balanceError);
-        setWfhRemaining(0);
-      } else {
-        // Type cast the response properly
-        const typedBalance = wfhBalance as unknown as { remaining_this_month: number };
-        const remaining = typedBalance?.remaining_this_month || 0;
-        console.log('WFH remaining balance:', remaining);
-        setWfhRemaining(remaining);
+      // Check regular WFH balance
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+
+      const { data: wfhLeaves, error: wfhLeavesError } = await supabase
+        .from('leave_applied_users')
+        .select('actual_days_used, is_half_day, start_date, end_date')
+        .eq('user_id', user.id)
+        .eq('leave_type_id', wfhLeaveType.id)
+        .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+        .lt('start_date', currentMonth === 12 
+          ? `${currentYear + 1}-01-01` 
+          : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+        .in('status', ['approved', 'pending']);
+
+      if (wfhLeavesError) {
+        console.error('Error fetching WFH leaves:', wfhLeavesError);
+        setWfhRemaining(2);
+        setWfhBalanceChecked(true);
+        return;
+      }
+
+      // Calculate total regular WFH days used
+      const totalWfhDaysUsed = wfhLeaves?.reduce((total, leave) => {
+        if (leave.actual_days_used) {
+          return total + leave.actual_days_used;
+        }
+        if (leave.is_half_day) {
+          return total + 0.5;
+        }
+        const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+        return total + daysDiff;
+      }, 0) || 0;
+
+      const remainingWfh = Math.max(0, 2 - totalWfhDaysUsed);
+      setWfhRemaining(remainingWfh);
+
+      // Check Additional WFH usage if available
+      if (!additionalWfhError && additionalWfhLeaveType) {
+        const { data: additionalWfhLeaves, error: additionalWfhLeavesError } = await supabase
+          .from('leave_applied_users')
+          .select('actual_days_used, is_half_day, start_date, end_date')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', additionalWfhLeaveType.id)
+          .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+          .lt('start_date', currentMonth === 12 
+            ? `${currentYear + 1}-01-01` 
+            : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+          .in('status', ['approved', 'pending']);
+
+        if (!additionalWfhLeavesError) {
+          const totalAdditionalWfhDaysUsed = additionalWfhLeaves?.reduce((total, leave) => {
+            if (leave.actual_days_used) {
+              return total + leave.actual_days_used;
+            }
+            if (leave.is_half_day) {
+              return total + 0.5;
+            }
+            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+            return total + daysDiff;
+          }, 0) || 0;
+
+          setAdditionalWfhUsed(totalAdditionalWfhDaysUsed);
+        }
       }
       
       setWfhBalanceChecked(true);
     } catch (error) {
       console.error('Error checking WFH status:', error);
-      setWfhRemaining(0);
+      setWfhRemaining(2);
       setWfhBalanceChecked(true);
     } finally {
       setWfhLoading(false);
@@ -222,6 +275,9 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
                     style={{ backgroundColor: type.color }}
                   />
                   {type.label}
+                  {type.label === 'Additional work from home' && (
+                    <span className="text-xs text-orange-600 font-medium">(Activated)</span>
+                  )}
                 </div>
               </SelectItem>
             ))}
@@ -232,16 +288,27 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
           <div className="mt-2 p-3 rounded-md text-sm bg-green-50 border border-green-200 text-green-800">
             <div className="flex items-center gap-2">
               <span>
-                ✓ You can apply for Additional Work From Home as your regular WFH quota is exhausted. No limit on applications.
+                ✓ Additional Work From Home is now available as your regular WFH quota (2 days/month) has been exhausted. You can apply for unlimited additional WFH days.
               </span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-green-300">
+              <span className="font-medium">Additional WFH used this month: {additionalWfhUsed} days</span>
             </div>
           </div>
         )}
 
-        {wfhRemaining > 0 && wfhBalanceChecked && (
+        {selectedLeaveType?.label === 'Work From Home' && wfhBalanceChecked && (
           <div className="mt-2 p-3 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-800">
             <span>
-              You have {wfhRemaining} days of regular Work From Home remaining this month.
+              You have {wfhRemaining} days of regular Work From Home remaining this month (2 days/month limit).
+            </span>
+          </div>
+        )}
+
+        {wfhRemaining <= 0 && wfhBalanceChecked && !selectedLeaveType && (
+          <div className="mt-2 p-3 rounded-md text-sm bg-orange-50 border border-orange-200 text-orange-800">
+            <span>
+              Your regular Work From Home quota is exhausted. "Additional work from home" is now available in the dropdown with no monthly limit.
             </span>
           </div>
         )}
