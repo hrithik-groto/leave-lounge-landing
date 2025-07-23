@@ -14,7 +14,14 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
   leaveTypeId,
   refreshTrigger
 }) => {
-  const { canApply, wfhRemaining, loading, additionalWfhUsed } = useAdditionalWFHValidation(leaveTypeId);
+  const { 
+    canApply, 
+    wfhRemaining, 
+    loading, 
+    additionalWfhUsed, 
+    additionalWfhRemaining,
+    annualAllowance 
+  } = useAdditionalWFHValidation(leaveTypeId);
 
   if (loading) {
     return (
@@ -29,8 +36,11 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
     );
   }
 
-  // Only show if Additional WFH can be applied (regular WFH is exhausted)
+  // Show unavailable state if regular WFH is not exhausted OR annual quota is exhausted
   if (!canApply) {
+    const isWfhNotExhausted = wfhRemaining > 0;
+    const isAnnualQuotaExhausted = additionalWfhRemaining <= 0;
+
     return (
       <Card className="w-full border-orange-200">
         <CardHeader className="pb-3">
@@ -38,16 +48,38 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
             <Home className="h-4 w-4" />
             Additional Work From Home
             <Badge variant="secondary" className="text-xs">
-              Not Available
+              {isAnnualQuotaExhausted ? 'Quota Exhausted' : 'Not Available'}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
+          <div className="grid grid-cols-1 gap-2 mb-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Annual Allowance:</span>
+              <span className="font-medium text-sm">{annualAllowance} days</span>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Used This Year:</span>
+              <span className="font-medium text-sm">{additionalWfhUsed} days</span>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Remaining This Year:</span>
+              <Badge variant={additionalWfhRemaining <= 0 ? "destructive" : "default"} className="text-xs">
+                {additionalWfhRemaining} days
+              </Badge>
+            </div>
+          </div>
+
           <div className="p-3 rounded-md text-sm bg-orange-50 border border-orange-200 text-orange-800">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
               <span>
-                Use your regular Work From Home quota first. You have {wfhRemaining} days remaining this month.
+                {isAnnualQuotaExhausted 
+                  ? `Annual quota of ${annualAllowance} days exhausted. Wait for next year to apply for Additional WFH.`
+                  : `Use your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`
+                }
               </span>
             </div>
           </div>
@@ -71,29 +103,40 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
         <div className="p-3 rounded-md text-sm bg-green-50 border border-green-200 text-green-800">
           <div className="flex items-center gap-2">
             <span>
-              ✓ Now available! Your regular Work From Home quota has been exhausted. You can apply for unlimited additional WFH days.
+              ✓ Now available! Your regular Work From Home quota has been exhausted.
             </span>
           </div>
         </div>
         
         <div className="grid grid-cols-1 gap-2">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Monthly Limit:</span>
-            <span className="font-medium text-sm">Unlimited</span>
+            <span className="text-sm text-muted-foreground">Annual Allowance:</span>
+            <span className="font-medium text-sm">{annualAllowance} days</span>
           </div>
 
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Used This Month:</span>
+            <span className="text-sm text-muted-foreground">Used This Year:</span>
             <span className="font-medium text-sm">{additionalWfhUsed} days</span>
           </div>
 
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Status:</span>
+            <span className="text-sm text-muted-foreground">Remaining This Year:</span>
             <Badge variant="default" className="text-xs bg-green-600">
-              Active
+              {additionalWfhRemaining} days
             </Badge>
           </div>
         </div>
+
+        {additionalWfhRemaining <= 5 && (
+          <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>
+                Only {additionalWfhRemaining} days remaining for this year. Plan accordingly!
+              </span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

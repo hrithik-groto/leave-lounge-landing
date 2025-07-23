@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -13,6 +12,8 @@ interface LeaveBalance {
   carried_forward?: number;
   can_apply?: boolean;
   wfh_remaining?: number;
+  used_this_year?: number;
+  remaining_this_year?: number;
 }
 
 // Create a type for the RPC response
@@ -29,6 +30,8 @@ interface LeaveBalanceResponse {
   remaining_balance?: number;
   can_apply?: boolean;
   wfh_remaining?: number;
+  used_this_year?: number;
+  remaining_this_year?: number;
 }
 
 export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) => {
@@ -63,94 +66,42 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
         const leaveTypeLabel = leaveTypeData?.label;
 
-        // For Additional work from home, check if regular WFH is exhausted
+        // For Additional work from home, use the updated RPC function that returns annual data
         if (leaveTypeLabel === 'Additional work from home') {
           const currentMonth = new Date().getMonth() + 1;
           const currentYear = new Date().getFullYear();
 
-          // Get the Work From Home leave type ID
-          const { data: wfhLeaveType, error: wfhError } = await supabase
-            .from('leave_types')
-            .select('id')
-            .eq('label', 'Work From Home')
-            .single();
+          const { data, error: balanceError } = await supabase
+            .rpc('get_monthly_leave_balance', {
+              p_user_id: user.id,
+              p_leave_type_id: leaveTypeId,
+              p_month: currentMonth,
+              p_year: currentYear
+            });
 
-          if (wfhError) {
-            console.error('Error finding WFH leave type:', wfhError);
-            setError('Could not find Work From Home leave type');
+          if (balanceError) {
+            console.error('Error fetching additional WFH balance:', balanceError);
+            setError('Could not fetch Additional WFH balance');
             return;
           }
 
-          // Check regular WFH balance
-          const { data: wfhLeaves, error: wfhLeavesError } = await supabase
-            .from('leave_applied_users')
-            .select('actual_days_used, is_half_day, start_date, end_date')
-            .eq('user_id', user.id)
-            .eq('leave_type_id', wfhLeaveType.id)
-            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-            .lt('start_date', currentMonth === 12 
-              ? `${currentYear + 1}-01-01` 
-              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-            .in('status', ['approved', 'pending']);
-
-          if (wfhLeavesError) {
-            console.error('Error fetching WFH leaves:', wfhLeavesError);
-            setError('Could not fetch WFH leaves');
-            return;
+          // Type guard to ensure data is properly typed
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const typedData = data as unknown as LeaveBalanceResponse;
+            
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: 'days',
+              monthly_allowance: 0, // Not applicable for annual leave
+              used_this_month: 0, // Not applicable for annual leave
+              remaining_this_month: typedData.remaining_this_year || 0,
+              annual_allowance: typedData.annual_allowance || 24,
+              used_this_year: typedData.used_this_year || 0,
+              remaining_this_year: typedData.remaining_this_year || 24,
+              can_apply: typedData.can_apply,
+              wfh_remaining: typedData.wfh_remaining
+            });
           }
-
-          // Calculate total regular WFH days used
-          const totalWfhDaysUsed = wfhLeaves?.reduce((total, leave) => {
-            if (leave.actual_days_used) {
-              return total + leave.actual_days_used;
-            }
-            if (leave.is_half_day) {
-              return total + 0.5;
-            }
-            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
-            return total + daysDiff;
-          }, 0) || 0;
-
-          const remainingWfh = Math.max(0, 2 - totalWfhDaysUsed);
-
-          // Get additional WFH usage
-          const { data: additionalWfhLeaves, error: additionalWfhError } = await supabase
-            .from('leave_applied_users')
-            .select('actual_days_used, is_half_day, start_date, end_date')
-            .eq('user_id', user.id)
-            .eq('leave_type_id', leaveTypeId)
-            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-            .lt('start_date', currentMonth === 12 
-              ? `${currentYear + 1}-01-01` 
-              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-            .in('status', ['approved', 'pending']);
-
-          if (additionalWfhError) {
-            console.error('Error fetching additional WFH leaves:', additionalWfhError);
-            setError('Could not fetch additional WFH leaves');
-            return;
-          }
-
-          const totalAdditionalWfhDaysUsed = additionalWfhLeaves?.reduce((total, leave) => {
-            if (leave.actual_days_used) {
-              return total + leave.actual_days_used;
-            }
-            if (leave.is_half_day) {
-              return total + 0.5;
-            }
-            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
-            return total + daysDiff;
-          }, 0) || 0;
-
-          setBalance({
-            leave_type: leaveTypeLabel,
-            duration_type: 'days',
-            monthly_allowance: 999, // Unlimited
-            used_this_month: totalAdditionalWfhDaysUsed,
-            remaining_this_month: 999, // Unlimited
-            can_apply: remainingWfh <= 0, // Only available when regular WFH is exhausted
-            wfh_remaining: remainingWfh
-          });
         }
         // For Short Leave, calculate from actual records
         else if (leaveTypeLabel === 'Short Leave') {
