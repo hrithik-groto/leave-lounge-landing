@@ -1,22 +1,25 @@
 
-import { Home, Shield, TestTube } from "lucide-react";
+import { HomeIcon, Shield } from "lucide-react";
 import Index from "./pages/Index";
-import AdminDashboard from "./pages/AdminDashboard";
 import Dashboard from "./pages/Dashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import TestNotifications from "./pages/TestNotifications";
 import NotFound from "./pages/NotFound";
 
+/**
+ * Central place for defining the navigation items. Used for navigation components and routing.
+ */
 export const navItems = [
   {
     title: "Home",
     to: "/",
-    icon: <Home className="h-4 w-4" />,
+    icon: <HomeIcon className="h-4 w-4" />,
     page: <Index />,
   },
   {
     title: "Dashboard",
     to: "/dashboard",
-    icon: <Shield className="h-4 w-4" />,
+    icon: <HomeIcon className="h-4 w-4" />,
     page: <Dashboard />,
   },
   {
@@ -28,13 +31,13 @@ export const navItems = [
   {
     title: "Test Notifications",
     to: "/test-notifications",
-    icon: <TestTube className="h-4 w-4" />,
+    icon: <HomeIcon className="h-4 w-4" />,
     page: <TestNotifications />,
   },
   {
-    title: "404",
+    title: "Not Found",
     to: "*",
-    icon: <Home className="h-4 w-4" />,
+    icon: <HomeIcon className="h-4 w-4" />,
     page: <NotFound />,
   },
 ];

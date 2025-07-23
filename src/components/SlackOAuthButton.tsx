@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,10 +34,16 @@ const SlackOAuthButton = () => {
     };
     
     handleUrlChange();
-    window.addEventListener('popstate', handleUrlChange);
+    
+    // Also listen for browser navigation events
+    const handlePopState = () => {
+      handleUrlChange();
+    };
+    
+    window.addEventListener('popstate', handlePopState);
     
     return () => {
-      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('popstate', handlePopState);
     };
   }, [user, toast]);
 
@@ -75,6 +82,11 @@ const SlackOAuthButton = () => {
       window.location.href = oauthUrl;
     } catch (error) {
       console.error('Error starting OAuth flow:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start Slack connection. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 

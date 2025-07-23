@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -105,8 +106,8 @@ serve(async (req) => {
 
     console.log('Successfully saved Slack integration for user:', state);
 
-    // Redirect to success page
-    const redirectUrl = `https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/dashboard?slack_connected=true`;
+    // Redirect to index page with success parameter
+    const redirectUrl = `https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/?slack_connected=true`;
     
     return new Response(null, {
       status: 302,
