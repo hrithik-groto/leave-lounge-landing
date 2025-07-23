@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
 import { useLeaveOverlapValidation } from "@/hooks/useLeaveOverlapValidation";
+import { useAdditionalWFHValidation } from "@/hooks/useAdditionalWFHValidation";
 
 interface LeaveType {
   id: string;
@@ -69,6 +70,9 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
     isHalfDay,
     halfDayPeriod
   );
+
+  // Add Additional WFH validation hook
+  const { canApply: canApplyAdditionalWFH, wfhRemaining, loading: additionalWFHLoading } = useAdditionalWFHValidation(leaveTypeId);
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -200,6 +204,33 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
         setCurrentUsage({[selectedLeaveType.id]: totalDaysUsed});
       }
+      else if (selectedLeaveType.label === 'Additional work from home') {
+        const { data: leaves, error } = await supabase
+          .from('leave_applied_users')
+          .select('actual_days_used, is_half_day, start_date, end_date, status')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', selectedLeaveType.id)
+          .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+          .lt('start_date', currentMonth === 12 
+            ? `${currentYear + 1}-01-01` 
+            : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+          .in('status', ['approved', 'pending']);
+
+        if (error) throw error;
+
+        const totalDaysUsed = leaves?.reduce((total, leave) => {
+          if (leave.actual_days_used) {
+            return total + leave.actual_days_used;
+          }
+          if (leave.is_half_day) {
+            return total + 0.5;
+          }
+          const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+          return total + daysDiff;
+        }, 0) || 0;
+
+        setCurrentUsage({[selectedLeaveType.id]: totalDaysUsed});
+      }
       else {
         const { data: leaves, error } = await supabase
           .from('leave_applied_users')
@@ -262,6 +293,11 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
   const canApplyForLeave = () => {
     if (!selectedLeaveType) return false;
     
+    // Special handling for Additional WFH
+    if (selectedLeaveType.label === 'Additional work from home') {
+      return canApplyAdditionalWFH;
+    }
+    
     const monthlyAllowance = getMonthlyAllowance();
     const used = currentUsage[selectedLeaveType.id] || 0;
     const requestedAmount = calculateLeaveDuration();
@@ -289,6 +325,14 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
 
   const getValidationMessage = () => {
     if (!selectedLeaveType) return null;
+    
+    // Special handling for Additional WFH
+    if (selectedLeaveType.label === 'Additional work from home') {
+      if (!canApplyAdditionalWFH) {
+        return `You need to exhaust your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`;
+      }
+      return null;
+    }
     
     const monthlyAllowance = getMonthlyAllowance();
     const used = currentUsage[selectedLeaveType.id] || 0;
@@ -497,6 +541,20 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
                       <div>Used this month: {currentUsage[selectedLeaveType.id] || 0} days</div>
                       <div>Remaining: {currentUsage[`${selectedLeaveType.id}_remaining`] || 0} days</div>
                       <div>Carried forward: {currentUsage[`${selectedLeaveType.id}_carried_forward`] || 0} days</div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedLeaveType?.label === 'Additional work from home' && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                    <h4 className="text-sm font-medium text-green-900 mb-2">Additional Work From Home:</h4>
+                    <div className="space-y-1 text-sm text-green-800">
+                      <div>Used this month: {currentUsage[selectedLeaveType.id] || 0} days</div>
+                      <div>Monthly limit: Unlimited</div>
+                      <div>Status: {canApplyAdditionalWFH ? 'Available' : 'Not Available'}</div>
+                      {!canApplyAdditionalWFH && (
+                        <div className="text-orange-800">Regular WFH remaining: {wfhRemaining} days</div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -725,7 +783,7 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
               type="submit"
               form="leave-form" 
               className="w-full" 
-              disabled={isSubmitting || !canApplyForLeave() || !validationResult.canApply || validationLoading}
+              disabled={isSubmitting || !canApplyForLeave() || !validationResult.canApply || validationLoading || additionalWFHLoading}
             >
               {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
             </Button>

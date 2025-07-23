@@ -14,7 +14,7 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
   leaveTypeId,
   refreshTrigger
 }) => {
-  const { canApply, wfhRemaining, loading } = useAdditionalWFHValidation(leaveTypeId);
+  const { canApply, wfhRemaining, loading, additionalWfhUsed } = useAdditionalWFHValidation(leaveTypeId);
 
   if (loading) {
     return (
@@ -80,6 +80,11 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Monthly Limit:</span>
             <span className="font-medium text-sm">Unlimited</span>
+          </div>
+
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Used This Month:</span>
+            <span className="font-medium text-sm">{additionalWfhUsed} days</span>
           </div>
 
           <div className="flex justify-between items-center">
