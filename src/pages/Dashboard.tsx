@@ -11,7 +11,7 @@ import { Calendar, Clock, Users, FileText, MessageSquare, Bell, Settings } from 
 import AnnualLeaveInitializer from '@/components/AnnualLeaveInitializer';
 import QuickActions from '@/components/QuickActions';
 import { ComprehensiveLeaveBalance } from '@/components/ComprehensiveLeaveBalance';
-import { TabbedLeaveApplications } from '@/components/TabbedLeaveApplications';
+import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
 import AllUsersOnLeave from '@/components/AllUsersOnLeave';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import SlackIntegration from '@/components/SlackIntegration';
