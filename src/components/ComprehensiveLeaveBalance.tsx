@@ -1,9 +1,9 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, Clock, Home, AlertTriangle } from 'lucide-react';
 import { useLeaveBalance } from '@/hooks/useLeaveBalance';
+import { AdditionalWFHLeaveBalance } from './AdditionalWFHLeaveBalance';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
 import { useState, useEffect } from 'react';
@@ -22,20 +22,12 @@ interface ComprehensiveLeaveBalanceProps {
   refreshTrigger?: number;
 }
 
-// Create an interface for the RPC response
-interface MonthlyLeaveBalanceResponse {
-  used_this_month: number;
-  remaining_this_month: number;
-  carried_forward: number;
-  allocated_balance?: number;
-  monthly_allocation?: number;
-}
-
 export const ComprehensiveLeaveBalance: React.FC<ComprehensiveLeaveBalanceProps> = ({
   refreshTrigger
 }) => {
   const { user } = useUser();
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeConfig[]>([]);
+  const [additionalWFHId, setAdditionalWFHId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -45,22 +37,31 @@ export const ComprehensiveLeaveBalance: React.FC<ComprehensiveLeaveBalanceProps>
           .from('leave_types')
           .select('id, label, color')
           .eq('is_active', true)
-          .in('label', ['Paid Leave', 'Short Leave', 'Work From Home'])
           .order('label');
 
         if (error) throw error;
 
-        const leaveTypeConfigs: LeaveTypeConfig[] = data?.map(type => ({
-          id: type.id,
-          label: type.label,
-          icon: type.label === 'Short Leave' ? Clock : type.label === 'Work From Home' ? Home : Calendar,
-          monthlyAllowance: type.label === 'Paid Leave' ? 1.5 : type.label === 'Short Leave' ? 4 : 2,
-          unit: type.label === 'Short Leave' ? 'hours' : 'days',
-          color: type.color || '#3B82F6',
-          carryForward: type.label === 'Paid Leave' // Only Paid Leave gets carried forward
-        })) || [];
+        const mainLeaveTypes: LeaveTypeConfig[] = [];
+        let additionalWFHLeaveId: string | null = null;
 
-        setLeaveTypes(leaveTypeConfigs);
+        data?.forEach(type => {
+          if (type.label === 'Additional work from home') {
+            additionalWFHLeaveId = type.id;
+          } else if (['Paid Leave', 'Short Leave', 'Work From Home'].includes(type.label)) {
+            mainLeaveTypes.push({
+              id: type.id,
+              label: type.label,
+              icon: type.label === 'Short Leave' ? Clock : type.label === 'Work From Home' ? Home : Calendar,
+              monthlyAllowance: type.label === 'Paid Leave' ? 1.5 : type.label === 'Short Leave' ? 4 : 2,
+              unit: type.label === 'Short Leave' ? 'hours' : 'days',
+              color: type.color || '#3B82F6',
+              carryForward: type.label === 'Paid Leave'
+            });
+          }
+        });
+
+        setLeaveTypes(mainLeaveTypes);
+        setAdditionalWFHId(additionalWFHLeaveId);
       } catch (error) {
         console.error('Error fetching leave types:', error);
       } finally {
@@ -87,7 +88,7 @@ export const ComprehensiveLeaveBalance: React.FC<ComprehensiveLeaveBalanceProps>
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Leave Balance Overview</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {leaveTypes.map((leaveType) => (
           <LeaveBalanceCard
             key={leaveType.id}
@@ -95,6 +96,12 @@ export const ComprehensiveLeaveBalance: React.FC<ComprehensiveLeaveBalanceProps>
             refreshTrigger={refreshTrigger}
           />
         ))}
+        {additionalWFHId && (
+          <AdditionalWFHLeaveBalance
+            leaveTypeId={additionalWFHId}
+            refreshTrigger={refreshTrigger}
+          />
+        )}
       </div>
     </div>
   );
@@ -157,7 +164,7 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
 
           // Properly type and access the response data
           if (data && typeof data === 'object') {
-            const balanceData = data as unknown as MonthlyLeaveBalanceResponse;
+            const balanceData = data as any;
             
             setUsage({
               used: balanceData.used_this_month || 0,

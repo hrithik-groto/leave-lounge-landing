@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -11,6 +10,8 @@ interface LeaveBalance {
   remaining_this_month: number;
   annual_allowance?: number;
   carried_forward?: number;
+  can_apply?: boolean;
+  wfh_remaining?: number;
 }
 
 // Create a type for the RPC response
@@ -25,6 +26,8 @@ interface LeaveBalanceResponse {
   allocated_balance?: number;
   used_balance?: number;
   remaining_balance?: number;
+  can_apply?: boolean;
+  wfh_remaining?: number;
 }
 
 export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) => {
@@ -59,8 +62,40 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
         const leaveTypeLabel = leaveTypeData?.label;
 
+        // For Additional work from home, use the RPC function
+        if (leaveTypeLabel === 'Additional work from home') {
+          const { data, error: balanceError } = await supabase
+            .rpc('get_monthly_leave_balance', {
+              p_user_id: user.id,
+              p_leave_type_id: leaveTypeId,
+              p_month: new Date().getMonth() + 1,
+              p_year: new Date().getFullYear()
+            });
+
+          if (balanceError) {
+            console.error('Error fetching additional WFH balance:', balanceError);
+            setError(balanceError.message);
+            return;
+          }
+
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const typedData = data as unknown as LeaveBalanceResponse;
+            
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: 'days',
+              monthly_allowance: typedData.monthly_allowance || 999,
+              used_this_month: typedData.used_this_month || 0,
+              remaining_this_month: typedData.remaining_this_month || 999,
+              can_apply: typedData.can_apply || false,
+              wfh_remaining: typedData.wfh_remaining || 0
+            });
+          } else {
+            setError('Invalid balance data received');
+          }
+        }
         // For Short Leave, calculate from actual records
-        if (leaveTypeLabel === 'Short Leave') {
+        else if (leaveTypeLabel === 'Short Leave') {
           const currentMonth = new Date().getMonth() + 1;
           const currentYear = new Date().getFullYear();
 
@@ -144,74 +179,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             remaining_this_month: remainingDays
           });
         } 
-        // For Annual Leave, use the existing RPC function
-        else if (leaveTypeLabel === 'Annual Leave') {
-          const { data, error: balanceError } = await supabase
-            .rpc('get_monthly_leave_balance', {
-              p_user_id: user.id,
-              p_leave_type_id: leaveTypeId,
-              p_month: new Date().getMonth() + 1,
-              p_year: new Date().getFullYear()
-            });
-
-          if (balanceError) {
-            console.error('Error fetching annual leave balance:', balanceError);
-            setError(balanceError.message);
-            return;
-          }
-
-          // Type guard to ensure data is properly typed
-          if (data && typeof data === 'object' && !Array.isArray(data)) {
-            const typedData = data as unknown as LeaveBalanceResponse;
-            
-            // Map the response to our LeaveBalance interface
-            setBalance({
-              leave_type: leaveTypeLabel,
-              duration_type: 'days',
-              monthly_allowance: typedData.monthly_allowance || typedData.allocated_balance || 0,
-              used_this_month: typedData.used_this_month || typedData.used_balance || 0,
-              remaining_this_month: typedData.remaining_this_month || typedData.remaining_balance || 0,
-              annual_allowance: typedData.annual_allowance || typedData.allocated_balance,
-              carried_forward: typedData.carried_forward
-            });
-          } else {
-            setError('Invalid balance data received');
-          }
-        }
-        // For Paid Leave, use the monthly balance system with carryforward
-        else if (leaveTypeLabel === 'Paid Leave') {
-          const { data, error: balanceError } = await supabase
-            .rpc('get_monthly_leave_balance', {
-              p_user_id: user.id,
-              p_leave_type_id: leaveTypeId,
-              p_month: new Date().getMonth() + 1,
-              p_year: new Date().getFullYear()
-            });
-
-          if (balanceError) {
-            console.error('Error fetching paid leave balance:', balanceError);
-            setError(balanceError.message);
-            return;
-          }
-
-          // Type guard to ensure data is properly typed
-          if (data && typeof data === 'object' && !Array.isArray(data)) {
-            const typedData = data as unknown as LeaveBalanceResponse;
-            
-            // Map the response to our LeaveBalance interface
-            setBalance({
-              leave_type: leaveTypeLabel,
-              duration_type: 'days',
-              monthly_allowance: typedData.monthly_allowance || typedData.allocated_balance || 1.5,
-              used_this_month: typedData.used_this_month || typedData.used_balance || 0,
-              remaining_this_month: typedData.remaining_this_month || typedData.remaining_balance || 0,
-              carried_forward: typedData.carried_forward || 0
-            });
-          } else {
-            setError('Invalid balance data received');
-          }
-        }
-        // Default case for any other leave types
+        // For other leave types, use RPC function
         else {
           const { data, error: balanceError } = await supabase
             .rpc('get_monthly_leave_balance', {
@@ -229,8 +197,18 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
           // Type guard to ensure data is properly typed
           if (data && typeof data === 'object' && !Array.isArray(data)) {
-            const typedData = data as unknown as LeaveBalance;
-            setBalance(typedData);
+            const typedData = data as unknown as LeaveBalanceResponse;
+            
+            // Map the response to our LeaveBalance interface
+            setBalance({
+              leave_type: leaveTypeLabel,
+              duration_type: typedData.duration_type || 'days',
+              monthly_allowance: typedData.monthly_allowance || typedData.allocated_balance || 0,
+              used_this_month: typedData.used_this_month || typedData.used_balance || 0,
+              remaining_this_month: typedData.remaining_this_month || typedData.remaining_balance || 0,
+              annual_allowance: typedData.annual_allowance || typedData.allocated_balance,
+              carried_forward: typedData.carried_forward
+            });
           } else {
             setError('Invalid balance data received');
           }

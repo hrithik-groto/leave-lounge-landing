@@ -7,12 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, AlertTriangle } from "lucide-react";
 import { format, isAfter, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
 import { toast } from "sonner";
+import { useAdditionalWFHValidation } from "@/hooks/useAdditionalWFHValidation";
 
 interface LeaveType {
   id: string;
@@ -33,6 +34,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
 
   const { user } = useUser();
+  const { canApply: canApplyAdditionalWFH, wfhRemaining, loading: wfhLoading } = useAdditionalWFHValidation(leaveTypeId);
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -53,6 +55,9 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
     }
   };
 
+  const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
+  const isAdditionalWFH = selectedLeaveType?.label === 'Additional work from home';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -71,9 +76,18 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
       return;
     }
 
+    // Check if user can apply for Additional work from home
+    if (isAdditionalWFH && !canApplyAdditionalWFH) {
+      toast.error(`You can only apply for Additional Work From Home after exhausting your regular Work From Home quota. You have ${wfhRemaining} days remaining.`);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      // Calculate days for the application
+      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+
       // Prepare the submission data with proper typing
       const submissionData = {
         user_id: user.id,
@@ -83,7 +97,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
         reason: reason.trim(),
         status: 'pending' as const,
         is_half_day: false,
-        actual_days_used: 1,
+        actual_days_used: daysDiff,
         hours_requested: 0
       };
 
@@ -142,6 +156,25 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
             ))}
           </SelectContent>
         </Select>
+        
+        {isAdditionalWFH && !wfhLoading && (
+          <div className={cn(
+            "mt-2 p-3 rounded-md text-sm",
+            canApplyAdditionalWFH 
+              ? "bg-green-50 border border-green-200 text-green-800"
+              : "bg-red-50 border border-red-200 text-red-800"
+          )}>
+            <div className="flex items-center gap-2">
+              {!canApplyAdditionalWFH && <AlertTriangle className="h-4 w-4" />}
+              <span>
+                {canApplyAdditionalWFH 
+                  ? "✓ You can apply for Additional Work From Home as your regular WFH quota is exhausted."
+                  : `You must exhaust your regular Work From Home quota first. ${wfhRemaining} days remaining.`
+                }
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -210,7 +243,11 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
         />
       </div>
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
+      <Button 
+        type="submit" 
+        className="w-full" 
+        disabled={isSubmitting || (isAdditionalWFH && !canApplyAdditionalWFH)}
+      >
         {isSubmitting ? 'Submitting...' : 'Submit Application'}
       </Button>
     </form>
