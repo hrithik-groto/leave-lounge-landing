@@ -16,29 +16,6 @@ const SlackOAuthButton = () => {
     if (user) {
       checkSlackConnection();
     }
-    
-    // Listen for URL changes to detect OAuth callback
-    const handleUrlChange = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('slack_connected') === 'true') {
-        setIsConnected(true);
-        // Clean up URL immediately
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
-    
-    handleUrlChange();
-    
-    // Also listen for browser navigation events
-    const handlePopState = () => {
-      handleUrlChange();
-    };
-    
-    window.addEventListener('popstate', handlePopState);
-    
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
   }, [user]);
 
   const checkSlackConnection = async () => {
@@ -73,6 +50,7 @@ const SlackOAuthButton = () => {
       
       const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=chat:write,users:read&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
       
+      // Open OAuth in the same window to avoid SSL issues
       window.location.href = oauthUrl;
     } catch (error) {
       console.error('Error starting OAuth flow:', error);

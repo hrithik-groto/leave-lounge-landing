@@ -15,24 +15,36 @@ const Index = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (isLoaded && user) {
-      // Check if user was redirected from Slack OAuth
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('slack_connected') === 'true') {
+    if (!isLoaded) return;
+
+    // Handle Slack OAuth success callback
+    const urlParams = new URLSearchParams(window.location.search);
+    const slackConnected = urlParams.get('slack_connected');
+    
+    if (slackConnected === 'true') {
+      // Clean up URL immediately
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      if (user) {
+        // Show success toast
         toast({
           title: "🎉 Slack Connected!",
           description: "Your Slack account has been successfully connected!",
           className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
         });
-        // Clean up URL and redirect to dashboard
-        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Redirect to dashboard after a brief delay
         setTimeout(() => {
           navigate('/dashboard');
-        }, 1500); // Give user time to see the success message
-      } else {
-        // Regular redirect to dashboard for authenticated users
-        navigate('/dashboard');
+        }, 1000);
+        return;
       }
+    }
+    
+    // Regular redirect logic for authenticated users
+    if (user && !slackConnected) {
+      navigate('/dashboard');
     }
   }, [user, isLoaded, navigate, toast]);
 
@@ -43,6 +55,21 @@ const Index = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show success message while redirecting after Slack connection
+  const urlParams = new URLSearchParams(window.location.search);
+  if (user && urlParams.get('slack_connected') === 'true') {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-blue-50">
+        <div className="text-center">
+          <div className="animate-pulse text-6xl mb-4">🎉</div>
+          <h2 className="text-2xl font-bold text-green-800 mb-2">Slack Connected!</h2>
+          <p className="text-green-600 mb-4">Redirecting to dashboard...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
         </div>
       </div>
     );

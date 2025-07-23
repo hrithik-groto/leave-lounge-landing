@@ -106,8 +106,20 @@ serve(async (req) => {
 
     console.log('Successfully saved Slack integration for user:', state);
 
-    // Redirect to index page with success parameter
-    const redirectUrl = `https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/?slack_connected=true`;
+    // Get the origin from the request headers to construct the proper redirect URL
+    const origin = req.headers.get('origin') || req.headers.get('referer');
+    let redirectUrl = 'https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/?slack_connected=true';
+    
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        redirectUrl = `${originUrl.origin}/?slack_connected=true`;
+      } catch (e) {
+        console.log('Could not parse origin, using default redirect');
+      }
+    }
+    
+    console.log('Redirecting to:', redirectUrl);
     
     return new Response(null, {
       status: 302,
