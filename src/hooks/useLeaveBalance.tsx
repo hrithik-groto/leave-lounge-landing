@@ -257,13 +257,16 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
           if (data && typeof data === 'object' && !Array.isArray(data)) {
             const typedData = data as unknown as LeaveBalanceResponse;
             
+            // Ensure remaining balance is never negative
+            const remainingBalance = Math.max(0, (typedData.remaining_this_month || typedData.remaining_balance || 0));
+            
             // Map the response to our LeaveBalance interface
             setBalance({
               leave_type: leaveTypeLabel,
               duration_type: typedData.duration_type || 'days',
               monthly_allowance: typedData.monthly_allowance || typedData.allocated_balance || 0,
               used_this_month: typedData.used_this_month || typedData.used_balance || 0,
-              remaining_this_month: typedData.remaining_this_month || typedData.remaining_balance || 0,
+              remaining_this_month: remainingBalance,
               annual_allowance: typedData.annual_allowance || typedData.allocated_balance,
               carried_forward: typedData.carried_forward
             });

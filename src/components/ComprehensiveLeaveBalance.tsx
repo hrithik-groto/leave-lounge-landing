@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -145,9 +146,11 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
             return total + (leave.hours_requested || 1);
           }, 0) || 0;
 
+          const remaining = Math.max(0, leaveType.monthlyAllowance - totalHoursUsed);
+
           setUsage({
             used: totalHoursUsed,
-            remaining: Math.max(0, leaveType.monthlyAllowance - totalHoursUsed),
+            remaining: remaining,
             carryForward: 0 // No carry forward for Short Leave
           });
         } else if (leaveType.label === 'Paid Leave') {
@@ -166,9 +169,12 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
           if (data && typeof data === 'object') {
             const balanceData = data as any;
             
+            // Ensure remaining balance is never negative
+            const remainingBalance = Math.max(0, balanceData.remaining_this_month || 0);
+            
             setUsage({
               used: balanceData.used_this_month || 0,
-              remaining: balanceData.remaining_this_month || 0,
+              remaining: remainingBalance,
               carryForward: balanceData.carried_forward || 0
             });
           } else {
@@ -202,9 +208,11 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
             return total + daysDiff;
           }, 0) || 0;
 
+          const remaining = Math.max(0, leaveType.monthlyAllowance - totalDaysUsed);
+
           setUsage({
             used: totalDaysUsed,
-            remaining: Math.max(0, leaveType.monthlyAllowance - totalDaysUsed),
+            remaining: remaining,
             carryForward: 0 // No carry forward for Work From Home
           });
         }
@@ -280,7 +288,7 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
           )}
         </div>
 
-        {usage.remaining <= 0 && (
+        {usage.remaining <= 0 && usage.used >= leaveType.monthlyAllowance && (
           <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
             {leaveType.label === 'Short Leave' 
               ? 'Monthly short leave quota exhausted. Wait for next month to get 4 new short leaves.'
