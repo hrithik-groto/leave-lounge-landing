@@ -1,45 +1,43 @@
-
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { supabase } from '@/integrations/supabase/client';
-import { useUser } from '@clerk/clerk-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
-import { Switch } from '@/components/ui/switch';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useLeaveBalance } from '@/hooks/useLeaveBalance';
-import { useAdditionalWFHValidation } from '@/hooks/useAdditionalWFHValidation';
-
-const leaveApplicationSchema = z.object({
-  leave_type_id: z.string().min(1, 'Please select a leave type'),
-  start_date: z.date({
-    required_error: 'Start date is required',
-  }),
-  end_date: z.date({
-    required_error: 'End date is required',
-  }),
-  reason: z.string().min(1, 'Reason is required'),
-  is_half_day: z.boolean().default(false),
-  hours_requested: z.number().min(0.5).max(8).optional(),
-});
-
-type LeaveApplicationFormData = z.infer<typeof leaveApplicationSchema>;
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
+import { CalendarIcon, Clock, AlertCircle, XCircle, CheckCircle } from "lucide-react";
+import { format, addDays, isSameDay, isAfter, isBefore, startOfDay } from "date-fns";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useUser } from "@clerk/clerk-react";
+import { useLeaveOverlapValidation } from "@/hooks/useLeaveOverlapValidation";
 
 interface LeaveType {
   id: string;
   label: string;
   color: string;
+  requires_approval: boolean;
+}
+
+interface CompanyHoliday {
+  id: string;
+  name: string;
+  date: string;
+}
+
+// Create an interface for the RPC response
+interface MonthlyLeaveBalanceResponse {
+  used_this_month: number;
+  remaining_this_month: number;
+  carried_forward: number;
+  allocated_balance?: number;
+  monthly_allocation?: number;
 }
 
 interface EnhancedLeaveApplicationFormProps {
@@ -48,351 +46,692 @@ interface EnhancedLeaveApplicationFormProps {
 
 export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationFormProps> = ({ onSuccess }) => {
   const { user } = useUser();
-  const { toast } = useToast();
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [selectedLeaveType, setSelectedLeaveType] = useState<string>('');
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
+  const [leaveTypeId, setLeaveTypeId] = useState("");
+  const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [companyHolidays, setCompanyHolidays] = useState<CompanyHoliday[]>([]);
+  const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDayPeriod, setHalfDayPeriod] = useState<'morning' | 'afternoon'>('morning');
+  const [hoursRequested, setHoursRequested] = useState(1);
+  const [holidayName, setHolidayName] = useState("");
+  const [meetingDetails, setMeetingDetails] = useState("");
+  const [currentUsage, setCurrentUsage] = useState<{[key: string]: number}>({});
 
-  const { balance, loading: balanceLoading, error: balanceError } = useLeaveBalance(selectedLeaveType, refreshTrigger);
-  const { canApply: canApplyAdditionalWFH, wfhRemaining } = useAdditionalWFHValidation(selectedLeaveType);
+  const selectedLeaveType = leaveTypes.find(lt => lt.id === leaveTypeId);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch,
-    reset,
-  } = useForm<LeaveApplicationFormData>({
-    resolver: zodResolver(leaveApplicationSchema),
-    defaultValues: {
-      is_half_day: false,
-    },
-  });
-
-  const watchedValues = watch();
-  const isHalfDay = watchedValues.is_half_day;
-  const selectedLeaveTypeData = leaveTypes.find(lt => lt.id === selectedLeaveType);
+  // Use the overlap validation hook
+  const { validationResult, loading: validationLoading } = useLeaveOverlapValidation(
+    startDate,
+    endDate,
+    isHalfDay,
+    halfDayPeriod
+  );
 
   useEffect(() => {
-    const fetchLeaveTypes = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('leave_types')
-          .select('id, label, color')
-          .eq('is_active', true);
-
-        if (error) {
-          console.error('Error fetching leave types:', error);
-          toast({
-            title: "Error",
-            description: "Failed to load leave types.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        setLeaveTypes(data || []);
-      } catch (err) {
-        console.error('Error in fetchLeaveTypes:', err);
-        toast({
-          title: "Error",
-          description: "Failed to load leave types.",
-          variant: "destructive",
-        });
-      }
-    };
-
     fetchLeaveTypes();
-  }, [toast]);
+    fetchCompanyHolidays();
+  }, []);
 
-  const onSubmit = async (data: LeaveApplicationFormData) => {
-    if (!user?.id) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to apply for leave.",
-        variant: "destructive",
-      });
+  useEffect(() => {
+    if (selectedLeaveType && user?.id) {
+      fetchCurrentUsage();
+    }
+  }, [selectedLeaveType, user?.id]);
+
+  // Auto-sync end date with start date for Short Leave
+  useEffect(() => {
+    if (selectedLeaveType?.label === 'Short Leave' && startDate) {
+      setEndDate(startDate);
+    }
+  }, [selectedLeaveType, startDate]);
+
+  const fetchLeaveTypes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('leave_types')
+        .select('*')
+        .eq('is_active', true)
+        .order('label');
+
+      if (error) throw error;
+      setLeaveTypes(data || []);
+    } catch (error) {
+      console.error('Error fetching leave types:', error);
+      toast.error('Failed to load leave types');
+    }
+  };
+
+  const fetchCompanyHolidays = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_holidays')
+        .select('*')
+        .eq('is_active', true);
+
+      if (error) throw error;
+      setCompanyHolidays(data || []);
+    } catch (error) {
+      console.error('Error fetching company holidays:', error);
+    }
+  };
+
+  const fetchCurrentUsage = async () => {
+    if (!user?.id || !selectedLeaveType) return;
+
+    try {
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+
+      if (selectedLeaveType.label === 'Short Leave') {
+        const { data: shortLeaves, error } = await supabase
+          .from('leave_applied_users')
+          .select('hours_requested, status')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', selectedLeaveType.id)
+          .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+          .lt('start_date', currentMonth === 12 
+            ? `${currentYear + 1}-01-01` 
+            : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+          .in('status', ['approved', 'pending']);
+
+        if (error) throw error;
+
+        const totalHoursUsed = shortLeaves?.reduce((total, leave) => {
+          return total + (leave.hours_requested || 1);
+        }, 0) || 0;
+
+        setCurrentUsage({[selectedLeaveType.id]: totalHoursUsed});
+      } 
+      else if (selectedLeaveType.label === 'Paid Leave') {
+        const { data, error } = await supabase
+          .rpc('get_monthly_leave_balance', {
+            p_user_id: user.id,
+            p_leave_type_id: selectedLeaveType.id,
+            p_month: currentMonth,
+            p_year: currentYear
+          });
+
+        if (error) throw error;
+
+        if (data && typeof data === 'object') {
+          const balanceData = data as unknown as MonthlyLeaveBalanceResponse;
+          
+          setCurrentUsage({
+            [selectedLeaveType.id]: balanceData.used_this_month || 0,
+            [`${selectedLeaveType.id}_remaining`]: balanceData.remaining_this_month || 0,
+            [`${selectedLeaveType.id}_carried_forward`]: balanceData.carried_forward || 0
+          });
+        } else {
+          console.error('Invalid response format from get_monthly_leave_balance');
+          setCurrentUsage({
+            [selectedLeaveType.id]: 0,
+            [`${selectedLeaveType.id}_remaining`]: 1.5,
+            [`${selectedLeaveType.id}_carried_forward`]: 0
+          });
+        }
+      }
+      else if (selectedLeaveType.label === 'Work From Home') {
+        const { data: leaves, error } = await supabase
+          .from('leave_applied_users')
+          .select('actual_days_used, is_half_day, start_date, end_date, status')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', selectedLeaveType.id)
+          .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+          .lt('start_date', currentMonth === 12 
+            ? `${currentYear + 1}-01-01` 
+            : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+          .in('status', ['approved', 'pending']);
+
+        if (error) throw error;
+
+        const totalDaysUsed = leaves?.reduce((total, leave) => {
+          if (leave.actual_days_used) {
+            return total + leave.actual_days_used;
+          }
+          if (leave.is_half_day) {
+            return total + 0.5;
+          }
+          const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+          return total + daysDiff;
+        }, 0) || 0;
+
+        setCurrentUsage({[selectedLeaveType.id]: totalDaysUsed});
+      }
+      else {
+        const { data: leaves, error } = await supabase
+          .from('leave_applied_users')
+          .select('actual_days_used, is_half_day, start_date, end_date, status')
+          .eq('user_id', user.id)
+          .eq('leave_type_id', selectedLeaveType.id)
+          .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+          .lt('start_date', currentMonth === 12 
+            ? `${currentYear + 1}-01-01` 
+            : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+          .in('status', ['approved', 'pending']);
+
+        if (error) throw error;
+
+        const totalDaysUsed = leaves?.reduce((total, leave) => {
+          if (leave.actual_days_used) {
+            return total + leave.actual_days_used;
+          }
+          if (leave.is_half_day) {
+            return total + 0.5;
+          }
+          const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+          return total + daysDiff;
+        }, 0) || 0;
+
+        setCurrentUsage({[selectedLeaveType.id]: totalDaysUsed});
+      }
+    } catch (error) {
+      console.error('Error fetching current usage:', error);
+    }
+  };
+
+  const calculateLeaveDuration = () => {
+    if (!startDate || !endDate) return 0;
+    
+    if (selectedLeaveType?.label === 'Short Leave') {
+      return hoursRequested;
+    }
+    
+    if (isHalfDay && (selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave')) {
+      return 0.5;
+    }
+    
+    const timeDiff = endDate.getTime() - startDate.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+    return daysDiff;
+  };
+
+  const getMonthlyAllowance = () => {
+    if (!selectedLeaveType) return 0;
+    switch (selectedLeaveType.label) {
+      case 'Paid Leave': return 1.5;
+      case 'Short Leave': return 4;
+      case 'Work From Home': return 2;
+      case 'Annual Leave': return 18; // Annual allowance
+      default: return 0;
+    }
+  };
+
+  const canApplyForLeave = () => {
+    if (!selectedLeaveType) return false;
+    
+    const monthlyAllowance = getMonthlyAllowance();
+    const used = currentUsage[selectedLeaveType.id] || 0;
+    const requestedAmount = calculateLeaveDuration();
+    
+    if (selectedLeaveType.label === 'Annual Leave') {
+      return true;
+    }
+    
+    if (selectedLeaveType.label === 'Paid Leave') {
+      const remaining = currentUsage[`${selectedLeaveType.id}_remaining`] || (monthlyAllowance - used);
+      
+      if (isHalfDay && requestedAmount === 0.5) {
+        return remaining >= 0.5;
+      }
+      
+      if (!isHalfDay && requestedAmount === 1) {
+        return remaining >= 1;
+      }
+      
+      return requestedAmount <= remaining;
+    }
+    
+    return (used + requestedAmount) <= monthlyAllowance;
+  };
+
+  const getValidationMessage = () => {
+    if (!selectedLeaveType) return null;
+    
+    const monthlyAllowance = getMonthlyAllowance();
+    const used = currentUsage[selectedLeaveType.id] || 0;
+    let remaining = monthlyAllowance - used;
+    
+    if (selectedLeaveType.label === 'Paid Leave') {
+      remaining = currentUsage[`${selectedLeaveType.id}_remaining`] || remaining;
+    }
+    
+    const requestedAmount = calculateLeaveDuration();
+    
+    if (selectedLeaveType.label === 'Annual Leave') {
+      return null;
+    }
+    
+    if (remaining <= 0) {
+      const unit = selectedLeaveType.label === 'Short Leave' ? 'hours' : 'days';
+      return `You have exhausted your ${selectedLeaveType.label.toLowerCase()} quota for this month. Please wait for next month to get ${monthlyAllowance} new ${unit}.`;
+    }
+    
+    if (requestedAmount > remaining) {
+      const unit = selectedLeaveType.label === 'Short Leave' ? 'hours' : 'days';
+      
+      if (selectedLeaveType.label === 'Paid Leave' && remaining === 0.5 && !isHalfDay) {
+        return `You have only 0.5 days remaining. Please select "Half Day Leave" to use your remaining quota.`;
+      }
+      
+      return `You can only apply for ${remaining} more ${unit} this month (requested: ${requestedAmount} ${unit}).`;
+    }
+    
+    return null;
+  };
+
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  };
+
+  const isCompanyHoliday = (date: Date) => {
+    return companyHolidays.some(holiday => 
+      isSameDay(new Date(holiday.date), date)
+    );
+  };
+
+  const isDateInPast = (date: Date) => {
+    const today = startOfDay(new Date());
+    return isBefore(startOfDay(date), today);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      toast.error('You must be logged in to submit a leave application');
+      return;
+    }
+
+    if (!startDate || !endDate || !leaveTypeId) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (!validationResult.canApply) {
+      toast.error(validationResult.message || 'Cannot apply for leave on selected dates');
+      return;
+    }
+
+    if (!canApplyForLeave()) {
+      toast.error(getValidationMessage() || 'Cannot apply for leave');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      console.log('Submitting leave application:', data);
-
-      // Validate Additional WFH availability
-      if (selectedLeaveTypeData?.label === 'Additional work from home' && !canApplyAdditionalWFH) {
-        toast({
-          title: "Cannot Apply",
-          description: `You still have ${wfhRemaining} regular Work From Home days remaining this month. Use those first.`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Calculate actual days used with proper handling for half-day
-      let actualDaysUsed = 1;
-      if (data.is_half_day) {
-        actualDaysUsed = 0.5;
-      } else if (data.start_date && data.end_date) {
-        const timeDiff = data.end_date.getTime() - data.start_date.getTime();
-        actualDaysUsed = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
-      }
-
-      // For Paid Leave, validate against 1.5 monthly limit
-      if (selectedLeaveTypeData?.label === 'Paid Leave') {
-        if (balance && balance.remaining_this_month < actualDaysUsed) {
-          toast({
-            title: "Insufficient Balance",
-            description: `You have ${balance.remaining_this_month} days remaining this month. Cannot apply for ${actualDaysUsed} days.`,
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      const leaveApplication = {
+      const submissionData = {
         user_id: user.id,
-        leave_type_id: data.leave_type_id,
-        start_date: data.start_date.toISOString().split('T')[0],
-        end_date: data.end_date.toISOString().split('T')[0],
-        reason: data.reason,
-        status: 'pending',
-        is_half_day: data.is_half_day,
-        hours_requested: data.hours_requested || (selectedLeaveTypeData?.label === 'Short Leave' ? 1 : 0),
-        actual_days_used: actualDaysUsed,
-        applied_at: new Date().toISOString(),
+        start_date: format(startDate, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd'),
+        leave_type_id: leaveTypeId,
+        reason: reason.trim(),
+        status: 'pending' as const,
+        is_half_day: isHalfDay,
+        actual_days_used: calculateLeaveDuration(),
+        hours_requested: selectedLeaveType?.label === 'Short Leave' ? hoursRequested : 0,
+        leave_duration_type: selectedLeaveType?.label === 'Short Leave' ? 'hours' as const : 'days' as const,
+        leave_time_start: isHalfDay ? (halfDayPeriod === 'morning' ? '10:00:00' : '14:00:00') : null,
+        leave_time_end: isHalfDay ? (halfDayPeriod === 'morning' ? '14:00:00' : '18:30:00') : null,
+        holiday_name: holidayName.trim() || null,
+        meeting_details: meetingDetails.trim() || null
       };
 
-      console.log('Prepared leave application:', leaveApplication);
+      console.log('Submitting leave application with data:', submissionData);
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('leave_applied_users')
-        .insert([leaveApplication]);
+        .insert(submissionData)
+        .select()
+        .single();
 
       if (error) {
         console.error('Supabase error:', error);
-        toast({
-          title: "Error",
-          description: error.message || "Failed to submit leave application.",
-          variant: "destructive",
-        });
+        if (error.message.includes('monthly limit') || error.message.includes('quota')) {
+          toast.error(error.message);
+        } else {
+          toast.error('Failed to submit leave application: ' + error.message);
+        }
         return;
       }
 
-      toast({
-        title: "Success",
-        description: "Leave application submitted successfully!",
-        variant: "default",
-      });
-
-      reset();
-      setSelectedLeaveType('');
-      setRefreshTrigger(prev => prev + 1);
+      toast.success('Leave application submitted successfully!');
       
+      setStartDate(undefined);
+      setEndDate(undefined);
+      setLeaveTypeId("");
+      setReason("");
+      setIsHalfDay(false);
+      setHalfDayPeriod('morning');
+      setHoursRequested(1);
+      setHolidayName("");
+      setMeetingDetails("");
+
       if (onSuccess) {
         onSuccess();
       }
 
-    } catch (err) {
-      console.error('Error submitting leave application:', err);
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to submit leave application.",
-        variant: "destructive",
-      });
+    } catch (error) {
+      console.error('Error submitting leave application:', error);
+      toast.error('An unexpected error occurred');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const validationMessage = getValidationMessage();
+
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Apply for Leave</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="leave_type_id">Leave Type</Label>
-            <Select
-              value={selectedLeaveType}
-              onValueChange={(value) => {
-                setSelectedLeaveType(value);
-                setValue('leave_type_id', value);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a leave type" />
-              </SelectTrigger>
-              <SelectContent>
-                {leaveTypes.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: type.color }}
-                      />
-                      {type.label}
+    <div className="w-full h-full flex flex-col">
+      <Card className="flex-1 flex flex-col overflow-hidden">
+        <CardHeader className="flex-shrink-0 pb-4 border-b">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <CalendarIcon className="h-5 w-5" />
+            Apply for Leave
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 p-0 flex flex-col max-h-[60vh]">
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <ScrollArea className="flex-1">
+              <div className="space-y-6 p-6">
+                {validationMessage && (
+                  <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-yellow-800">{validationMessage}</p>
+                  </div>
+                )}
+
+                {!validationResult.canApply && validationResult.message && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <XCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-red-800">{validationResult.message}</p>
+                  </div>
+                )}
+
+                {startDate && endDate && isSameDay(startDate, endDate) && validationResult.conflicts.length > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">Available Time Slots:</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        {validationResult.availableSlots.morning ? (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        )}
+                        <span className={validationResult.availableSlots.morning ? 'text-green-800' : 'text-red-800'}>
+                          Morning (10:00 AM - 2:00 PM)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {validationResult.availableSlots.afternoon ? (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        )}
+                        <span className={validationResult.availableSlots.afternoon ? 'text-green-800' : 'text-red-800'}>
+                          Afternoon (2:00 PM - 6:30 PM)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {validationResult.availableSlots.fullDay ? (
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        )}
+                        <span className={validationResult.availableSlots.fullDay ? 'text-green-800' : 'text-red-800'}>
+                          Full Day
+                        </span>
+                      </div>
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.leave_type_id && (
-              <p className="text-sm text-red-500">{errors.leave_type_id.message}</p>
-            )}
-          </div>
+                  </div>
+                )}
 
-          {selectedLeaveType && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-medium mb-2">Leave Balance</h3>
-              {balanceLoading && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Loading balance...</span>
-                </div>
-              )}
-              {balanceError && (
-                <p className="text-sm text-red-500">{balanceError}</p>
-              )}
-              {balance && (
-                <div className="text-sm space-y-1">
-                  <p><strong>Monthly Allowance:</strong> {balance.monthly_allowance} {balance.duration_type}</p>
-                  <p><strong>Used This Month:</strong> {balance.used_this_month} {balance.duration_type}</p>
-                  <p><strong>Remaining:</strong> {balance.remaining_this_month} {balance.duration_type}</p>
-                  {balance.carried_forward && balance.carried_forward > 0 && (
-                    <p><strong>Carried Forward:</strong> {balance.carried_forward} {balance.duration_type}</p>
+                {selectedLeaveType?.label === 'Paid Leave' && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">Paid Leave Balance:</h4>
+                    <div className="space-y-1 text-sm text-blue-800">
+                      <div>Used this month: {currentUsage[selectedLeaveType.id] || 0} days</div>
+                      <div>Remaining: {currentUsage[`${selectedLeaveType.id}_remaining`] || 0} days</div>
+                      <div>Carried forward: {currentUsage[`${selectedLeaveType.id}_carried_forward`] || 0} days</div>
+                    </div>
+                  </div>
+                )}
+
+                <form id="leave-form" onSubmit={handleSubmit} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="leave-type">Leave Type *</Label>
+                    <Select value={leaveTypeId} onValueChange={setLeaveTypeId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select leave type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {leaveTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full flex-shrink-0" 
+                                style={{ backgroundColor: type.color }}
+                              />
+                              {type.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Start Date *</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !startDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {startDate ? format(startDate, "PPP") : "Pick start date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={startDate}
+                            onSelect={setStartDate}
+                            disabled={(date) => isDateInPast(date) || isWeekend(date) || isCompanyHoliday(date)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>End Date *</Label>
+                      {selectedLeaveType?.label === 'Short Leave' ? (
+                        <div className="relative">
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal bg-gray-50"
+                            disabled
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {endDate ? format(endDate, "PPP") : "Same as start date"}
+                          </Button>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Short leave applications are limited to single day. For multiple days, create separate applications.
+                          </p>
+                        </div>
+                      ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !endDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {endDate ? format(endDate, "PPP") : "Pick end date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={setEndDate}
+                              disabled={(date) => 
+                                !startDate || 
+                                isBefore(date, startDate) || 
+                                isWeekend(date) || 
+                                isCompanyHoliday(date)
+                              }
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  </div>
+
+                  {(selectedLeaveType?.label === 'Paid Leave' || selectedLeaveType?.label === 'Annual Leave') && 
+                  startDate && endDate && isSameDay(startDate, endDate) && (
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="half-day" 
+                          checked={isHalfDay}
+                          onCheckedChange={(checked) => setIsHalfDay(checked === true)}
+                        />
+                        <Label htmlFor="half-day">Half Day Leave</Label>
+                      </div>
+                      
+                      {isHalfDay && (
+                        <RadioGroup 
+                          value={halfDayPeriod} 
+                          onValueChange={(value: 'morning' | 'afternoon') => setHalfDayPeriod(value)}
+                          className="ml-6"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem 
+                              value="morning" 
+                              id="morning" 
+                              disabled={!validationResult.availableSlots.morning}
+                            />
+                            <Label 
+                              htmlFor="morning"
+                              className={!validationResult.availableSlots.morning ? 'text-muted-foreground' : ''}
+                            >
+                              Morning (10:00 AM - 2:00 PM)
+                              {!validationResult.availableSlots.morning && ' - Not Available'}
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem 
+                              value="afternoon" 
+                              id="afternoon" 
+                              disabled={!validationResult.availableSlots.afternoon}
+                            />
+                            <Label 
+                              htmlFor="afternoon"
+                              className={!validationResult.availableSlots.afternoon ? 'text-muted-foreground' : ''}
+                            >
+                              Afternoon (2:00 PM - 6:30 PM)
+                              {!validationResult.availableSlots.afternoon && ' - Not Available'}
+                            </Label>
+                          </div>
+                        </RadioGroup>
+                      )}
+                    </div>
                   )}
-                  {balance.can_apply === false && (
-                    <p className="text-red-500 font-medium">
-                      Additional WFH is only available when regular WFH is exhausted. 
-                      You have {balance.wfh_remaining} regular WFH days remaining.
-                    </p>
+
+                  {selectedLeaveType?.label === 'Short Leave' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="hours">Hours Requested *</Label>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="hours"
+                          type="number"
+                          min="1"
+                          max="4"
+                          value={hoursRequested}
+                          onChange={(e) => setHoursRequested(Number(e.target.value))}
+                          className="w-32"
+                        />
+                        <span className="text-sm text-muted-foreground">hours (max 4 per month)</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Note: You get 4 hours of short leave per month. Each application can be for 1 hour.
+                      </p>
+                    </div>
                   )}
-                </div>
-              )}
-            </div>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start_date">Start Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !watchedValues.start_date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {watchedValues.start_date ? format(watchedValues.start_date, "PPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={watchedValues.start_date}
-                    onSelect={(date) => setValue('start_date', date!)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              {errors.start_date && (
-                <p className="text-sm text-red-500">{errors.start_date.message}</p>
-              )}
-            </div>
+                  {startDate && endDate && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <p className="text-sm">
+                        <strong>Duration:</strong> {calculateLeaveDuration()} {selectedLeaveType?.label === 'Short Leave' ? 'hours' : 'days'}
+                      </p>
+                    </div>
+                  )}
 
-            <div className="space-y-2">
-              <Label htmlFor="end_date">End Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !watchedValues.end_date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {watchedValues.end_date ? format(watchedValues.end_date, "PPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={watchedValues.end_date}
-                    onSelect={(date) => setValue('end_date', date!)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              {errors.end_date && (
-                <p className="text-sm text-red-500">{errors.end_date.message}</p>
-              )}
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reason">Reason *</Label>
+                    <Textarea
+                      id="reason"
+                      placeholder="Please provide a reason for your leave request..."
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      className="min-h-[80px] resize-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="holiday-name">Holiday/Event Name (Optional)</Label>
+                      <Input
+                        id="holiday-name"
+                        placeholder="e.g., Diwali, Wedding"
+                        value={holidayName}
+                        onChange={(e) => setHolidayName(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="meeting-details">Meeting Details (Optional)</Label>
+                      <Input
+                        id="meeting-details"
+                        placeholder="Meeting or event details"
+                        value={meetingDetails}
+                        onChange={(e) => setMeetingDetails(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </ScrollArea>
           </div>
-
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="is_half_day"
-              checked={isHalfDay}
-              onCheckedChange={(checked) => setValue('is_half_day', checked)}
-            />
-            <Label htmlFor="is_half_day">Half Day</Label>
+          
+          <div className="flex-shrink-0 p-6 pt-4 border-t bg-background sticky bottom-0 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+            <Button 
+              type="submit"
+              form="leave-form" 
+              className="w-full" 
+              disabled={isSubmitting || !canApplyForLeave() || !validationResult.canApply || validationLoading}
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit Leave Application'}
+            </Button>
           </div>
-
-          {selectedLeaveTypeData?.label === 'Short Leave' && (
-            <div className="space-y-2">
-              <Label htmlFor="hours_requested">Hours Requested</Label>
-              <Input
-                id="hours_requested"
-                type="number"
-                step="0.5"
-                min="0.5"
-                max="8"
-                {...register('hours_requested', { valueAsNumber: true })}
-                placeholder="Enter hours (0.5 - 8)"
-              />
-              {errors.hours_requested && (
-                <p className="text-sm text-red-500">{errors.hours_requested.message}</p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
-            <Textarea
-              id="reason"
-              {...register('reason')}
-              placeholder="Enter reason for leave..."
-              rows={3}
-            />
-            {errors.reason && (
-              <p className="text-sm text-red-500">{errors.reason.message}</p>
-            )}
-          </div>
-
-          <Button 
-            type="submit" 
-            className="w-full" 
-            disabled={isSubmitting || (selectedLeaveTypeData?.label === 'Additional work from home' && !canApplyAdditionalWFH)}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              'Submit Application'
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
