@@ -43,6 +43,59 @@ serve(async (req) => {
         
         const startTime = Date.now();
         
+        // First check if user is connected to the system
+        const { data: slackIntegration, error: integrationError } = await supabase
+          .from('user_slack_integrations')
+          .select('user_id')
+          .eq('slack_user_id', user.id)
+          .eq('slack_team_id', payload.team.id)
+          .single();
+
+        if (integrationError || !slackIntegration) {
+          console.error('❌ User not connected to system:', integrationError);
+          
+          const errorModal = {
+            type: 'modal',
+            callback_id: 'connection_error_modal',
+            title: {
+              type: 'plain_text',
+              text: 'Connection Required',
+              emoji: true
+            },
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: '❌ *Account Not Connected*\n\nYour Slack account is not connected to Timeloo. Please visit the web application to link your account first.'
+                }
+              },
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: '🔗 *How to Connect:*\n1. Visit the Timeloo web application\n2. Go to Settings > Integrations\n3. Connect your Slack account\n4. Return here and try again'
+                }
+              }
+            ]
+          };
+
+          const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+          await fetch('https://slack.com/api/views.open', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${botToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              trigger_id: payload.trigger_id,
+              view: errorModal
+            })
+          });
+
+          return new Response('OK', { status: 200, headers: corsHeaders });
+        }
+
         // Step 1: Open basic modal immediately to prevent trigger_id expiration
         const basicModal = {
           type: 'modal',
@@ -57,7 +110,7 @@ serve(async (req) => {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: '⏳ Loading leave types and your balance...'
+                text: '⏳ Loading your profile and leave balances...'
               }
             }
           ]
@@ -89,23 +142,27 @@ serve(async (req) => {
         // Step 2: Asynchronously update modal with real data
         console.log(`🔄 Updating modal with real data...`);
         
-        // Get or create user profile
+        // Get user profile with comprehensive error handling
         let profile;
-        const { data: existingProfile } = await supabase
+        const { data: existingProfile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', slackIntegration.user_id)
           .single();
 
-        if (!existingProfile) {
-          console.log(`👤 Creating new profile for user: ${user.id}`);
-          // Create the user profile if it doesn't exist
+        if (profileError || !existingProfile) {
+          console.log(`👤 Creating new profile for user: ${slackIntegration.user_id}`);
+          
+          // Extract user info from Slack payload
+          const userEmail = user.profile?.email || `${user.name}@slack.user`;
+          const userName = user.real_name || user.profile?.real_name || user.name || 'Slack User';
+          
           const { data: newProfile, error: createError } = await supabase
             .from('profiles')
             .insert({
-              id: user.id,
-              email: user.profile?.email || `${user.name}@slack.user`,
-              name: user.real_name || user.name || 'Slack User'
+              id: slackIntegration.user_id,
+              email: userEmail,
+              name: userName
             })
             .select()
             .single();
@@ -116,10 +173,10 @@ serve(async (req) => {
           }
           
           profile = newProfile;
-          console.log(`✅ Created new profile for user: ${user.id}`);
+          console.log(`✅ Created new profile for user: ${slackIntegration.user_id}`);
         } else {
           profile = existingProfile;
-          console.log(`✅ Found existing profile for user: ${user.id}`);
+          console.log(`✅ Found existing profile for user: ${slackIntegration.user_id}`);
         }
 
         // Get leave types
@@ -137,7 +194,7 @@ serve(async (req) => {
           // Get balance for each leave type
           const { data: balanceData } = await supabase
             .rpc('get_monthly_leave_balance', {
-              p_user_id: user.id,
+              p_user_id: slackIntegration.user_id,
               p_leave_type_id: leaveType.id,
               p_month: new Date().getMonth() + 1,
               p_year: new Date().getFullYear()
@@ -199,7 +256,9 @@ serve(async (req) => {
           }
 
           // Add to balance summary
-          balanceSummary.push(summaryText);
+          if (summaryText) {
+            balanceSummary.push(summaryText);
+          }
 
           // Only add to options if not disabled
           if (!isDisabled) {
@@ -230,7 +289,7 @@ serve(async (req) => {
           ? balanceSummary.join('\n') 
           : 'No leave balances available';
 
-        // Update modal with real data including balance summary
+        // Update modal with real data including user info and balance summary
         const fullModal = {
           type: 'modal',
           callback_id: 'leave_application_modal',
@@ -254,8 +313,11 @@ serve(async (req) => {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `👋 Hi *${profile.name || user.real_name || user.name}*! Let's apply for your leave.`
+                text: `👤 *Employee:* ${profile.name || 'Unknown'}\n📧 *Email:* ${profile.email || 'Unknown'}`
               }
+            },
+            {
+              type: 'divider'
             },
             {
               type: 'section',
@@ -359,9 +421,10 @@ serve(async (req) => {
         });
 
         if (updateResponse.ok) {
-          console.log(`✅ Modal updated with real data and balance summary`);
+          console.log(`✅ Modal updated with user profile and balance summary`);
         } else {
-          console.error('❌ Failed to update modal');
+          const errorText = await updateResponse.text();
+          console.error('❌ Failed to update modal:', errorText);
         }
 
         return new Response('OK', { 
@@ -377,6 +440,29 @@ serve(async (req) => {
       
       const values = payload.view.state.values;
       const userId = payload.user.id;
+      
+      // Get the actual user ID from Slack integration
+      const { data: slackIntegration } = await supabase
+        .from('user_slack_integrations')
+        .select('user_id')
+        .eq('slack_user_id', userId)
+        .eq('slack_team_id', payload.team.id)
+        .single();
+
+      if (!slackIntegration) {
+        console.error('❌ User not found in integrations');
+        return new Response(JSON.stringify({
+          response_action: 'errors',
+          errors: {
+            leave_type_block: 'Your account is not connected. Please connect your Slack account in the web app first.'
+          }
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const actualUserId = slackIntegration.user_id;
       
       // Extract form values
       const leaveTypeId = values.leave_type_block?.leave_type_select?.selected_option?.value;
@@ -439,7 +525,7 @@ serve(async (req) => {
       // Validate balance before submission
       const { data: currentBalance } = await supabase
         .rpc('get_monthly_leave_balance', {
-          p_user_id: userId,
+          p_user_id: actualUserId,
           p_leave_type_id: leaveTypeId,
           p_month: new Date().getMonth() + 1,
           p_year: new Date().getFullYear()
@@ -490,7 +576,7 @@ serve(async (req) => {
       const { data: leaveApplication, error: insertError } = await supabase
         .from('leave_applied_users')
         .insert({
-          user_id: userId,
+          user_id: actualUserId,
           leave_type_id: leaveTypeId,
           start_date: startDate,
           end_date: endDate,
