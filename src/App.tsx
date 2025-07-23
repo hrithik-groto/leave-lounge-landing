@@ -14,7 +14,8 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+// Use the correct publishable key
+const PUBLISHABLE_KEY = "pk_test_cmlnaHQtbXVkZmlzaC0zMC5jbGVyay5hY2NvdW50cy5kZXYk";
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Publishable Key");
@@ -22,7 +23,7 @@ if (!PUBLISHABLE_KEY) {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
       <TooltipProvider>
         <Toaster />
         <Sonner />
