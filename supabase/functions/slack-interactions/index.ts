@@ -110,7 +110,10 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
   const userId = payload.actions[0].value;
   const triggerId = payload.trigger_id;
 
-  // Get user's Slack integration
+  console.log('🚀 Starting handleApplyLeave with trigger_id:', triggerId);
+  console.log('⏱️ Timestamp:', new Date().toISOString());
+
+  // First, immediately validate the user exists to fail fast if needed
   const { data: slackIntegration, error: integrationError } = await supabaseClient
     .from('user_slack_integrations')
     .select('*')
@@ -118,23 +121,26 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     .single();
 
   if (integrationError || !slackIntegration) {
-    console.error('User not found or not linked to Slack:', integrationError);
+    console.error('❌ User not found or not linked to Slack:', integrationError);
     return await sendEphemeralMessage(payload.response_url, 
       'User not found or not linked to Slack. Please contact your administrator.');
   }
 
-  // Get current balances with proper Additional WFH validation
-  const balances = await getLeaveBalances(userId, supabaseClient);
-  
-  // Get leave types - filter based on WFH exhaustion logic
-  const { data: leaveTypes, error: leaveTypesError } = await supabaseClient
-    .from('leave_types')
-    .select('*')
-    .eq('is_active', true)
-    .order('label');
+  // Get data in parallel to reduce total time
+  const [balancesPromise, leaveTypesPromise] = await Promise.all([
+    getLeaveBalances(userId, supabaseClient),
+    supabaseClient
+      .from('leave_types')
+      .select('*')
+      .eq('is_active', true)
+      .order('label')
+  ]);
+
+  const balances = await balancesPromise;
+  const { data: leaveTypes, error: leaveTypesError } = await leaveTypesPromise;
 
   if (leaveTypesError) {
-    console.error('Error fetching leave types:', leaveTypesError);
+    console.error('❌ Error fetching leave types:', leaveTypesError);
     return await sendEphemeralMessage(payload.response_url, 
       'Failed to fetch leave types. Please try again.');
   }
@@ -291,51 +297,64 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     ]
   };
 
-  // Open modal with improved error handling
-  try {
-    console.log('Attempting to open modal with trigger_id:', triggerId);
-    
-    const response = await fetch('https://slack.com/api/views.open', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('SLACK_BOT_TOKEN')}`,
-        'Content-Type': 'application/json; charset=utf-8'
-      },
-      body: JSON.stringify({
-        trigger_id: triggerId,
-        view: modal
-      })
-    });
+  console.log('⏱️ About to open modal, elapsed time:', new Date().toISOString());
 
-    const result = await response.json();
-    console.log('Modal API response:', JSON.stringify(result, null, 2));
+  // Open modal with race condition protection
+  try {
+    const modalResponse = await Promise.race([
+      fetch('https://slack.com/api/views.open', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SLACK_BOT_TOKEN')}`,
+          'Content-Type': 'application/json; charset=utf-8'
+        },
+        body: JSON.stringify({
+          trigger_id: triggerId,
+          view: modal
+        })
+      }),
+      // Timeout after 2 seconds to avoid trigger expiration
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Modal request timeout')), 2000)
+      )
+    ]);
+
+    const result = await modalResponse.json();
+    console.log('✅ Modal API response received:', result.ok ? 'SUCCESS' : 'FAILED');
 
     if (result.ok) {
-      console.log('✅ Modal opened successfully');
+      console.log('🎉 Modal opened successfully!');
       return new Response(null, { status: 200, headers: corsHeaders });
     } else {
       console.log('❌ Modal opening failed:', result.error);
       
       // Handle specific error cases gracefully
-      if (result.error === 'expired_trigger_id') {
-        console.log('Handling expired trigger ID with ephemeral message');
-        return await sendEphemeralMessage(payload.response_url, 
-          'Sorry, that action has expired. Please try clicking the Apply Leave button again.');
-      }
-      
-      if (result.error === 'invalid_trigger_id') {
-        console.log('Handling invalid trigger ID with ephemeral message');
-        return await sendEphemeralMessage(payload.response_url, 
-          'Invalid action. Please try clicking the Apply Leave button again.');
-      }
-      
-      return await sendEphemeralMessage(payload.response_url, 
-        'Failed to open leave application form. Please try again.');
+      const errorMessage = getErrorMessage(result.error);
+      return await sendEphemeralMessage(payload.response_url, errorMessage);
     }
   } catch (error) {
-    console.error('Exception while opening modal:', error);
+    console.error('💥 Exception while opening modal:', error);
+    
+    if (error.message === 'Modal request timeout') {
+      return await sendEphemeralMessage(payload.response_url, 
+        '⏱️ The request took too long. Please try clicking Apply Leave again.');
+    }
+    
     return await sendEphemeralMessage(payload.response_url, 
-      'An error occurred while opening the leave form. Please try again.');
+      '🚨 An error occurred. Please try clicking Apply Leave again.');
+  }
+}
+
+function getErrorMessage(error: string): string {
+  switch (error) {
+    case 'expired_trigger_id':
+      return '⏱️ That action has expired. Please click Apply Leave again.';
+    case 'invalid_trigger_id':
+      return '🔄 Invalid action. Please click Apply Leave again.';
+    case 'trigger_exchanged':
+      return '🔄 This action was already used. Please click Apply Leave again.';
+    default:
+      return '❌ Failed to open the leave form. Please try again.';
   }
 }
 
