@@ -50,7 +50,7 @@ serve(async (req) => {
       return new Response('Slack app credentials not configured', { status: 500 });
     }
 
-    const redirectUri = `https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth`;
+    const redirectUri = `${url.origin}/functions/v1/slack-oauth`;
     
     // Exchange code for access token
     const tokenResponse = await fetch('https://slack.com/api/oauth.v2.access', {
@@ -106,18 +106,8 @@ serve(async (req) => {
 
     console.log('Successfully saved Slack integration for user:', state);
 
-    // Get the origin from the request headers to construct the proper redirect URL
-    const origin = req.headers.get('origin') || req.headers.get('referer');
-    let redirectUrl = 'https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/?slack_connected=true';
-    
-    if (origin) {
-      try {
-        const originUrl = new URL(origin);
-        redirectUrl = `${originUrl.origin}/?slack_connected=true`;
-      } catch (e) {
-        console.log('Could not parse origin, using default redirect');
-      }
-    }
+    // Redirect directly to dashboard with success parameter
+    const redirectUrl = `${url.origin}/dashboard?slack_connected=true`;
     
     console.log('Redirecting to:', redirectUrl);
     
