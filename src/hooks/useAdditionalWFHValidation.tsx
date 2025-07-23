@@ -3,6 +3,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
 
+interface WFHBalanceResponse {
+  remaining_this_month: number;
+  used_this_month: number;
+  monthly_allowance: number;
+  leave_type: string;
+  duration_type: string;
+}
+
 export const useAdditionalWFHValidation = (leaveTypeId: string) => {
   const { user } = useUser();
   const [canApply, setCanApply] = useState(false);
@@ -36,7 +44,10 @@ export const useAdditionalWFHValidation = (leaveTypeId: string) => {
 
         if (balanceError) throw balanceError;
 
-        const remaining = wfhBalance?.remaining_this_month || 0;
+        // Type cast the response properly
+        const typedBalance = wfhBalance as unknown as WFHBalanceResponse;
+        const remaining = typedBalance?.remaining_this_month || 0;
+        
         setWfhRemaining(remaining);
         setCanApply(remaining <= 0);
       } catch (error) {
