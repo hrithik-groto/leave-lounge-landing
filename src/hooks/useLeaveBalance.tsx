@@ -236,53 +236,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             used_this_month: totalDaysUsed,
             remaining_this_month: remainingDays
           });
-        }
-        // For Paid Leave, calculate from actual records directly
-        else if (leaveTypeLabel === 'Paid Leave') {
-          const currentMonth = new Date().getMonth() + 1;
-          const currentYear = new Date().getFullYear();
-
-          // Get all Paid Leave applications for current month
-          const { data: paidLeaves, error: paidLeavesError } = await supabase
-            .from('leave_applied_users')
-            .select('actual_days_used, is_half_day, start_date, end_date, status')
-            .eq('user_id', user.id)
-            .eq('leave_type_id', leaveTypeId)
-            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-            .lt('start_date', currentMonth === 12 
-              ? `${currentYear + 1}-01-01` 
-              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-            .in('status', ['approved', 'pending']);
-
-          if (paidLeavesError) {
-            console.error('Error fetching Paid leaves:', paidLeavesError);
-            setError(paidLeavesError.message);
-            return;
-          }
-
-          // Calculate total days used (including half days)
-          const totalDaysUsed = paidLeaves?.reduce((total, leave) => {
-            if (leave.actual_days_used) {
-              return total + leave.actual_days_used;
-            }
-            if (leave.is_half_day) {
-              return total + 0.5;
-            }
-            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
-            return total + daysDiff;
-          }, 0) || 0;
-
-          const monthlyAllowanceDays = 1.5; // 1.5 days per month for Paid Leave
-          const remainingDays = Math.max(0, monthlyAllowanceDays - totalDaysUsed);
-
-          setBalance({
-            leave_type: leaveTypeLabel,
-            duration_type: 'days',
-            monthly_allowance: monthlyAllowanceDays,
-            used_this_month: totalDaysUsed,
-            remaining_this_month: remainingDays
-          });
-        }
+        } 
         // For other leave types, use RPC function
         else {
           const { data, error: balanceError } = await supabase
