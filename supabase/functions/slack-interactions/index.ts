@@ -129,8 +129,9 @@ serve(async (req) => {
           .eq('is_active', true)
           .order('label');
 
-        // Build leave type options with balance info
+        // Build leave type options with balance info and collect balance summary
         const leaveTypeOptions = [];
+        const balanceSummary = [];
         
         for (const leaveType of leaveTypes || []) {
           // Get balance for each leave type
@@ -144,6 +145,7 @@ serve(async (req) => {
 
           let balanceText = '';
           let isDisabled = false;
+          let summaryText = '';
 
           if (balanceData) {
             if (leaveType.label === 'Additional work from home') {
@@ -163,33 +165,43 @@ serve(async (req) => {
               } else {
                 balanceText = ` (${remainingThisYear}/24 days left this year)`;
               }
+              summaryText = `🏠 *Additional WFH:* ${remainingThisYear}/24 days left this year`;
             } else if (leaveType.label === 'Short Leave') {
               const remaining = balanceData.remaining_this_month || 0;
               balanceText = ` (${remaining}/4 hours left this month)`;
               isDisabled = remaining <= 0;
+              summaryText = `⏰ *Short Leave:* ${remaining}/4 hours left this month`;
             } else if (leaveType.label === 'Work From Home') {
               const remaining = balanceData.remaining_this_month || 0;
               balanceText = ` (${remaining}/2 days left this month)`;
               isDisabled = remaining <= 0;
+              summaryText = `🏠 *Work From Home:* ${remaining}/2 days left this month`;
             } else if (leaveType.label === 'Paid Leave') {
               const remaining = balanceData.remaining_this_month || 0;
               const monthly = balanceData.monthly_allowance || 1.5;
               balanceText = ` (${remaining}/${monthly} days left this month)`;
               isDisabled = remaining <= 0;
+              summaryText = `💰 *Paid Leave:* ${remaining}/${monthly} days left this month`;
             } else if (leaveType.label === 'Annual Leave') {
               const remaining = balanceData.remaining_this_month || 0;
               const annual = balanceData.annual_allowance || 18;
               balanceText = ` (${remaining}/${annual} days left this year)`;
               isDisabled = remaining <= 0;
+              summaryText = `📅 *Annual Leave:* ${remaining}/${annual} days left this year`;
             } else {
               const remaining = balanceData.remaining_this_month || 0;
               const unit = balanceData.duration_type === 'hours' ? 'hours' : 'days';
               const allowance = balanceData.monthly_allowance || balanceData.annual_allowance || 0;
               balanceText = ` (${remaining}/${allowance} ${unit} left)`;
               isDisabled = remaining <= 0;
+              summaryText = `📋 *${leaveType.label}:* ${remaining}/${allowance} ${unit} left`;
             }
           }
 
+          // Add to balance summary
+          balanceSummary.push(summaryText);
+
+          // Only add to options if not disabled
           if (!isDisabled) {
             leaveTypeOptions.push({
               text: {
@@ -213,7 +225,12 @@ serve(async (req) => {
           });
         }
 
-        // Update modal with real data
+        // Create balance summary text
+        const balanceSummaryText = balanceSummary.length > 0 
+          ? balanceSummary.join('\n') 
+          : 'No leave balances available';
+
+        // Update modal with real data including balance summary
         const fullModal = {
           type: 'modal',
           callback_id: 'leave_application_modal',
@@ -238,6 +255,13 @@ serve(async (req) => {
               text: {
                 type: 'mrkdwn',
                 text: `👋 Hi *${profile.name || user.real_name || user.name}*! Let's apply for your leave.`
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `📊 *Your Current Leave Balance:*\n${balanceSummaryText}`
               }
             },
             {
@@ -335,7 +359,7 @@ serve(async (req) => {
         });
 
         if (updateResponse.ok) {
-          console.log(`✅ Modal updated with real data`);
+          console.log(`✅ Modal updated with real data and balance summary`);
         } else {
           console.error('❌ Failed to update modal');
         }
@@ -365,7 +389,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           response_action: 'errors',
           errors: {
-            leave_type_block: 'Please select a valid leave type'
+            leave_type_block: 'Please select a valid leave type. All available quotas may be exhausted.'
           }
         }), {
           status: 200,
@@ -407,51 +431,53 @@ serve(async (req) => {
         });
       }
 
-      // Additional validation for Additional work from home
-      if (leaveType.label === 'Additional work from home') {
-        // Check if user can apply for Additional WFH
-        const { data: balanceData } = await supabase
-          .rpc('get_monthly_leave_balance', {
-            p_user_id: userId,
-            p_leave_type_id: leaveTypeId,
-            p_month: new Date().getMonth() + 1,
-            p_year: new Date().getFullYear()
-          });
+      // Calculate requested days
+      const startDateObj = new Date(startDate);
+      const endDateObj = new Date(endDate);
+      const daysDiff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24)) + 1;
 
-        if (!balanceData?.can_apply) {
-          const wfhRemaining = balanceData?.wfh_remaining || 0;
-          const remainingThisYear = balanceData?.remaining_this_year || 0;
-          
-          let errorMessage = '';
-          if (wfhRemaining > 0) {
-            errorMessage = `Please use your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`;
-          } else if (remainingThisYear <= 0) {
-            errorMessage = 'Your annual Additional Work From Home quota (24 days) has been exhausted. Please wait for the next year.';
+      // Validate balance before submission
+      const { data: currentBalance } = await supabase
+        .rpc('get_monthly_leave_balance', {
+          p_user_id: userId,
+          p_leave_type_id: leaveTypeId,
+          p_month: new Date().getMonth() + 1,
+          p_year: new Date().getFullYear()
+        });
+
+      if (currentBalance) {
+        let remainingBalance = 0;
+        let errorMessage = '';
+
+        if (leaveType.label === 'Additional work from home') {
+          if (!currentBalance.can_apply) {
+            const wfhRemaining = currentBalance.wfh_remaining || 0;
+            if (wfhRemaining > 0) {
+              errorMessage = `Please use your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`;
+            } else {
+              errorMessage = 'Your annual Additional Work From Home quota (24 days) has been exhausted.';
+            }
           } else {
-            errorMessage = 'Additional Work From Home is not available at this time.';
+            remainingBalance = currentBalance.remaining_this_year || 0;
+            if (daysDiff > remainingBalance) {
+              errorMessage = `Insufficient balance. You can only apply for ${remainingBalance} more days this year. Requested: ${daysDiff} days.`;
+            }
           }
+        } else {
+          remainingBalance = currentBalance.remaining_this_month || 0;
+          if (remainingBalance <= 0) {
+            const unit = currentBalance.duration_type === 'hours' ? 'hours' : 'days';
+            errorMessage = `Your ${leaveType.label} quota is exhausted for this ${leaveType.label === 'Annual Leave' ? 'year' : 'month'}. No ${unit} remaining.`;
+          } else if (leaveType.label !== 'Short Leave' && daysDiff > remainingBalance) {
+            errorMessage = `Insufficient balance. You have ${remainingBalance} days remaining. Requested: ${daysDiff} days.`;
+          }
+        }
 
+        if (errorMessage) {
           return new Response(JSON.stringify({
             response_action: 'errors',
             errors: {
               leave_type_block: errorMessage
-            }
-          }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-
-        // Check if the requested days would exceed annual limit
-        const startDateObj = new Date(startDate);
-        const endDateObj = new Date(endDate);
-        const daysDiff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24)) + 1;
-        
-        if (daysDiff > (balanceData?.remaining_this_year || 0)) {
-          return new Response(JSON.stringify({
-            response_action: 'errors',
-            errors: {
-              end_date_block: `You can only apply for ${balanceData?.remaining_this_year || 0} more days this year. Requested: ${daysDiff} days.`
             }
           }), {
             status: 200,
