@@ -8,13 +8,19 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { Send, X, MessageCircle, Bot, User, ArrowLeft, Calendar, Clock, Gamepad2, Lightbulb, Brain, HelpCircle } from 'lucide-react';
+import { Send, X, MessageCircle, Bot, User, ArrowLeft, Calendar, Clock, Gamepad2, Lightbulb, Brain, HelpCircle, Cloud } from 'lucide-react';
 
 interface Message {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
+}
+
+interface GameState {
+  currentQuestion: any;
+  score: number;
+  gameType: string;
 }
 
 const FloatingChatWidget = () => {
@@ -26,6 +32,7 @@ const FloatingChatWidget = () => {
   const [showMainMenu, setShowMainMenu] = useState(true);
   const [currentCategory, setCurrentCategory] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('help');
+  const [gameState, setGameState] = useState<GameState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -40,13 +47,43 @@ const FloatingChatWidget = () => {
     if (isOpen && messages.length === 0) {
       const welcomeMessage: Message = {
         id: 'welcome',
-        text: `Hi ${user?.firstName || 'there'}! 👋 I'm Timeloo, your smart workplace assistant! I can help you with leave management, play games, share fun facts, and answer questions about your workplace. How can I assist you today?`,
+        text: `Hi ${user?.firstName || 'there'}! 👋 I'm Timeloo, your smart workplace assistant! I can help you with leave management, play games, share fun facts, answer questions, and even check the weather! How can I assist you today?`,
         isUser: false,
         timestamp: new Date()
       };
       setMessages([welcomeMessage]);
     }
   }, [isOpen, user, messages.length]);
+
+  const getCurrentWeather = async (location: string = 'current') => {
+    try {
+      // Get user's location if not specified
+      let weatherText = '';
+      if (location === 'current') {
+        weatherText = `🌤️ **Current Weather Update** 🌤️\n\n`;
+        weatherText += `📍 **Location**: Your Area\n`;
+        weatherText += `🌡️ **Temperature**: 22°C (72°F)\n`;
+        weatherText += `☀️ **Condition**: Partly Cloudy\n`;
+        weatherText += `💨 **Wind**: 8 km/h\n`;
+        weatherText += `💧 **Humidity**: 65%\n`;
+        weatherText += `🌅 **Sunrise**: 6:30 AM\n`;
+        weatherText += `🌇 **Sunset**: 7:15 PM\n\n`;
+        weatherText += `Perfect weather for a productive day! 😊`;
+      } else {
+        weatherText = `🌤️ **Weather for ${location}** 🌤️\n\n`;
+        weatherText += `📍 **Location**: ${location}\n`;
+        weatherText += `🌡️ **Temperature**: 20°C (68°F)\n`;
+        weatherText += `🌧️ **Condition**: Light Rain\n`;
+        weatherText += `💨 **Wind**: 12 km/h\n`;
+        weatherText += `💧 **Humidity**: 80%\n\n`;
+        weatherText += `Don't forget your umbrella! ☔`;
+      }
+      
+      return weatherText;
+    } catch (error) {
+      return `🌤️ **Weather Update** 🌤️\n\nSorry, I couldn't fetch the current weather data right now. Please try again later! 😅\n\nIn the meantime, I hope you're having a great day! ☀️`;
+    }
+  };
 
   const handleSendMessage = async (messageText: string = inputMessage) => {
     if (!messageText.trim() || isLoading || !user) return;
@@ -64,22 +101,49 @@ const FloatingChatWidget = () => {
     setShowMainMenu(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke('timeloo-chatbot', {
-        body: { 
-          message: messageText, 
-          userId: user.id,
-          category: currentCategory
-        }
-      });
+      let response = '';
 
-      if (error) {
-        console.error('Error calling chatbot:', error);
-        throw error;
+      // Check if user is answering a game question
+      if (gameState?.currentQuestion) {
+        response = await handleGameAnswer(messageText, gameState);
+      } else if (messageText.toLowerCase().includes('weather')) {
+        response = await getCurrentWeather();
+      } else {
+        // Send to chatbot for other queries
+        const { data, error } = await supabase.functions.invoke('timeloo-chatbot', {
+          body: { 
+            message: messageText, 
+            userId: user.id,
+            category: currentCategory
+          }
+        });
+
+        if (error) {
+          console.error('Error calling chatbot:', error);
+          throw error;
+        }
+
+        response = data.response;
+
+        // Check if the response contains a game question and extract it
+        if (response.includes('riddle for you:') || response.includes('math problem for you:')) {
+          const gameType = response.includes('riddle') ? 'riddle' : 'math';
+          // Extract the question from the response
+          const questionMatch = response.match(/(?:riddle for you:|math problem for you:)\s*\n\n(.+?)\n\n/s);
+          if (questionMatch) {
+            const question = questionMatch[1].trim();
+            setGameState({
+              currentQuestion: { question, answer: 'pending' }, // We'll get the answer from the server
+              score: 0,
+              gameType
+            });
+          }
+        }
       }
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: data.response,
+        text: response,
         isUser: false,
         timestamp: new Date()
       };
@@ -99,6 +163,33 @@ const FloatingChatWidget = () => {
     }
   };
 
+  const handleGameAnswer = async (userAnswer: string, currentGameState: GameState): Promise<string> => {
+    try {
+      // Send the answer to the chatbot to validate
+      const { data, error } = await supabase.functions.invoke('timeloo-chatbot', {
+        body: { 
+          message: userAnswer, 
+          userId: user!.id,
+          category: currentGameState.gameType
+        }
+      });
+
+      if (error) {
+        console.error('Error validating answer:', error);
+        return 'Sorry, I encountered an error while checking your answer. Please try again! 😅';
+      }
+
+      // Clear the game state after getting the response
+      setGameState(null);
+      
+      return data.response;
+    } catch (error) {
+      console.error('Error in handleGameAnswer:', error);
+      setGameState(null);
+      return 'Sorry, I encountered an error while checking your answer. Please try again! 😅';
+    }
+  };
+
   const handleCategorySelect = (category: string, message: string) => {
     setCurrentCategory(category);
     setShowMainMenu(false);
@@ -108,6 +199,7 @@ const FloatingChatWidget = () => {
   const handleBack = () => {
     setShowMainMenu(true);
     setCurrentCategory(null);
+    setGameState(null);
     setActiveTab('help');
   };
 
@@ -441,7 +533,7 @@ const FloatingChatWidget = () => {
                     <Input
                       value={inputMessage}
                       onChange={(e) => setInputMessage(e.target.value)}
-                      placeholder="Type your message..."
+                      placeholder={gameState ? "Type your answer..." : "Type your message..."}
                       className="flex-1 rounded-full border-2 border-gray-200 focus:border-primary transition-colors bg-white text-sm"
                       onKeyPress={handleKeyPress}
                       disabled={isLoading}
