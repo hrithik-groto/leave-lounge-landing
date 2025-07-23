@@ -167,10 +167,25 @@ serve(async (req) => {
               const remaining = balanceData.remaining_this_month || 0;
               balanceText = ` (${remaining}/4 hours left this month)`;
               isDisabled = remaining <= 0;
+            } else if (leaveType.label === 'Work From Home') {
+              const remaining = balanceData.remaining_this_month || 0;
+              balanceText = ` (${remaining}/2 days left this month)`;
+              isDisabled = remaining <= 0;
+            } else if (leaveType.label === 'Paid Leave') {
+              const remaining = balanceData.remaining_this_month || 0;
+              const monthly = balanceData.monthly_allowance || 1.5;
+              balanceText = ` (${remaining}/${monthly} days left this month)`;
+              isDisabled = remaining <= 0;
+            } else if (leaveType.label === 'Annual Leave') {
+              const remaining = balanceData.remaining_this_month || 0;
+              const annual = balanceData.annual_allowance || 18;
+              balanceText = ` (${remaining}/${annual} days left this year)`;
+              isDisabled = remaining <= 0;
             } else {
               const remaining = balanceData.remaining_this_month || 0;
               const unit = balanceData.duration_type === 'hours' ? 'hours' : 'days';
-              balanceText = ` (${remaining} ${unit} left this month)`;
+              const allowance = balanceData.monthly_allowance || balanceData.annual_allowance || 0;
+              balanceText = ` (${remaining}/${allowance} ${unit} left)`;
               isDisabled = remaining <= 0;
             }
           }
@@ -191,7 +206,7 @@ serve(async (req) => {
           leaveTypeOptions.push({
             text: {
               type: 'plain_text',
-              text: 'No leave types available',
+              text: 'No leave types available - All quotas exhausted',
               emoji: true
             },
             value: 'none'
