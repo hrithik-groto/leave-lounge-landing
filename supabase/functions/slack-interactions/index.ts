@@ -179,16 +179,17 @@ serve(async (req) => {
           console.log(`✅ Found existing profile for user: ${slackIntegration.user_id}`);
         }
 
-        // Get leave types
+        // Get all leave types
         const { data: leaveTypes } = await supabase
           .from('leave_types')
           .select('*')
           .eq('is_active', true)
           .order('label');
 
-        // Build leave type options with balance info and collect balance summary
+        // Build comprehensive leave balance summary and available options
         const leaveTypeOptions = [];
-        const balanceSummary = [];
+        const balanceSummaryItems = [];
+        let hasAvailableLeave = false;
         
         for (const leaveType of leaveTypes || []) {
           // Get balance for each leave type
@@ -201,8 +202,9 @@ serve(async (req) => {
             });
 
           let balanceText = '';
-          let isDisabled = false;
+          let isExhausted = false;
           let summaryText = '';
+          let statusEmoji = '';
 
           if (balanceData) {
             if (leaveType.label === 'Additional work from home') {
@@ -214,54 +216,68 @@ serve(async (req) => {
               if (!canApply) {
                 if (wfhRemaining > 0) {
                   balanceText = ` (Use regular WFH first: ${wfhRemaining} days left)`;
-                  isDisabled = true;
+                  isExhausted = true;
+                  statusEmoji = '⚠️';
+                  summaryText = `⚠️ *Additional WFH:* Use regular WFH first (${wfhRemaining} days left)`;
                 } else if (remainingThisYear <= 0) {
                   balanceText = ` (Annual quota exhausted: 0/24 days left)`;
-                  isDisabled = true;
+                  isExhausted = true;
+                  statusEmoji = '❌';
+                  summaryText = `❌ *Additional WFH:* Annual quota exhausted (0/24 days left)`;
                 }
               } else {
                 balanceText = ` (${remainingThisYear}/24 days left this year)`;
+                statusEmoji = remainingThisYear > 0 ? '✅' : '❌';
+                summaryText = `${statusEmoji} *Additional WFH:* ${remainingThisYear}/24 days left this year`;
+                isExhausted = remainingThisYear <= 0;
               }
-              summaryText = `🏠 *Additional WFH:* ${remainingThisYear}/24 days left this year`;
             } else if (leaveType.label === 'Short Leave') {
               const remaining = balanceData.remaining_this_month || 0;
               balanceText = ` (${remaining}/4 hours left this month)`;
-              isDisabled = remaining <= 0;
-              summaryText = `⏰ *Short Leave:* ${remaining}/4 hours left this month`;
+              isExhausted = remaining <= 0;
+              statusEmoji = remaining > 0 ? '✅' : '❌';
+              summaryText = `${statusEmoji} *Short Leave:* ${remaining}/4 hours left this month`;
             } else if (leaveType.label === 'Work From Home') {
               const remaining = balanceData.remaining_this_month || 0;
               balanceText = ` (${remaining}/2 days left this month)`;
-              isDisabled = remaining <= 0;
-              summaryText = `🏠 *Work From Home:* ${remaining}/2 days left this month`;
+              isExhausted = remaining <= 0;
+              statusEmoji = remaining > 0 ? '✅' : '❌';
+              summaryText = `${statusEmoji} *Work From Home:* ${remaining}/2 days left this month`;
             } else if (leaveType.label === 'Paid Leave') {
               const remaining = balanceData.remaining_this_month || 0;
               const monthly = balanceData.monthly_allowance || 1.5;
               balanceText = ` (${remaining}/${monthly} days left this month)`;
-              isDisabled = remaining <= 0;
-              summaryText = `💰 *Paid Leave:* ${remaining}/${monthly} days left this month`;
+              isExhausted = remaining <= 0;
+              statusEmoji = remaining > 0 ? '✅' : '❌';
+              summaryText = `${statusEmoji} *Paid Leave:* ${remaining}/${monthly} days left this month`;
             } else if (leaveType.label === 'Annual Leave') {
               const remaining = balanceData.remaining_this_month || 0;
               const annual = balanceData.annual_allowance || 18;
               balanceText = ` (${remaining}/${annual} days left this year)`;
-              isDisabled = remaining <= 0;
-              summaryText = `📅 *Annual Leave:* ${remaining}/${annual} days left this year`;
+              isExhausted = remaining <= 0;
+              statusEmoji = remaining > 0 ? '✅' : '❌';
+              summaryText = `${statusEmoji} *Annual Leave:* ${remaining}/${annual} days left this year`;
             } else {
               const remaining = balanceData.remaining_this_month || 0;
               const unit = balanceData.duration_type === 'hours' ? 'hours' : 'days';
               const allowance = balanceData.monthly_allowance || balanceData.annual_allowance || 0;
               balanceText = ` (${remaining}/${allowance} ${unit} left)`;
-              isDisabled = remaining <= 0;
-              summaryText = `📋 *${leaveType.label}:* ${remaining}/${allowance} ${unit} left`;
+              isExhausted = remaining <= 0;
+              statusEmoji = remaining > 0 ? '✅' : '❌';
+              summaryText = `${statusEmoji} *${leaveType.label}:* ${remaining}/${allowance} ${unit} left`;
             }
+          } else {
+            // No balance data available
+            isExhausted = true;
+            statusEmoji = '❓';
+            summaryText = `❓ *${leaveType.label}:* Balance unavailable`;
           }
 
           // Add to balance summary
-          if (summaryText) {
-            balanceSummary.push(summaryText);
-          }
+          balanceSummaryItems.push(summaryText);
 
-          // Only add to options if not disabled
-          if (!isDisabled) {
+          // Only add to options if not exhausted
+          if (!isExhausted) {
             leaveTypeOptions.push({
               text: {
                 type: 'plain_text',
@@ -270,65 +286,54 @@ serve(async (req) => {
               },
               value: leaveType.id
             });
+            hasAvailableLeave = true;
           }
         }
 
-        if (leaveTypeOptions.length === 0) {
+        // Create the comprehensive balance summary text
+        const balanceSummaryText = balanceSummaryItems.length > 0 
+          ? balanceSummaryItems.join('\n') 
+          : '❓ No leave balance information available';
+
+        // If no leave types are available, show a special message
+        if (!hasAvailableLeave) {
           leaveTypeOptions.push({
             text: {
               type: 'plain_text',
-              text: 'No leave types available - All quotas exhausted',
+              text: '❌ All leave quotas exhausted - No applications allowed',
               emoji: true
             },
-            value: 'none'
+            value: 'exhausted'
           });
         }
 
-        // Create balance summary text
-        const balanceSummaryText = balanceSummary.length > 0 
-          ? balanceSummary.join('\n') 
-          : 'No leave balances available';
+        // Create modal blocks
+        const modalBlocks = [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `👤 *Employee:* ${profile.name || 'Unknown'}\n📧 *Email:* ${profile.email || 'Unknown'}`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `📊 *Your Current Leave Balances:*\n\n${balanceSummaryText}`
+            }
+          },
+          {
+            type: 'divider'
+          }
+        ];
 
-        // Update modal with real data including user info and balance summary
-        const fullModal = {
-          type: 'modal',
-          callback_id: 'leave_application_modal',
-          title: {
-            type: 'plain_text',
-            text: 'Apply for Leave',
-            emoji: true
-          },
-          submit: {
-            type: 'plain_text',
-            text: 'Submit',
-            emoji: true
-          },
-          close: {
-            type: 'plain_text',
-            text: 'Cancel',
-            emoji: true
-          },
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `👤 *Employee:* ${profile.name || 'Unknown'}\n📧 *Email:* ${profile.email || 'Unknown'}`
-              }
-            },
-            {
-              type: 'divider'
-            },
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `📊 *Your Current Leave Balance:*\n${balanceSummaryText}`
-              }
-            },
-            {
-              type: 'divider'
-            },
+        // Add form fields only if there are available leave types
+        if (hasAvailableLeave) {
+          modalBlocks.push(
             {
               type: 'input',
               block_id: 'leave_type_block',
@@ -404,7 +409,43 @@ serve(async (req) => {
               },
               optional: true
             }
-          ]
+          );
+        } else {
+          // Show message when all quotas are exhausted
+          modalBlocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '❌ *All Leave Quotas Exhausted*\n\nYou cannot apply for any leave at this time as all your leave quotas have been exhausted. Please wait for the next month/year for quota refresh or contact your HR for additional leave allocation.'
+            }
+          });
+        }
+
+        // Update modal with real data
+        const fullModal = {
+          type: 'modal',
+          callback_id: 'leave_application_modal',
+          title: {
+            type: 'plain_text',
+            text: 'Apply for Leave',
+            emoji: true
+          },
+          blocks: modalBlocks
+        };
+
+        // Only add submit button if there are available leave types
+        if (hasAvailableLeave) {
+          fullModal.submit = {
+            type: 'plain_text',
+            text: 'Submit',
+            emoji: true
+          };
+        }
+
+        fullModal.close = {
+          type: 'plain_text',
+          text: hasAvailableLeave ? 'Cancel' : 'Close',
+          emoji: true
         };
 
         // Update the modal
@@ -421,7 +462,7 @@ serve(async (req) => {
         });
 
         if (updateResponse.ok) {
-          console.log(`✅ Modal updated with user profile and balance summary`);
+          console.log(`✅ Modal updated with comprehensive leave balance information`);
         } else {
           const errorText = await updateResponse.text();
           console.error('❌ Failed to update modal:', errorText);
@@ -470,12 +511,13 @@ serve(async (req) => {
       const endDate = values.end_date_block?.end_date_pick?.selected_date;
       const reason = values.reason_block?.reason_input?.value || '';
 
-      if (!leaveTypeId || leaveTypeId === 'none') {
-        console.error('❌ No valid leave type selected');
+      // Check if user selected the "exhausted" option
+      if (!leaveTypeId || leaveTypeId === 'exhausted') {
+        console.error('❌ Invalid leave type selected - all quotas exhausted');
         return new Response(JSON.stringify({
           response_action: 'errors',
           errors: {
-            leave_type_block: 'Please select a valid leave type. All available quotas may be exhausted.'
+            leave_type_block: 'All your leave quotas are exhausted. You cannot apply for any leave at this time.'
           }
         }), {
           status: 200,
@@ -522,7 +564,7 @@ serve(async (req) => {
       const endDateObj = new Date(endDate);
       const daysDiff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24)) + 1;
 
-      // Validate balance before submission
+      // Validate balance before submission with comprehensive checks
       const { data: currentBalance } = await supabase
         .rpc('get_monthly_leave_balance', {
           p_user_id: actualUserId,
@@ -539,23 +581,24 @@ serve(async (req) => {
           if (!currentBalance.can_apply) {
             const wfhRemaining = currentBalance.wfh_remaining || 0;
             if (wfhRemaining > 0) {
-              errorMessage = `Please use your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`;
+              errorMessage = `❌ Please use your regular Work From Home quota first. You have ${wfhRemaining} days remaining this month.`;
             } else {
-              errorMessage = 'Your annual Additional Work From Home quota (24 days) has been exhausted.';
+              errorMessage = '❌ Your annual Additional Work From Home quota (24 days) has been exhausted.';
             }
           } else {
             remainingBalance = currentBalance.remaining_this_year || 0;
             if (daysDiff > remainingBalance) {
-              errorMessage = `Insufficient balance. You can only apply for ${remainingBalance} more days this year. Requested: ${daysDiff} days.`;
+              errorMessage = `❌ Insufficient balance. You can only apply for ${remainingBalance} more days this year. Requested: ${daysDiff} days.`;
             }
           }
         } else {
           remainingBalance = currentBalance.remaining_this_month || 0;
           if (remainingBalance <= 0) {
             const unit = currentBalance.duration_type === 'hours' ? 'hours' : 'days';
-            errorMessage = `Your ${leaveType.label} quota is exhausted for this ${leaveType.label === 'Annual Leave' ? 'year' : 'month'}. No ${unit} remaining.`;
+            const period = leaveType.label === 'Annual Leave' ? 'year' : 'month';
+            errorMessage = `❌ Your ${leaveType.label} quota is exhausted for this ${period}. No ${unit} remaining.`;
           } else if (leaveType.label !== 'Short Leave' && daysDiff > remainingBalance) {
-            errorMessage = `Insufficient balance. You have ${remainingBalance} days remaining. Requested: ${daysDiff} days.`;
+            errorMessage = `❌ Insufficient balance. You have ${remainingBalance} days remaining. Requested: ${daysDiff} days.`;
           }
         }
 
