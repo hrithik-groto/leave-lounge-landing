@@ -92,10 +92,9 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     .single();
 
   if (integrationError || !slackIntegration) {
-    return new Response(
-      JSON.stringify({ error: 'User not found or not linked to Slack' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error('User not found or not linked to Slack:', integrationError);
+    return await sendEphemeralMessage(payload.response_url, 
+      'User not found or not linked to Slack. Please contact your administrator.');
   }
 
   // Get current balances with proper Additional WFH validation
@@ -110,10 +109,8 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
 
   if (leaveTypesError) {
     console.error('Error fetching leave types:', leaveTypesError);
-    return new Response(
-      JSON.stringify({ error: 'Failed to fetch leave types' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return await sendEphemeralMessage(payload.response_url, 
+      'Failed to fetch leave types. Please try again.');
   }
 
   // Filter leave types based on WFH exhaustion logic
@@ -268,12 +265,12 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     ]
   };
 
-  // Open modal
+  // Open modal with proper error handling
   const response = await fetch('https://slack.com/api/views.open', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${Deno.env.get('SLACK_BOT_TOKEN')}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json; charset=utf-8'
     },
     body: JSON.stringify({
       trigger_id: triggerId,
@@ -288,10 +285,40 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     return new Response(null, { status: 200, headers: corsHeaders });
   } else {
     console.error('Error opening modal:', result);
-    return new Response(
-      JSON.stringify({ error: 'Failed to open modal' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    
+    // Handle specific error cases
+    if (result.error === 'expired_trigger_id') {
+      return await sendEphemeralMessage(payload.response_url, 
+        'Sorry, that action has expired. Please try clicking the Apply Leave button again.');
+    }
+    
+    return await sendEphemeralMessage(payload.response_url, 
+      'Failed to open leave application form. Please try again.');
+  }
+}
+
+async function sendEphemeralMessage(responseUrl: string, message: string) {
+  try {
+    const response = await fetch(responseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      },
+      body: JSON.stringify({
+        text: message,
+        response_type: 'ephemeral'
+      })
+    });
+    
+    if (response.ok) {
+      return new Response(null, { status: 200, headers: corsHeaders });
+    } else {
+      console.error('Failed to send ephemeral message:', await response.text());
+      return new Response('Failed to send message', { status: 500, headers: corsHeaders });
+    }
+  } catch (error) {
+    console.error('Error sending ephemeral message:', error);
+    return new Response('Error sending message', { status: 500, headers: corsHeaders });
   }
 }
 
