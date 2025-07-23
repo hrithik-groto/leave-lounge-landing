@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -24,13 +25,15 @@ interface OverlapValidationResult {
     fullDay: boolean;
   };
   message?: string;
+  remainingBalance?: number;
 }
 
 export const useLeaveOverlapValidation = (
   startDate?: Date,
   endDate?: Date,
   isHalfDay?: boolean,
-  halfDayPeriod?: 'morning' | 'afternoon'
+  halfDayPeriod?: 'morning' | 'afternoon',
+  leaveTypeId?: string
 ) => {
   const { user } = useUser();
   const [validationResult, setValidationResult] = useState<OverlapValidationResult>({
@@ -45,7 +48,7 @@ export const useLeaveOverlapValidation = (
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user?.id || !startDate || !endDate) {
+    if (!user?.id || !startDate || !endDate || !leaveTypeId) {
       setValidationResult({
         canApply: true,
         conflicts: [],
@@ -59,13 +62,37 @@ export const useLeaveOverlapValidation = (
     }
 
     validateLeaveOverlap();
-  }, [user?.id, startDate, endDate, isHalfDay, halfDayPeriod]);
+  }, [user?.id, startDate, endDate, isHalfDay, halfDayPeriod, leaveTypeId]);
 
   const validateLeaveOverlap = async () => {
-    if (!user?.id || !startDate || !endDate) return;
+    if (!user?.id || !startDate || !endDate || !leaveTypeId) return;
 
     setLoading(true);
     try {
+      // Get current month's balance for Paid Leave
+      let remainingBalance = 999; // Default for non-Paid Leave
+      
+      // Check if this is Paid Leave and get remaining balance
+      const { data: leaveType } = await supabase
+        .from('leave_types')
+        .select('label')
+        .eq('id', leaveTypeId)
+        .single();
+
+      if (leaveType?.label === 'Paid Leave') {
+        const { data: balanceData } = await supabase
+          .rpc('get_monthly_leave_balance', {
+            p_user_id: user.id,
+            p_leave_type_id: leaveTypeId,
+            p_month: startDate.getMonth() + 1,
+            p_year: startDate.getFullYear()
+          });
+
+        if (balanceData) {
+          remainingBalance = balanceData.remaining_this_month || 0;
+        }
+      }
+
       // Get all existing leave applications that might overlap
       const { data: existingLeaves, error } = await supabase
         .from('leave_applied_users')
@@ -88,6 +115,29 @@ export const useLeaveOverlapValidation = (
         afternoon: true,
         fullDay: true
       };
+
+      // Calculate days requested
+      const daysRequested = isHalfDay ? 0.5 : (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
+
+      // Check balance first for Paid Leave
+      if (leaveType?.label === 'Paid Leave') {
+        if (remainingBalance < daysRequested) {
+          canApply = false;
+          message = `Insufficient balance. You have ${remainingBalance} days remaining this month (requested: ${daysRequested} days)`;
+          setValidationResult({
+            canApply,
+            conflicts,
+            availableSlots: {
+              morning: false,
+              afternoon: false,
+              fullDay: false
+            },
+            message,
+            remainingBalance
+          });
+          return;
+        }
+      }
 
       // Check for conflicts day by day
       const currentDate = new Date(startDate);
@@ -130,8 +180,8 @@ export const useLeaveOverlapValidation = (
               
               // Update available slots
               availableSlots = {
-                morning: existingPeriod !== 'morning',
-                afternoon: existingPeriod !== 'afternoon',
+                morning: existingPeriod !== 'morning' && remainingBalance >= 0.5,
+                afternoon: existingPeriod !== 'afternoon' && remainingBalance >= 0.5,
                 fullDay: false
               };
             }
@@ -146,6 +196,15 @@ export const useLeaveOverlapValidation = (
             };
             break;
           }
+        } else {
+          // No conflicts for this day, check balance
+          if (leaveType?.label === 'Paid Leave') {
+            availableSlots = {
+              morning: remainingBalance >= 0.5,
+              afternoon: remainingBalance >= 0.5,
+              fullDay: remainingBalance >= 1
+            };
+          }
         }
 
         currentDate.setDate(currentDate.getDate() + 1);
@@ -155,7 +214,8 @@ export const useLeaveOverlapValidation = (
         canApply,
         conflicts,
         availableSlots,
-        message
+        message,
+        remainingBalance
       });
 
     } catch (error) {

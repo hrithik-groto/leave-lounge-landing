@@ -113,6 +113,12 @@ export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({
           </div>
         )}
 
+        {balance.leave_type === 'Paid Leave' && balance.remaining_this_month > 0 && balance.remaining_this_month < 1 && (
+          <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+            You have {balance.remaining_this_month} day{balance.remaining_this_month !== 1 ? 's' : ''} remaining. You can only apply for half-day leave.
+          </div>
+        )}
+
         {balance.leave_type === 'Short Leave' && balance.remaining_this_month > 0 && (
           <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600">
             You have {balance.remaining_this_month} hour{balance.remaining_this_month !== 1 ? 's' : ''} of short leave remaining this month.
