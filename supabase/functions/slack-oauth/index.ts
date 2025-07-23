@@ -50,10 +50,7 @@ serve(async (req) => {
       return new Response('Slack app credentials not configured', { status: 500 });
     }
 
-    // Use HTTPS for the redirect URI - always use the production URL
     const redirectUri = `https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth`;
-    
-    console.log('Using redirect URI:', redirectUri);
     
     // Exchange code for access token
     const tokenResponse = await fetch('https://slack.com/api/oauth.v2.access', {
@@ -109,13 +106,8 @@ serve(async (req) => {
 
     console.log('Successfully saved Slack integration for user:', state);
 
-    // Determine the base URL for redirect - use the current origin
-    const baseUrl = url.origin.includes('supabase.co') ? 'https://ppuyedxxfcijdfeqpwfj.supabase.co' : url.origin;
-    
-    // Redirect to dashboard with success parameter
-    const redirectUrl = `${baseUrl}/dashboard?slack_connected=true`;
-    
-    console.log('Redirecting to:', redirectUrl);
+    // Redirect to index page with success parameter
+    const redirectUrl = `https://ba137aef-b49a-47cd-aa27-50903c1d7b84.lovableproject.com/?slack_connected=true`;
     
     return new Response(null, {
       status: 302,
