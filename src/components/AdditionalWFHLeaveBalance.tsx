@@ -57,7 +57,7 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
         <div className="grid grid-cols-1 gap-2">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Monthly Limit:</span>
-            <span className="font-medium text-sm">No Limit</span>
+            <span className="font-medium text-sm">Unlimited</span>
           </div>
           
           <div className="flex justify-between items-center">
@@ -86,7 +86,7 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
 
         {canApply && (
           <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-600">
-            You can now apply for Additional Work From Home as your regular WFH quota has been exhausted.
+            You can now apply for Additional Work From Home as your regular WFH quota has been exhausted. No limit on applications.
           </div>
         )}
       </CardContent>

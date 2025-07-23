@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@clerk/clerk-react';
@@ -62,7 +63,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
         const leaveTypeLabel = leaveTypeData?.label;
 
-        // For Additional work from home, use the RPC function
+        // For Additional work from home, use the RPC function to get WFH status
         if (leaveTypeLabel === 'Additional work from home') {
           const { data, error: balanceError } = await supabase
             .rpc('get_monthly_leave_balance', {
@@ -84,9 +85,9 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
             setBalance({
               leave_type: leaveTypeLabel,
               duration_type: 'days',
-              monthly_allowance: typedData.monthly_allowance || 999,
+              monthly_allowance: 999, // Unlimited
               used_this_month: typedData.used_this_month || 0,
-              remaining_this_month: typedData.remaining_this_month || 999,
+              remaining_this_month: 999, // Unlimited
               can_apply: typedData.can_apply || false,
               wfh_remaining: typedData.wfh_remaining || 0
             });

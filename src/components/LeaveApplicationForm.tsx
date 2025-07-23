@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@clerk/clerk-react";
 import { toast } from "sonner";
-import { useAdditionalWFHValidation } from "@/hooks/useAdditionalWFHValidation";
 
 interface LeaveType {
   id: string;
@@ -32,13 +31,21 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [wfhRemaining, setWfhRemaining] = useState(0);
+  const [wfhLoading, setWfhLoading] = useState(false);
 
   const { user } = useUser();
-  const { canApply: canApplyAdditionalWFH, wfhRemaining, loading: wfhLoading } = useAdditionalWFHValidation(leaveTypeId);
+  const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
 
   useEffect(() => {
     fetchLeaveTypes();
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      checkWFHBalance();
+    }
+  }, [user?.id]);
 
   const fetchLeaveTypes = async () => {
     try {
@@ -55,8 +62,57 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
     }
   };
 
-  const selectedLeaveType = leaveTypes.find(type => type.id === leaveTypeId);
-  const isAdditionalWFH = selectedLeaveType?.label === 'Additional work from home';
+  const checkWFHBalance = async () => {
+    if (!user?.id) return;
+
+    try {
+      setWfhLoading(true);
+      
+      // Get the Work From Home leave type ID
+      const { data: wfhLeaveType, error: wfhError } = await supabase
+        .from('leave_types')
+        .select('id')
+        .eq('label', 'Work From Home')
+        .single();
+
+      if (wfhError) throw wfhError;
+
+      // Check WFH balance
+      const { data: wfhBalance, error: balanceError } = await supabase
+        .rpc('get_monthly_leave_balance', {
+          p_user_id: user.id,
+          p_leave_type_id: wfhLeaveType.id,
+          p_month: new Date().getMonth() + 1,
+          p_year: new Date().getFullYear()
+        });
+
+      if (balanceError) throw balanceError;
+
+      // Type cast the response properly
+      const typedBalance = wfhBalance as unknown as { remaining_this_month: number };
+      const remaining = typedBalance?.remaining_this_month || 0;
+      
+      setWfhRemaining(remaining);
+    } catch (error) {
+      console.error('Error checking WFH status:', error);
+      setWfhRemaining(0);
+    } finally {
+      setWfhLoading(false);
+    }
+  };
+
+  // Filter leave types based on WFH exhaustion
+  const getAvailableLeaveTypes = () => {
+    return leaveTypes.filter(type => {
+      // Show all leave types except Additional work from home
+      if (type.label !== 'Additional work from home') {
+        return true;
+      }
+      
+      // Only show Additional work from home if regular WFH is exhausted
+      return wfhRemaining <= 0;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,12 +129,6 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
 
     if (isAfter(startDate, endDate)) {
       toast.error('Start date cannot be after end date');
-      return;
-    }
-
-    // Check if user can apply for Additional work from home
-    if (isAdditionalWFH && !canApplyAdditionalWFH) {
-      toast.error(`You can only apply for Additional Work From Home after exhausting your regular Work From Home quota. You have ${wfhRemaining} days remaining.`);
       return;
     }
 
@@ -123,6 +173,9 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
       setLeaveTypeId("");
       setReason("");
       
+      // Refresh WFH balance after submission
+      checkWFHBalance();
+      
       if (onSuccess) {
         onSuccess();
       }
@@ -134,6 +187,8 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
     }
   };
 
+  const availableLeaveTypes = getAvailableLeaveTypes();
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto">
       <div className="space-y-2">
@@ -143,7 +198,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
             <SelectValue placeholder="Select leave type" />
           </SelectTrigger>
           <SelectContent>
-            {leaveTypes.map((type) => (
+            {availableLeaveTypes.map((type) => (
               <SelectItem key={type.id} value={type.id}>
                 <div className="flex items-center gap-2">
                   <div 
@@ -157,22 +212,21 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
           </SelectContent>
         </Select>
         
-        {isAdditionalWFH && !wfhLoading && (
-          <div className={cn(
-            "mt-2 p-3 rounded-md text-sm",
-            canApplyAdditionalWFH 
-              ? "bg-green-50 border border-green-200 text-green-800"
-              : "bg-red-50 border border-red-200 text-red-800"
-          )}>
+        {selectedLeaveType?.label === 'Additional work from home' && (
+          <div className="mt-2 p-3 rounded-md text-sm bg-green-50 border border-green-200 text-green-800">
             <div className="flex items-center gap-2">
-              {!canApplyAdditionalWFH && <AlertTriangle className="h-4 w-4" />}
               <span>
-                {canApplyAdditionalWFH 
-                  ? "✓ You can apply for Additional Work From Home as your regular WFH quota is exhausted."
-                  : `You must exhaust your regular Work From Home quota first. ${wfhRemaining} days remaining.`
-                }
+                ✓ You can apply for Additional Work From Home as your regular WFH quota is exhausted. No limit on applications.
               </span>
             </div>
+          </div>
+        )}
+
+        {wfhRemaining > 0 && (
+          <div className="mt-2 p-3 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-800">
+            <span>
+              You have {wfhRemaining} days of regular Work From Home remaining this month.
+            </span>
           </div>
         )}
       </div>
@@ -246,7 +300,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
       <Button 
         type="submit" 
         className="w-full" 
-        disabled={isSubmitting || (isAdditionalWFH && !canApplyAdditionalWFH)}
+        disabled={isSubmitting}
       >
         {isSubmitting ? 'Submitting...' : 'Submit Application'}
       </Button>
