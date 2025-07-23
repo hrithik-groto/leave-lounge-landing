@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Home, AlertTriangle } from 'lucide-react';
-import { useLeaveBalance } from '@/hooks/useLeaveBalance';
+import { useAdditionalWFHValidation } from '@/hooks/useAdditionalWFHValidation';
 
 interface AdditionalWFHLeaveBalanceProps {
   leaveTypeId: string;
@@ -14,7 +14,7 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
   leaveTypeId,
   refreshTrigger
 }) => {
-  const { balance, loading, error } = useLeaveBalance(leaveTypeId, refreshTrigger);
+  const { canApply, wfhRemaining, loading } = useAdditionalWFHValidation(leaveTypeId);
 
   if (loading) {
     return (
@@ -29,25 +29,32 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
     );
   }
 
-  if (error) {
+  // Only show if Additional WFH can be applied (regular WFH is exhausted)
+  if (!canApply) {
     return (
-      <Card className="w-full border-red-200">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-red-600">
-            <AlertTriangle className="h-4 w-4" />
-            <span className="text-sm">Error loading balance</span>
+      <Card className="w-full border-orange-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Home className="h-4 w-4" />
+            Additional Work From Home
+            <Badge variant="secondary" className="text-xs">
+              Not Available
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="p-3 rounded-md text-sm bg-orange-50 border border-orange-200 text-orange-800">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>
+                Use your regular Work From Home quota first. You have {wfhRemaining} days remaining this month.
+              </span>
+            </div>
           </div>
         </CardContent>
       </Card>
     );
   }
-
-  // Don't show the card if balance is null or Additional WFH is not available
-  if (!balance || !balance.can_apply) {
-    return null;
-  }
-
-  const usedThisMonth = balance.used_this_month || 0;
 
   return (
     <Card className="w-full">
@@ -56,21 +63,29 @@ export const AdditionalWFHLeaveBalance: React.FC<AdditionalWFHLeaveBalanceProps>
           <Home className="h-4 w-4" />
           Additional Work From Home
           <Badge variant="default" className="text-xs bg-green-600">
-            Active
+            Available
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
+        <div className="p-3 rounded-md text-sm bg-green-50 border border-green-200 text-green-800">
+          <div className="flex items-center gap-2">
+            <span>
+              ✓ Now available! Your regular Work From Home quota has been exhausted. You can apply for unlimited additional WFH days.
+            </span>
+          </div>
+        </div>
+        
         <div className="grid grid-cols-1 gap-2">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Applied This Month:</span>
-            <span className="font-medium text-sm">{usedThisMonth} days</span>
+            <span className="text-sm text-muted-foreground">Monthly Limit:</span>
+            <span className="font-medium text-sm">Unlimited</span>
           </div>
 
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Status:</span>
             <Badge variant="default" className="text-xs bg-green-600">
-              Available
+              Active
             </Badge>
           </div>
         </div>
