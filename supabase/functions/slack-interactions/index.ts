@@ -67,7 +67,7 @@ serve(async (req) => {
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: '❌ *Account Not Connected*\n\nYour Slack account is not connected to Timeloo. Please visit the web application to link your account first.'
+                  text: '🥺 *Account Not Connected*\n\nYour Slack account is not connected to Timeloo. Please visit the web application, Copy and paste this link in your browser 👉🏻 https://preview--leave-lounge-landing.lovable.app to link your account first. Araam se krlo koi jldi nhi hai 🙂'
                 }
               },
               {
