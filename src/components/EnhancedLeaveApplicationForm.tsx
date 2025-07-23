@@ -132,13 +132,25 @@ export const EnhancedLeaveApplicationForm: React.FC<EnhancedLeaveApplicationForm
         return;
       }
 
-      // Calculate actual days used
+      // Calculate actual days used with proper handling for half-day
       let actualDaysUsed = 1;
       if (data.is_half_day) {
         actualDaysUsed = 0.5;
       } else if (data.start_date && data.end_date) {
         const timeDiff = data.end_date.getTime() - data.start_date.getTime();
         actualDaysUsed = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+      }
+
+      // For Paid Leave, validate against 1.5 monthly limit
+      if (selectedLeaveTypeData?.label === 'Paid Leave') {
+        if (balance && balance.remaining_this_month < actualDaysUsed) {
+          toast({
+            title: "Insufficient Balance",
+            description: `You have ${balance.remaining_this_month} days remaining this month. Cannot apply for ${actualDaysUsed} days.`,
+            variant: "destructive",
+          });
+          return;
+        }
       }
 
       const leaveApplication = {

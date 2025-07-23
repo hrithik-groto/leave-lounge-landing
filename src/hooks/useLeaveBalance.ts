@@ -56,7 +56,7 @@ export const useLeaveBalance = (leaveTypeId: string, refreshTrigger?: number) =>
 
         // Properly handle the type conversion from Supabase Json to LeaveBalance
         if (data && typeof data === 'object' && !Array.isArray(data)) {
-          // Validate that the data has the expected structure
+          // Cast to unknown first, then to LeaveBalance
           const typedData = data as unknown as LeaveBalance;
           
           // Ensure all required fields are present and properly typed
