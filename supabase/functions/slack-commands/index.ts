@@ -9,11 +9,9 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Add detailed logging
   console.log('=== SLACK COMMAND REQUEST START ===');
   console.log('Method:', req.method);
   console.log('URL:', req.url);
-  console.log('Headers:', Object.fromEntries(req.headers.entries()));
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -34,9 +32,7 @@ serve(async (req) => {
     );
   }
 
-  // Only handle POST requests from here
   if (req.method !== 'POST') {
-    console.log('Non-POST request received:', req.method);
     return new Response('Method not allowed', { 
       status: 405,
       headers: corsHeaders 
@@ -44,19 +40,13 @@ serve(async (req) => {
   }
 
   try {
-    // First check if this is a URL verification challenge
     const contentType = req.headers.get('content-type') || '';
-    console.log('Content-Type:', contentType);
     
     if (contentType.includes('application/json')) {
-      // Handle JSON payload (URL verification)
       const body = await req.text();
-      console.log('Raw JSON body:', body);
-      
       try {
         const jsonData = JSON.parse(body);
         if (jsonData.type === 'url_verification') {
-          console.log('URL verification challenge:', jsonData.challenge);
           return new Response(jsonData.challenge, {
             headers: { 'Content-Type': 'text/plain' },
             status: 200
@@ -73,35 +63,15 @@ serve(async (req) => {
     );
 
     // Parse the form data from Slack
-    let formData;
-    try {
-      formData = await req.formData();
-      console.log('✅ Successfully parsed FormData');
-    } catch (parseError) {
-      console.error('❌ Failed to parse FormData:', parseError);
-      return new Response('Invalid form data', { 
-        status: 400,
-        headers: corsHeaders 
-      });
-    }
-
+    const formData = await req.formData();
     const command = formData.get('command');
     const userId = formData.get('user_id');
     const teamId = formData.get('team_id');
     const text = formData.get('text');
-    const token = formData.get('token');
     
-    console.log('📝 Received Slack command data:', { 
-      command, 
-      userId, 
-      teamId, 
-      text,
-      token: token ? 'present' : 'missing'
-    });
-    console.log('📋 All FormData entries:', Array.from(formData.entries()));
+    console.log('📝 Received Slack command:', { command, userId, teamId, text });
 
     if (command !== '/leaves') {
-      console.log('❌ Unknown command received:', command);
       return new Response(
         JSON.stringify({
           response_type: 'ephemeral',
@@ -114,7 +84,7 @@ serve(async (req) => {
       );
     }
 
-    // Find the user in our database based on Slack user ID
+    // Find the user in our database
     const { data: slackIntegration, error: integrationError } = await supabaseClient
       .from('user_slack_integrations')
       .select('user_id')
@@ -134,7 +104,7 @@ serve(async (req) => {
       );
     }
 
-    // Get user profile for personalized greeting and check if admin
+    // Get user profile
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('name')
@@ -144,164 +114,112 @@ serve(async (req) => {
     const userName = profile?.name || 'there';
     const isAdmin = slackIntegration.user_id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
 
-    // Get current leave balances
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    
-    // Get all leave types
-    const { data: leaveTypes, error: leaveTypesError } = await supabaseClient
+    // Get current date info
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
+    const monthStart = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
+    const monthEnd = currentMonth === 12 
+      ? `${currentYear + 1}-01-01` 
+      : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`;
+
+    // Get all leave types at once
+    const { data: leaveTypes } = await supabaseClient
       .from('leave_types')
       .select('*')
       .eq('is_active', true)
       .order('label');
 
-    if (leaveTypesError) {
-      console.error('Error fetching leave types:', leaveTypesError);
-    }
+    // Get all leave applications for this user for current month in one query
+    const { data: allLeaves } = await supabaseClient
+      .from('leave_applied_users')
+      .select('leave_type_id, actual_days_used, is_half_day, start_date, end_date, hours_requested, status')
+      .eq('user_id', slackIntegration.user_id)
+      .gte('start_date', monthStart)
+      .lt('start_date', monthEnd)
+      .in('status', ['approved', 'pending']);
 
-    // Calculate balances for each leave type
-    let balanceText = '';
+    // Calculate balances efficiently
+    const balances = [];
     
-    if (leaveTypes && leaveTypes.length > 0) {
-      const balancePromises = leaveTypes.map(async (leaveType) => {
+    if (leaveTypes && allLeaves) {
+      // Group leaves by type
+      const leavesByType = {};
+      allLeaves.forEach(leave => {
+        if (!leavesByType[leave.leave_type_id]) {
+          leavesByType[leave.leave_type_id] = [];
+        }
+        leavesByType[leave.leave_type_id].push(leave);
+      });
+
+      // Process each leave type
+      for (const leaveType of leaveTypes) {
+        const typeLeaves = leavesByType[leaveType.id] || [];
+        
         if (leaveType.label === 'Paid Leave') {
-          const { data: balanceData, error: balanceError } = await supabaseClient
-            .rpc('get_monthly_leave_balance', {
-              p_user_id: slackIntegration.user_id,
-              p_leave_type_id: leaveType.id,
-              p_month: currentMonth,
-              p_year: currentYear
-            });
-
-          if (!balanceError && balanceData) {
-            const remaining = balanceData.remaining_this_month || 0;
-            const used = balanceData.used_this_month || 0;
-            return `🌴 *Paid Leave*: ${remaining} days remaining (${used} used)`;
-          }
+          const totalUsed = typeLeaves.reduce((total, leave) => {
+            if (leave.actual_days_used) return total + leave.actual_days_used;
+            if (leave.is_half_day) return total + 0.5;
+            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+            return total + daysDiff;
+          }, 0);
+          
+          const remaining = Math.max(0, 1.5 - totalUsed);
+          balances.push(`🌴 *Paid Leave*: ${remaining} days remaining (${totalUsed} used)`);
+          
         } else if (leaveType.label === 'Work From Home') {
-          const { data: wfhLeaves, error: wfhError } = await supabaseClient
-            .from('leave_applied_users')
-            .select('actual_days_used, is_half_day, start_date, end_date')
-            .eq('user_id', slackIntegration.user_id)
-            .eq('leave_type_id', leaveType.id)
-            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-            .lt('start_date', currentMonth === 12 
-              ? `${currentYear + 1}-01-01` 
-              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-            .in('status', ['approved', 'pending']);
-
-          if (!wfhError) {
-            const totalUsed = wfhLeaves?.reduce((total, leave) => {
-              if (leave.actual_days_used) {
-                return total + leave.actual_days_used;
-              }
-              if (leave.is_half_day) {
-                return total + 0.5;
-              }
-              const leaveDays = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
-              return total + leaveDays;
-            }, 0) || 0;
-
-            const remaining = Math.max(0, 2 - totalUsed);
-            return `🏠 *Work From Home*: ${remaining} days remaining (${totalUsed} used)`;
-          }
+          const totalUsed = typeLeaves.reduce((total, leave) => {
+            if (leave.actual_days_used) return total + leave.actual_days_used;
+            if (leave.is_half_day) return total + 0.5;
+            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+            return total + daysDiff;
+          }, 0);
+          
+          const remaining = Math.max(0, 2 - totalUsed);
+          balances.push(`🏠 *Work From Home*: ${remaining} days remaining (${totalUsed} used)`);
+          
         } else if (leaveType.label === 'Short Leave') {
-          const { data: shortLeaves, error: shortError } = await supabaseClient
-            .from('leave_applied_users')
-            .select('hours_requested')
-            .eq('user_id', slackIntegration.user_id)
-            .eq('leave_type_id', leaveType.id)
-            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-            .lt('start_date', currentMonth === 12 
-              ? `${currentYear + 1}-01-01` 
-              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-            .in('status', ['approved', 'pending']);
-
-          if (!shortError) {
-            const totalUsed = shortLeaves?.reduce((total, leave) => total + (leave.hours_requested || 1), 0) || 0;
-            const remaining = Math.max(0, 4 - totalUsed);
-            return `⏰ *Short Leave*: ${remaining} hours remaining (${totalUsed} used)`;
-          }
+          const totalUsed = typeLeaves.reduce((total, leave) => {
+            return total + (leave.hours_requested || 1);
+          }, 0);
+          
+          const remaining = Math.max(0, 4 - totalUsed);
+          balances.push(`⏰ *Short Leave*: ${remaining} hours remaining (${totalUsed} used)`);
+          
         } else if (leaveType.label === 'Additional work from home') {
           // Check if regular WFH is exhausted
-          const { data: wfhLeaveType } = await supabaseClient
-            .from('leave_types')
-            .select('id')
-            .eq('label', 'Work From Home')
-            .single();
-
+          const wfhLeaveType = leaveTypes.find(lt => lt.label === 'Work From Home');
           if (wfhLeaveType) {
-            const { data: wfhLeaves, error: wfhError } = await supabaseClient
-              .from('leave_applied_users')
-              .select('actual_days_used, is_half_day, start_date, end_date')
-              .eq('user_id', slackIntegration.user_id)
-              .eq('leave_type_id', wfhLeaveType.id)
-              .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-              .lt('start_date', currentMonth === 12 
-                ? `${currentYear + 1}-01-01` 
-                : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-              .in('status', ['approved', 'pending']);
-
-            if (!wfhError) {
-              const totalWfhUsed = wfhLeaves?.reduce((total, leave) => {
-                if (leave.actual_days_used) {
-                  return total + leave.actual_days_used;
-                }
-                if (leave.is_half_day) {
-                  return total + 0.5;
-                }
-                const leaveDays = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
-                return total + leaveDays;
-              }, 0) || 0;
-
-              const wfhRemaining = Math.max(0, 2 - totalWfhUsed);
+            const wfhLeaves = leavesByType[wfhLeaveType.id] || [];
+            const wfhUsed = wfhLeaves.reduce((total, leave) => {
+              if (leave.actual_days_used) return total + leave.actual_days_used;
+              if (leave.is_half_day) return total + 0.5;
+              const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+              return total + daysDiff;
+            }, 0);
+            
+            const wfhRemaining = Math.max(0, 2 - wfhUsed);
+            
+            if (wfhRemaining <= 0) {
+              const additionalUsed = typeLeaves.reduce((total, leave) => {
+                if (leave.actual_days_used) return total + leave.actual_days_used;
+                if (leave.is_half_day) return total + 0.5;
+                const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+                return total + daysDiff;
+              }, 0);
               
-              if (wfhRemaining <= 0) {
-                // Get additional WFH usage
-                const { data: additionalWfhLeaves, error: additionalWfhError } = await supabaseClient
-                  .from('leave_applied_users')
-                  .select('actual_days_used, is_half_day, start_date, end_date')
-                  .eq('user_id', slackIntegration.user_id)
-                  .eq('leave_type_id', leaveType.id)
-                  .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-                  .lt('start_date', currentMonth === 12 
-                    ? `${currentYear + 1}-01-01` 
-                    : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
-                  .in('status', ['approved', 'pending']);
-
-                if (!additionalWfhError) {
-                  const totalAdditionalUsed = additionalWfhLeaves?.reduce((total, leave) => {
-                    if (leave.actual_days_used) {
-                      return total + leave.actual_days_used;
-                    }
-                    if (leave.is_half_day) {
-                      return total + 0.5;
-                    }
-                    const leaveDays = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
-                    return total + leaveDays;
-                  }, 0) || 0;
-
-                  return `🏠 *Additional WFH*: Unlimited available (${totalAdditionalUsed} used)`;
-                }
-              } else {
-                return `🏠 *Additional WFH*: Not available (use regular WFH first)`;
-              }
+              balances.push(`🏠 *Additional WFH*: Unlimited available (${additionalUsed} used)`);
+            } else {
+              balances.push(`🏠 *Additional WFH*: Not available (use regular WFH first)`);
             }
           }
         }
-        
-        return null;
-      });
-
-      const balanceResults = await Promise.all(balancePromises);
-      const validBalances = balanceResults.filter(balance => balance !== null);
-      
-      if (validBalances.length > 0) {
-        balanceText = '\n\n*📊 Current Leave Balances:*\n' + validBalances.join('\n');
       }
     }
 
-    // Create different message blocks based on user role
+    // Create message blocks
+    const balanceText = balances.length > 0 ? '\n\n*📊 Current Leave Balances:*\n' + balances.join('\n') : '';
+    
     let messageBlocks = [
       {
         type: 'section',
@@ -312,10 +230,7 @@ serve(async (req) => {
       }
     ];
 
-    console.log('🔧 DEBUG: Creating buttons for user:', userId, 'isAdmin:', isAdmin);
-
     if (isAdmin) {
-      // Admin-specific options
       messageBlocks = messageBlocks.concat([
         {
           type: 'actions',
@@ -353,22 +268,22 @@ serve(async (req) => {
       ]);
     }
 
-    // Common user options
+    // Add common user options
     messageBlocks = messageBlocks.concat([
       {
         type: 'actions',
         elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '🏖️ Apply leave',
-                emoji: true
-              },
-              action_id: 'apply_leave',
-              value: slackIntegration.user_id,
-              style: 'primary'
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🏖️ Apply leave',
+              emoji: true
             },
+            action_id: 'apply_leave',
+            value: slackIntegration.user_id,
+            style: 'primary'
+          },
           {
             type: 'button',
             text: {
@@ -485,14 +400,12 @@ serve(async (req) => {
       }
     ]);
 
-    // Create interactive message with buttons
     const interactiveMessage = {
       response_type: 'ephemeral',
       blocks: messageBlocks
     };
 
-    console.log('🚀 Sending interactive message with blocks:', JSON.stringify(messageBlocks, null, 2));
-    console.log('🔧 DEBUG: Full interactive message:', JSON.stringify(interactiveMessage, null, 2));
+    console.log('✅ Sending optimized response');
 
     return new Response(
       JSON.stringify(interactiveMessage),
