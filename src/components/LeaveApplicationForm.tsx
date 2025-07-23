@@ -168,7 +168,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
 
   // Filter leave types based on WFH exhaustion
   const getAvailableLeaveTypes = () => {
-    if (!wfhBalanceChecked) return leaveTypes; // Show all while loading
+    if (!wfhBalanceChecked) return []; // Don't show any leave types while loading
     
     return leaveTypes.filter(type => {
       // Show all leave types except Additional work from home
@@ -281,6 +281,11 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess }
                 </div>
               </SelectItem>
             ))}
+            {availableLeaveTypes.length === 0 && wfhBalanceChecked && (
+              <SelectItem value="disabled" disabled>
+                No leave types available
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
         
