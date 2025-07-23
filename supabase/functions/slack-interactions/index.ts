@@ -7,6 +7,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to send ephemeral messages
+async function sendEphemeralMessage(responseUrl: string, message: string) {
+  try {
+    const response = await fetch(responseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      },
+      body: JSON.stringify({
+        text: message,
+        response_type: 'ephemeral'
+      })
+    });
+    
+    if (response.ok) {
+      return new Response(null, { status: 200, headers: corsHeaders });
+    } else {
+      console.error('Failed to send ephemeral message:', await response.text());
+      return new Response('Failed to send message', { status: 500, headers: corsHeaders });
+    }
+  } catch (error) {
+    console.error('Error sending ephemeral message:', error);
+    return new Response('Error sending message', { status: 500, headers: corsHeaders });
+  }
+}
+
 serve(async (req) => {
   console.log('=== SLACK INTERACTION REQUEST START ===');
   console.log('Method:', req.method);
@@ -265,60 +291,51 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
     ]
   };
 
-  // Open modal with proper error handling
-  const response = await fetch('https://slack.com/api/views.open', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${Deno.env.get('SLACK_BOT_TOKEN')}`,
-      'Content-Type': 'application/json; charset=utf-8'
-    },
-    body: JSON.stringify({
-      trigger_id: triggerId,
-      view: modal
-    })
-  });
-
-  const result = await response.json();
-  console.log('Modal API response:', JSON.stringify(result, null, 2));
-
-  if (result.ok) {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  } else {
-    console.error('Error opening modal:', result);
-    
-    // Handle specific error cases
-    if (result.error === 'expired_trigger_id') {
-      return await sendEphemeralMessage(payload.response_url, 
-        'Sorry, that action has expired. Please try clicking the Apply Leave button again.');
-    }
-    
-    return await sendEphemeralMessage(payload.response_url, 
-      'Failed to open leave application form. Please try again.');
-  }
-}
-
-async function sendEphemeralMessage(responseUrl: string, message: string) {
+  // Open modal with improved error handling
   try {
-    const response = await fetch(responseUrl, {
+    console.log('Attempting to open modal with trigger_id:', triggerId);
+    
+    const response = await fetch('https://slack.com/api/views.open', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${Deno.env.get('SLACK_BOT_TOKEN')}`,
         'Content-Type': 'application/json; charset=utf-8'
       },
       body: JSON.stringify({
-        text: message,
-        response_type: 'ephemeral'
+        trigger_id: triggerId,
+        view: modal
       })
     });
-    
-    if (response.ok) {
+
+    const result = await response.json();
+    console.log('Modal API response:', JSON.stringify(result, null, 2));
+
+    if (result.ok) {
+      console.log('✅ Modal opened successfully');
       return new Response(null, { status: 200, headers: corsHeaders });
     } else {
-      console.error('Failed to send ephemeral message:', await response.text());
-      return new Response('Failed to send message', { status: 500, headers: corsHeaders });
+      console.log('❌ Modal opening failed:', result.error);
+      
+      // Handle specific error cases gracefully
+      if (result.error === 'expired_trigger_id') {
+        console.log('Handling expired trigger ID with ephemeral message');
+        return await sendEphemeralMessage(payload.response_url, 
+          'Sorry, that action has expired. Please try clicking the Apply Leave button again.');
+      }
+      
+      if (result.error === 'invalid_trigger_id') {
+        console.log('Handling invalid trigger ID with ephemeral message');
+        return await sendEphemeralMessage(payload.response_url, 
+          'Invalid action. Please try clicking the Apply Leave button again.');
+      }
+      
+      return await sendEphemeralMessage(payload.response_url, 
+        'Failed to open leave application form. Please try again.');
     }
   } catch (error) {
-    console.error('Error sending ephemeral message:', error);
-    return new Response('Error sending message', { status: 500, headers: corsHeaders });
+    console.error('Exception while opening modal:', error);
+    return await sendEphemeralMessage(payload.response_url, 
+      'An error occurred while opening the leave form. Please try again.');
   }
 }
 
