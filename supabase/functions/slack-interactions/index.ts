@@ -35,34 +35,20 @@ async function sendEphemeralMessage(responseUrl: string, message: string) {
 
 serve(async (req) => {
   console.log('=== SLACK INTERACTION REQUEST START ===');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Headers:', Object.fromEntries(req.headers.entries()));
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Content-Type:', req.headers.get('content-type'));
-    console.log('Body available:', req.body !== null);
-
     const formData = await req.formData();
-    console.log('✅ Successfully parsed FormData for interactions');
-    
-    // Debug: Log all form data entries
-    const allEntries = Array.from(formData.entries());
-    console.log('📋 All FormData entries:', allEntries);
-
     const payload = formData.get('payload');
     if (!payload) {
       return new Response('No payload found', { status: 400 });
     }
 
     const parsedPayload = JSON.parse(payload.toString());
-    console.log('✅ Successfully parsed payload');
     console.log('📝 Payload type:', parsedPayload.type);
-    console.log('📝 Payload data:', parsedPayload);
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -73,7 +59,6 @@ serve(async (req) => {
     if (parsedPayload.type === 'block_actions') {
       const action = parsedPayload.actions?.[0];
       console.log('Processing action:', action?.action_id, 'for user:', parsedPayload.user?.id);
-      console.log('Received Slack interaction:', parsedPayload.type, action?.action_id);
 
       if (action?.action_id === 'apply_leave') {
         return await handleApplyLeave(parsedPayload, supabaseClient);
@@ -109,198 +94,116 @@ serve(async (req) => {
 async function handleApplyLeave(payload: any, supabaseClient: any) {
   const userId = payload.actions[0].value;
   const triggerId = payload.trigger_id;
+  const startTime = Date.now();
 
-  console.log('🚀 Starting handleApplyLeave with trigger_id:', triggerId);
-  console.log('⏱️ Timestamp:', new Date().toISOString());
+  console.log('🚀 URGENT: Opening modal immediately for trigger_id:', triggerId);
 
-  // First, immediately validate the user exists to fail fast if needed
-  const { data: slackIntegration, error: integrationError } = await supabaseClient
-    .from('user_slack_integrations')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
-
-  if (integrationError || !slackIntegration) {
-    console.error('❌ User not found or not linked to Slack:', integrationError);
-    return await sendEphemeralMessage(payload.response_url, 
-      'User not found or not linked to Slack. Please contact your administrator.');
-  }
-
-  // Get data in parallel to reduce total time
-  const [balancesPromise, leaveTypesPromise] = await Promise.all([
-    getLeaveBalances(userId, supabaseClient),
-    supabaseClient
-      .from('leave_types')
-      .select('*')
-      .eq('is_active', true)
-      .order('label')
-  ]);
-
-  const balances = await balancesPromise;
-  const { data: leaveTypes, error: leaveTypesError } = await leaveTypesPromise;
-
-  if (leaveTypesError) {
-    console.error('❌ Error fetching leave types:', leaveTypesError);
-    return await sendEphemeralMessage(payload.response_url, 
-      'Failed to fetch leave types. Please try again.');
-  }
-
-  // Filter leave types based on WFH exhaustion logic
-  const availableLeaveTypes = await filterLeaveTypes(leaveTypes, balances, userId, supabaseClient);
-
-  const leaveOptions = availableLeaveTypes.map(type => {
-    const balance = balances.find(b => b.leave_type === type.label);
-    let displayText = '';
-    
-    if (type.label === 'Paid Leave') {
-      const remaining = balance?.remaining_this_month || 0;
-      displayText = remaining > 0 ? `🌴 ${type.label} (${remaining} days left)` : `🌴 ${type.label} (Exhausted)`;
-    } else if (type.label === 'Work From Home') {
-      const remaining = balance?.remaining_this_month || 0;
-      displayText = remaining > 0 ? `🏠 ${type.label} (${remaining} days left)` : `🏠 ${type.label} (Exhausted)`;
-    } else if (type.label === 'Short Leave') {
-      const remaining = balance?.remaining_this_month || 0;
-      displayText = remaining > 0 ? `⏰ ${type.label} (${remaining} hours left)` : `⏰ ${type.label} (Exhausted)`;
-    } else if (type.label === 'Additional work from home') {
-      displayText = `🏠 ${type.label}`;
-    }
-    
-    return {
-      text: { type: 'plain_text', text: displayText },
-      value: type.id
-    };
-  });
-
-  // Calculate total remaining for display
-  const totalRemaining = balances.reduce((total, balance) => {
-    if (balance.leave_type === 'Paid Leave') return total + (balance.remaining_this_month || 0);
-    if (balance.leave_type === 'Work From Home') return total + (balance.remaining_this_month || 0);
-    if (balance.leave_type === 'Short Leave') return total + ((balance.remaining_this_month || 0) / 8); // Convert hours to days
-    return total;
-  }, 0);
-
-  // Create balance display text
-  const balanceText = balances.map(balance => {
-    if (balance.leave_type === 'Additional work from home') {
-      return `• *${balance.leave_type}*: Unlimited days remaining`;
-    }
-    const unit = balance.duration_type === 'hours' ? 'hours' : 'days';
-    return `• *${balance.leave_type}*: ${balance.remaining_this_month || 0} ${unit} remaining`;
-  }).join('\n');
-
-  const modal = {
-    type: 'modal',
-    callback_id: 'leave_application_modal',
-    title: { type: 'plain_text', text: '🌿 Apply for Leave' },
-    submit: { type: 'plain_text', text: 'Apply' },
-    close: { type: 'plain_text', text: 'Cancel' },
-    private_metadata: userId,
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `:seedling: You have *${totalRemaining.toFixed(1)} days* remaining in this cycle`
-        }
-      },
-      { type: 'divider' },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*📊 Your Current Balances:*\n${balanceText}`
-        }
-      },
-      {
-        type: 'input',
-        block_id: 'leave_type',
-        label: { type: 'plain_text', text: 'Leave Type' },
-        element: {
-          type: 'static_select',
-          action_id: 'leave_type_select',
-          placeholder: { type: 'plain_text', text: '🍃 Select a leave type' },
-          options: leaveOptions
-        }
-      },
-      {
-        type: 'section',
-        text: { type: 'mrkdwn', text: '*Start Date & Time*' }
-      },
-      {
-        type: 'actions',
-        block_id: 'start_datetime',
-        elements: [
-          {
-            type: 'datepicker',
-            action_id: 'start_date_picker',
-            initial_date: new Date().toISOString().split('T')[0],
-            placeholder: { type: 'plain_text', text: 'Today' }
-          },
-          {
-            type: 'static_select',
-            action_id: 'start_time_select',
-            placeholder: { type: 'plain_text', text: 'Start of day' },
-            initial_option: {
-              text: { type: 'plain_text', text: 'Start of day (10:00 AM)' },
-              value: 'start_of_day'
-            },
-            options: [
-              { text: { type: 'plain_text', text: 'Start of day (10:00 AM)' }, value: 'start_of_day' },
-              { text: { type: 'plain_text', text: 'After lunch (2:45 PM)' }, value: 'after_lunch' },
-              { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
-            ]
-          }
-        ]
-      },
-      {
-        type: 'section',
-        text: { type: 'mrkdwn', text: '*End Date & Time*' }
-      },
-      {
-        type: 'actions',
-        block_id: 'end_datetime',
-        elements: [
-          {
-            type: 'datepicker',
-            action_id: 'end_date_picker',
-            initial_date: new Date().toISOString().split('T')[0],
-            placeholder: { type: 'plain_text', text: 'Today' }
-          },
-          {
-            type: 'static_select',
-            action_id: 'end_time_select',
-            placeholder: { type: 'plain_text', text: 'End of day' },
-            initial_option: {
-              text: { type: 'plain_text', text: 'End of day (6:30 PM)' },
-              value: 'end_of_day'
-            },
-            options: [
-              { text: { type: 'plain_text', text: 'End of day (6:30 PM)' }, value: 'end_of_day' },
-              { text: { type: 'plain_text', text: 'Before lunch (2:00 PM)' }, value: 'before_lunch' },
-              { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
-            ]
-          }
-        ]
-      },
-      {
-        type: 'input',
-        block_id: 'reason',
-        label: { type: 'plain_text', text: 'Reason' },
-        optional: true,
-        element: {
-          type: 'plain_text_input',
-          action_id: 'reason_input',
-          placeholder: { type: 'plain_text', text: 'Add a reason (required)' },
-          multiline: true
-        }
-      }
-    ]
-  };
-
-  console.log('⏱️ About to open modal, elapsed time:', new Date().toISOString());
-
-  // Open modal with race condition protection
   try {
+    // STEP 1: Open modal IMMEDIATELY with minimal data to avoid expiration
+    const basicModal = {
+      type: 'modal',
+      callback_id: 'leave_application_modal',
+      title: { type: 'plain_text', text: '🌿 Apply for Leave' },
+      submit: { type: 'plain_text', text: 'Apply' },
+      close: { type: 'plain_text', text: 'Cancel' },
+      private_metadata: userId,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: ':seedling: Loading your leave balances...'
+          }
+        },
+        {
+          type: 'input',
+          block_id: 'leave_type',
+          label: { type: 'plain_text', text: 'Leave Type' },
+          element: {
+            type: 'static_select',
+            action_id: 'leave_type_select',
+            placeholder: { type: 'plain_text', text: '🍃 Loading leave types...' },
+            options: [
+              { text: { type: 'plain_text', text: 'Loading...' }, value: 'loading' }
+            ]
+          }
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '*Start Date & Time*' }
+        },
+        {
+          type: 'actions',
+          block_id: 'start_datetime',
+          elements: [
+            {
+              type: 'datepicker',
+              action_id: 'start_date_picker',
+              initial_date: new Date().toISOString().split('T')[0],
+              placeholder: { type: 'plain_text', text: 'Today' }
+            },
+            {
+              type: 'static_select',
+              action_id: 'start_time_select',
+              placeholder: { type: 'plain_text', text: 'Start of day' },
+              initial_option: {
+                text: { type: 'plain_text', text: 'Start of day (10:00 AM)' },
+                value: 'start_of_day'
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'Start of day (10:00 AM)' }, value: 'start_of_day' },
+                { text: { type: 'plain_text', text: 'After lunch (2:45 PM)' }, value: 'after_lunch' },
+                { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
+              ]
+            }
+          ]
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '*End Date & Time*' }
+        },
+        {
+          type: 'actions',
+          block_id: 'end_datetime',
+          elements: [
+            {
+              type: 'datepicker',
+              action_id: 'end_date_picker',
+              initial_date: new Date().toISOString().split('T')[0],
+              placeholder: { type: 'plain_text', text: 'Today' }
+            },
+            {
+              type: 'static_select',
+              action_id: 'end_time_select',
+              placeholder: { type: 'plain_text', text: 'End of day' },
+              initial_option: {
+                text: { type: 'plain_text', text: 'End of day (6:30 PM)' },
+                value: 'end_of_day'
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'End of day (6:30 PM)' }, value: 'end_of_day' },
+                { text: { type: 'plain_text', text: 'Before lunch (2:00 PM)' }, value: 'before_lunch' },
+                { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
+              ]
+            }
+          ]
+        },
+        {
+          type: 'input',
+          block_id: 'reason',
+          label: { type: 'plain_text', text: 'Reason' },
+          optional: true,
+          element: {
+            type: 'plain_text_input',
+            action_id: 'reason_input',
+            placeholder: { type: 'plain_text', text: 'Add a reason (required)' },
+            multiline: true
+          }
+        }
+      ]
+    };
+
+    // Open modal with 1-second timeout to ensure it opens before trigger expires
     const modalResponse = await Promise.race([
       fetch('https://slack.com/api/views.open', {
         method: 'POST',
@@ -310,38 +213,250 @@ async function handleApplyLeave(payload: any, supabaseClient: any) {
         },
         body: JSON.stringify({
           trigger_id: triggerId,
-          view: modal
+          view: basicModal
         })
       }),
-      // Timeout after 2 seconds to avoid trigger expiration
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Modal request timeout')), 2000)
+        setTimeout(() => reject(new Error('Modal timeout')), 1000)
       )
     ]);
 
-    const result = await modalResponse.json();
-    console.log('✅ Modal API response received:', result.ok ? 'SUCCESS' : 'FAILED');
+    const modalResult = await modalResponse.json();
+    console.log('⚡ Modal opened in:', Date.now() - startTime, 'ms');
 
-    if (result.ok) {
-      console.log('🎉 Modal opened successfully!');
-      return new Response(null, { status: 200, headers: corsHeaders });
-    } else {
-      console.log('❌ Modal opening failed:', result.error);
-      
-      // Handle specific error cases gracefully
-      const errorMessage = getErrorMessage(result.error);
-      return await sendEphemeralMessage(payload.response_url, errorMessage);
-    }
-  } catch (error) {
-    console.error('💥 Exception while opening modal:', error);
-    
-    if (error.message === 'Modal request timeout') {
+    if (!modalResult.ok) {
+      console.error('❌ Modal failed:', modalResult.error);
       return await sendEphemeralMessage(payload.response_url, 
-        '⏱️ The request took too long. Please try clicking Apply Leave again.');
+        getErrorMessage(modalResult.error));
+    }
+
+    console.log('✅ Modal opened successfully!');
+
+    // STEP 2: Update modal with actual data in background (non-blocking)
+    updateModalWithData(modalResult.view.id, userId, supabaseClient).catch(error => {
+      console.error('Background update failed:', error);
+    });
+
+    return new Response(null, { status: 200, headers: corsHeaders });
+
+  } catch (error) {
+    console.error('💥 Critical error:', error);
+    
+    if (error.message === 'Modal timeout') {
+      return await sendEphemeralMessage(payload.response_url, 
+        '⏱️ Modal opening timed out. Please try clicking Apply Leave again.');
     }
     
     return await sendEphemeralMessage(payload.response_url, 
       '🚨 An error occurred. Please try clicking Apply Leave again.');
+  }
+}
+
+// Background function to update modal with real data
+async function updateModalWithData(viewId: string, userId: string, supabaseClient: any) {
+  try {
+    console.log('🔄 Updating modal with real data...');
+    
+    // Check if user exists
+    const { data: slackIntegration, error: integrationError } = await supabaseClient
+      .from('user_slack_integrations')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (integrationError || !slackIntegration) {
+      console.error('❌ User not found:', integrationError);
+      return;
+    }
+
+    // Get data in parallel
+    const [balancesResult, leaveTypesResult] = await Promise.all([
+      getLeaveBalances(userId, supabaseClient),
+      supabaseClient
+        .from('leave_types')
+        .select('*')
+        .eq('is_active', true)
+        .order('label')
+    ]);
+
+    const balances = balancesResult;
+    const { data: leaveTypes, error: leaveTypesError } = leaveTypesResult;
+
+    if (leaveTypesError) {
+      console.error('❌ Error fetching leave types:', leaveTypesError);
+      return;
+    }
+
+    // Filter leave types based on WFH exhaustion logic
+    const availableLeaveTypes = await filterLeaveTypes(leaveTypes, balances, userId, supabaseClient);
+
+    const leaveOptions = availableLeaveTypes.map(type => {
+      const balance = balances.find(b => b.leave_type === type.label);
+      let displayText = '';
+      
+      if (type.label === 'Paid Leave') {
+        const remaining = balance?.remaining_this_month || 0;
+        displayText = remaining > 0 ? `🌴 ${type.label} (${remaining} days left)` : `🌴 ${type.label} (Exhausted)`;
+      } else if (type.label === 'Work From Home') {
+        const remaining = balance?.remaining_this_month || 0;
+        displayText = remaining > 0 ? `🏠 ${type.label} (${remaining} days left)` : `🏠 ${type.label} (Exhausted)`;
+      } else if (type.label === 'Short Leave') {
+        const remaining = balance?.remaining_this_month || 0;
+        displayText = remaining > 0 ? `⏰ ${type.label} (${remaining} hours left)` : `⏰ ${type.label} (Exhausted)`;
+      } else if (type.label === 'Additional work from home') {
+        displayText = `🏠 ${type.label}`;
+      }
+      
+      return {
+        text: { type: 'plain_text', text: displayText },
+        value: type.id
+      };
+    });
+
+    // Calculate total remaining for display
+    const totalRemaining = balances.reduce((total, balance) => {
+      if (balance.leave_type === 'Paid Leave') return total + (balance.remaining_this_month || 0);
+      if (balance.leave_type === 'Work From Home') return total + (balance.remaining_this_month || 0);
+      if (balance.leave_type === 'Short Leave') return total + ((balance.remaining_this_month || 0) / 8);
+      return total;
+    }, 0);
+
+    // Create balance display text
+    const balanceText = balances.map(balance => {
+      if (balance.leave_type === 'Additional work from home') {
+        return `• *${balance.leave_type}*: Unlimited days remaining`;
+      }
+      const unit = balance.duration_type === 'hours' ? 'hours' : 'days';
+      return `• *${balance.leave_type}*: ${balance.remaining_this_month || 0} ${unit} remaining`;
+    }).join('\n');
+
+    // Update the modal with real data
+    const updatedModal = {
+      type: 'modal',
+      callback_id: 'leave_application_modal',
+      title: { type: 'plain_text', text: '🌿 Apply for Leave' },
+      submit: { type: 'plain_text', text: 'Apply' },
+      close: { type: 'plain_text', text: 'Cancel' },
+      private_metadata: userId,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `:seedling: You have *${totalRemaining.toFixed(1)} days* remaining in this cycle`
+          }
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*📊 Your Current Balances:*\n${balanceText}`
+          }
+        },
+        {
+          type: 'input',
+          block_id: 'leave_type',
+          label: { type: 'plain_text', text: 'Leave Type' },
+          element: {
+            type: 'static_select',
+            action_id: 'leave_type_select',
+            placeholder: { type: 'plain_text', text: '🍃 Select a leave type' },
+            options: leaveOptions
+          }
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '*Start Date & Time*' }
+        },
+        {
+          type: 'actions',
+          block_id: 'start_datetime',
+          elements: [
+            {
+              type: 'datepicker',
+              action_id: 'start_date_picker',
+              initial_date: new Date().toISOString().split('T')[0],
+              placeholder: { type: 'plain_text', text: 'Today' }
+            },
+            {
+              type: 'static_select',
+              action_id: 'start_time_select',
+              placeholder: { type: 'plain_text', text: 'Start of day' },
+              initial_option: {
+                text: { type: 'plain_text', text: 'Start of day (10:00 AM)' },
+                value: 'start_of_day'
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'Start of day (10:00 AM)' }, value: 'start_of_day' },
+                { text: { type: 'plain_text', text: 'After lunch (2:45 PM)' }, value: 'after_lunch' },
+                { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
+              ]
+            }
+          ]
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '*End Date & Time*' }
+        },
+        {
+          type: 'actions',
+          block_id: 'end_datetime',
+          elements: [
+            {
+              type: 'datepicker',
+              action_id: 'end_date_picker',
+              initial_date: new Date().toISOString().split('T')[0],
+              placeholder: { type: 'plain_text', text: 'Today' }
+            },
+            {
+              type: 'static_select',
+              action_id: 'end_time_select',
+              placeholder: { type: 'plain_text', text: 'End of day' },
+              initial_option: {
+                text: { type: 'plain_text', text: 'End of day (6:30 PM)' },
+                value: 'end_of_day'
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'End of day (6:30 PM)' }, value: 'end_of_day' },
+                { text: { type: 'plain_text', text: 'Before lunch (2:00 PM)' }, value: 'before_lunch' },
+                { text: { type: 'plain_text', text: 'Custom time' }, value: 'custom' }
+              ]
+            }
+          ]
+        },
+        {
+          type: 'input',
+          block_id: 'reason',
+          label: { type: 'plain_text', text: 'Reason' },
+          optional: true,
+          element: {
+            type: 'plain_text_input',
+            action_id: 'reason_input',
+            placeholder: { type: 'plain_text', text: 'Add a reason (required)' },
+            multiline: true
+          }
+        }
+      ]
+    };
+
+    // Update the modal
+    await fetch('https://slack.com/api/views.update', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SLACK_BOT_TOKEN')}`,
+        'Content-Type': 'application/json; charset=utf-8'
+      },
+      body: JSON.stringify({
+        view_id: viewId,
+        view: updatedModal
+      })
+    });
+
+    console.log('✅ Modal updated with real data');
+
+  } catch (error) {
+    console.error('❌ Failed to update modal:', error);
   }
 }
 
