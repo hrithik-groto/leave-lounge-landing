@@ -154,33 +154,39 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
             carryForward: 0 // No carry forward for Short Leave
           });
         } else if (leaveType.label === 'Paid Leave') {
-          // For Paid Leave, use the monthly balance system with carryforward
-          const { data, error } = await supabase
-            .rpc('get_monthly_leave_balance', {
-              p_user_id: user.id,
-              p_leave_type_id: leaveType.id,
-              p_month: currentMonth,
-              p_year: currentYear
-            });
+          // Calculate from actual records for Paid Leave
+          const { data: paidLeaves, error } = await supabase
+            .from('leave_applied_users')
+            .select('actual_days_used, is_half_day, start_date, end_date, status')
+            .eq('user_id', user.id)
+            .eq('leave_type_id', leaveType.id)
+            .gte('start_date', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
+            .lt('start_date', currentMonth === 12 
+              ? `${currentYear + 1}-01-01` 
+              : `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`)
+            .in('status', ['approved', 'pending']);
 
           if (error) throw error;
 
-          // Properly type and access the response data
-          if (data && typeof data === 'object') {
-            const balanceData = data as any;
-            
-            // Ensure remaining balance is never negative
-            const remainingBalance = Math.max(0, balanceData.remaining_this_month || 0);
-            
-            setUsage({
-              used: balanceData.used_this_month || 0,
-              remaining: remainingBalance,
-              carryForward: balanceData.carried_forward || 0
-            });
-          } else {
-            console.error('Invalid response format from get_monthly_leave_balance');
-            setUsage({ used: 0, remaining: leaveType.monthlyAllowance, carryForward: 0 });
-          }
+          // Calculate total days used (including half days)
+          const totalDaysUsed = paidLeaves?.reduce((total, leave) => {
+            if (leave.actual_days_used) {
+              return total + leave.actual_days_used;
+            }
+            if (leave.is_half_day) {
+              return total + 0.5;
+            }
+            const daysDiff = Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 3600 * 24)) + 1;
+            return total + daysDiff;
+          }, 0) || 0;
+
+          const remaining = Math.max(0, leaveType.monthlyAllowance - totalDaysUsed);
+
+          setUsage({
+            used: totalDaysUsed,
+            remaining: remaining,
+            carryForward: 0 // We'll handle carry forward separately if needed
+          });
         } else {
           // For other leave types, calculate from actual records
           const { data: leaves, error } = await supabase
@@ -288,7 +294,7 @@ const LeaveBalanceCard: React.FC<LeaveBalanceCardProps> = ({ leaveType, refreshT
           )}
         </div>
 
-        {usage.remaining <= 0 && usage.used >= leaveType.monthlyAllowance && (
+        {usage.remaining <= 0 && (
           <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
             {leaveType.label === 'Short Leave' 
               ? 'Monthly short leave quota exhausted. Wait for next month to get 4 new short leaves.'
