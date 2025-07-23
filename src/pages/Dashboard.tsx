@@ -1,15 +1,16 @@
+
 import React from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import FloatingChatWidget from '@/components/FloatingChatWidget';
 
 const Dashboard = () => {
   const { userId, signOut } = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   if (!userId) {
-    router.push('/');
+    navigate('/');
     return null;
   }
 
