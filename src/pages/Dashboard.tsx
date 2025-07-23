@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
@@ -9,8 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Calendar, Clock, Users, FileText, MessageSquare, Bell, Settings } from 'lucide-react';
 import AnnualLeaveInitializer from '@/components/AnnualLeaveInitializer';
 import QuickActions from '@/components/QuickActions';
-import ComprehensiveLeaveBalance from '@/components/ComprehensiveLeaveBalance';
-import TabbedLeaveApplications from '@/components/TabbedLeaveApplications';
+import { ComprehensiveLeaveBalance } from '@/components/ComprehensiveLeaveBalance';
+import { TabbedLeaveApplications } from '@/components/TabbedLeaveApplications';
 import AllUsersOnLeave from '@/components/AllUsersOnLeave';
 import EnhancedCalendar from '@/components/EnhancedCalendar';
 import SlackIntegration from '@/components/SlackIntegration';
@@ -47,6 +48,16 @@ const Dashboard = () => {
     }
   }, [user, isLoaded, navigate, toast]);
 
+  const handleQuickAction = (action: string) => {
+    // Handle quick actions
+    console.log('Quick action:', action);
+  };
+
+  const handleLeaveRevert = (applicationId: string) => {
+    // Handle leave revert
+    console.log('Revert application:', applicationId);
+  };
+
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
@@ -59,7 +70,7 @@ const Dashboard = () => {
   }
 
   if (!user) {
-    return null; // or some other fallback
+    return null;
   }
 
   return (
@@ -74,7 +85,7 @@ const Dashboard = () => {
               <CardDescription>Manage your leave requests and team at a glance.</CardDescription>
             </CardHeader>
             <CardContent>
-              <QuickActions />
+              <QuickActions onActionClick={handleQuickAction} />
             </CardContent>
           </Card>
 
@@ -107,7 +118,7 @@ const Dashboard = () => {
               <CardDescription>Manage and view your leave applications.</CardDescription>
             </CardHeader>
             <CardContent>
-              <TabbedLeaveApplications />
+              <TabbedLeaveApplications applications={[]} onRevert={handleLeaveRevert} />
             </CardContent>
           </Card>
 

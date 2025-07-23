@@ -43,14 +43,26 @@ const SlackOAuthButton = () => {
     try {
       // Get the client ID from Supabase secrets via edge function
       const response = await fetch(`https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth?get_client_id=true`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to get client ID');
+      }
+      
       const { clientId } = await response.json();
       
+      if (!clientId) {
+        throw new Error('Client ID not available');
+      }
+      
+      // Always use HTTPS for the redirect URI
       const redirectUri = `https://ppuyedxxfcijdfeqpwfj.supabase.co/functions/v1/slack-oauth`;
       const state = user.id;
       
       const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=chat:write,users:read&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
       
-      // Open OAuth in the same window to avoid SSL issues
+      console.log('Initiating OAuth with URL:', oauthUrl);
+      
+      // Open OAuth in the same window
       window.location.href = oauthUrl;
     } catch (error) {
       console.error('Error starting OAuth flow:', error);
