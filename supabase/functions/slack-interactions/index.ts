@@ -590,8 +590,17 @@ async function handleLeaveSubmission(data: any, supabaseClient: any) {
       });
     }
 
-    // Calculate days
-    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+    // Determine if it's a half day
+    const isHalfDay = (formData.startTime === 'after_lunch' && formData.endTime === 'end_of_day') ||
+                     (formData.startTime === 'start_of_day' && formData.endTime === 'before_lunch');
+
+    // Calculate days - this is crucial for the fix
+    let daysDiff;
+    if (isHalfDay) {
+      daysDiff = 0.5;
+    } else {
+      daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+    }
     
     // Validate leave balance
     const { data: leaveTypes } = await supabaseClient
@@ -612,7 +621,7 @@ async function handleLeaveSubmission(data: any, supabaseClient: any) {
       });
     }
 
-    // Check balance limits
+    // Check balance limits with proper half-day handling
     const balanceCheck = await validateLeaveBalance(userId, formData.leaveTypeId, daysDiff, leaveTypes.label, supabaseClient);
     
     if (!balanceCheck.valid) {
@@ -626,10 +635,6 @@ async function handleLeaveSubmission(data: any, supabaseClient: any) {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-
-    // Determine if it's a half day
-    const isHalfDay = (formData.startTime === 'after_lunch' && formData.endTime === 'end_of_day') ||
-                     (formData.startTime === 'start_of_day' && formData.endTime === 'before_lunch');
 
     // Set leave times for half day
     let leaveTimeStart = null;
@@ -654,7 +659,7 @@ async function handleLeaveSubmission(data: any, supabaseClient: any) {
       reason: formData.reason || 'Applied via Slack for ' + leaveTypes.label,
       status: 'pending',
       is_half_day: isHalfDay,
-      actual_days_used: isHalfDay ? 0.5 : daysDiff,
+      actual_days_used: daysDiff,
       hours_requested: leaveTypes.label === 'Short Leave' ? (isHalfDay ? 4 : 8) : 0,
       leave_time_start: leaveTimeStart,
       leave_time_end: leaveTimeEnd
@@ -795,10 +800,11 @@ async function validateLeaveBalance(userId: string, leaveTypeId: string, request
 
   const remaining = monthlyLimit - totalUsed;
   
+  // This is the key fix - allow proper decimal validation for half-day leaves
   if (requestedDays > remaining) {
     return { 
       valid: false, 
-      message: `${leaveTypeLabel} limit exceeded. You have ${remaining} days remaining this month.` 
+      message: `${leaveTypeLabel} limit exceeded. You have ${remaining} days remaining this month (requested: ${requestedDays} days).` 
     };
   }
 
