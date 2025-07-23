@@ -60,66 +60,8 @@ serve(async (req) => {
       const action = parsedPayload.actions?.[0];
       console.log('Processing action:', action?.action_id, 'for user:', parsedPayload.user?.id);
 
-<<<<<<< HEAD
-    let formData;
-    try {
-      console.log('Body available:', req.body ? 'Yes' : 'No');
-      formData = await req.formData();
-      console.log('✅ Successfully parsed FormData for interactions');
-    } catch (parseError) {
-      console.error('❌ Failed to parse FormData:', parseError);
-      return new Response('Invalid form data', { status: 400, headers: corsHeaders });
-    }
-
-    const payloadString = formData.get('payload') as string;
-    console.log('📋 All FormData entries:', Array.from(formData.entries()));
-
-    if (!payloadString) {
-      console.error('❌ No payload found in FormData');
-      return new Response('No payload found', { status: 400, headers: corsHeaders });
-    }
-
-    let payload;
-    try {
-      payload = JSON.parse(payloadString);
-      console.log('✅ Successfully parsed payload');
-      console.log('📝 Payload type:', payload.type);
-    } catch (parseError) {
-      console.error('❌ Failed to parse payload JSON:', parseError);
-      return new Response('Invalid payload JSON', { status: 400, headers: corsHeaders });
-    }
-
-    console.log('📝 Payload data:', JSON.stringify(payload, null, 2));
-
-    // Handle block actions (button clicks)
-    if (payload.type === 'block_actions') {
-      const action = payload.actions[0];
-      const actionId = action.action_id;
-      const userId = action.value;
-
-      console.log('Received Slack interaction:', payload.type, actionId);
-      console.log('Processing action:', actionId, 'for user:', userId);
-
-      // Find the user in our database
-      const { data: slackIntegration, error: integrationError } = await supabaseClient
-        .from('user_slack_integrations')
-        .select('user_id')
-        .eq('slack_user_id', payload.user.id)
-        .eq('slack_team_id', payload.team.id)
-        .single();
-
-      if (integrationError || !slackIntegration) {
-        return new Response(
-          JSON.stringify({
-            response_type: 'ephemeral',
-            text: '🥺 You need to connect your Timeloo account first. Please visit the web app (Copy and paste this in your browser 👉🏻 https://preview--leave-lounge-landing.lovable.app) to link your Slack account.',
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-=======
       if (action?.action_id === 'apply_leave') {
         return await handleApplyLeave(parsedPayload, supabaseClient);
->>>>>>> cf1dd46e75b912bc372d01c7f134e88c268ff19d
       }
       
       // Handle other button interactions that don't require a response
@@ -322,23 +264,23 @@ async function updateModalWithData(viewId: string, userId: string, supabaseClien
       .eq('user_id', userId)
       .single();
 
-    if (integrationError || !slackIntegration) {
-      console.error('❌ User not found:', integrationError);
-      return;
-    }
+      if (integrationError || !slackIntegration) {
+        return new Response(
+          JSON.stringify({
+            response_type: 'ephemeral',
+            text: '❌ You need to connect your Timeloo account first. Please visit the web app to link your Slack account.',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    // Get data in parallel
-    const [balancesResult, leaveTypesResult] = await Promise.all([
-      getLeaveBalances(userId, supabaseClient),
-      supabaseClient
-        .from('leave_types')
-        .select('*')
-        .eq('is_active', true)
-        .order('label')
-    ]);
-
-    const balances = balancesResult;
-    const { data: leaveTypes, error: leaveTypesError } = leaveTypesResult;
+      if (actionId === 'apply_leave') {
+        // Get all leave types for the modal
+        const { data: leaveTypes, error: leaveTypesError } = await supabaseClient
+          .from('leave_types')
+          .select('*')
+          .eq('is_active', true)
+          .order('label');
 
     if (leaveTypesError) {
       console.error('❌ Error fetching leave types:', leaveTypesError);
