@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     // Use the fresh bot token directly
     const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
-    const channelId = 'C095J2588Q5'; // Second channel for real-time notifications
+    const channelId = 'C095J2588Q5'; // All users channel
 
     console.log('🔑 Checking environment variables...');
     console.log('Bot token configured:', !!botToken);
@@ -42,16 +42,128 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate bot token format
-    if (!botToken.startsWith('xoxb-') && !botToken.startsWith('xoxe.xoxb-')) {
-      console.error('❌ Invalid bot token format');
+    // Check if this is a direct notification request (from trigger)
+    const requestBody = await req.json().catch(() => ({}));
+    console.log('📨 Request body:', JSON.stringify(requestBody, null, 2));
+
+    if (requestBody.leaveApplication) {
+      // Handle direct notification from trigger
+      console.log('📧 Processing direct leave notification');
+      const leave = requestBody.leaveApplication;
+      
+      const userName = leave.user_name || 'Unknown User';
+      const leaveType = leave.leave_type_label || 'Leave';
+      const startDate = new Date(leave.start_date);
+      const endDate = new Date(leave.end_date);
+      const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      const status = leave.status === 'pending' ? '⏳ awaiting approval' : '✅ approved';
+      
+      const istTimezone = 'Asia/Kolkata';
+      const formattedStartDate = formatInTimeZone(startDate, istTimezone, 'MMM dd');
+      const formattedEndDate = formatInTimeZone(endDate, istTimezone, 'MMM dd');
+      const dateRange = startDate.getTime() === endDate.getTime() ? 
+        formattedStartDate : 
+        `${formattedStartDate} - ${formattedEndDate}`;
+
+      // Fun see-off messages
+      const seeOffMessages = [
+        `🌟 Time to bid farewell (temporarily)!`,
+        `🚀 Houston, we have a leave application!`,
+        `🌈 Someone's taking a well-deserved break!`,
+        `🎉 Break time alert!`,
+        `🌺 Time to recharge those batteries!`,
+        `⭐ Adventure awaits!`,
+        `🌞 Time to chase some sunshine!`,
+        `🎈 Someone's escaping the office life!`,
+        `🌸 Self-care mode: ACTIVATED!`,
+        `🦋 Time to spread those wings!`
+      ];
+
+      const randomMessage = seeOffMessages[Math.floor(Math.random() * seeOffMessages.length)];
+
+      const message = {
+        channel: channelId,
+        text: `💫 ${userName} just applied for leave!`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `${randomMessage}\n\n*${userName}* just applied for *${leaveType}* (${dateRange}) — ${daysDiff} day${daysDiff > 1 ? 's' : ''} ${status}.\n\nLet's make sure they can disconnect peacefully! 🌸✨`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `📱 Powered by Timeloo • ${formatInTimeZone(new Date(), istTimezone, 'h:mm a')} IST`
+              }
+            ]
+          }
+        ]
+      };
+
+      console.log(`📤 Sending instant notification for ${userName}'s leave application`);
+
+      try {
+        const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(message),
+        });
+
+        if (!slackResponse.ok) {
+          throw new Error(`HTTP ${slackResponse.status}: ${slackResponse.statusText}`);
+        }
+
+        const slackResult = await slackResponse.json();
+        console.log('📬 Slack response:', JSON.stringify(slackResult, null, 2));
+
+        if (!slackResult.ok) {
+          console.error('❌ Slack API error:', slackResult.error);
+          
+          // If token expired, try to refresh
+          if (slackResult.error === 'token_expired') {
+            console.log('🔄 Token expired, attempting refresh...');
+            try {
+              const refreshResult = await supabaseClient.functions.invoke('refresh-slack-token', {
+                body: { source: 'midday-notifications-token-expired' }
+              });
+              
+              if (refreshResult.data?.success) {
+                console.log('✅ Token refreshed successfully');
+              } else {
+                console.error('❌ Token refresh failed:', refreshResult.data?.message);
+              }
+            } catch (refreshError) {
+              console.error('❌ Token refresh error:', refreshError);
+            }
+          }
+        } else {
+          console.log(`✅ Instant notification sent successfully for ${userName}`);
+        }
+
+      } catch (fetchError) {
+        console.error(`❌ Error sending instant notification for ${userName}:`, fetchError.message);
+      }
+
       return new Response(
-        JSON.stringify({ error: 'Invalid bot token format' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        JSON.stringify({ 
+          success: true, 
+          message: 'Instant notification sent successfully'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
 
-    // Get current time in IST
+    // If not a direct notification, handle as scheduled cron job (legacy behavior)
     const istTimezone = 'Asia/Kolkata';
     const now = new Date();
     const currentIST = new Date(now.toLocaleString("en-US", {timeZone: istTimezone}));
@@ -82,7 +194,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Look for recent leave applications (last 30 minutes)
+    // Look for recent leave applications (last 30 minutes) - fallback for cron job
     const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
     const thirtyMinutesAgoISO = thirtyMinutesAgo.toISOString();
 
@@ -226,8 +338,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        processedLeaves: enhancedLeaves.length,
-        message: 'Mid-day notifications processed successfully'
+        message: 'Mid-day notifications processed successfully (cron fallback)'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
