@@ -35,6 +35,18 @@ serve(async (req) => {
     if (payload.type === 'block_actions') {
       const action = payload.actions[0];
       const user = payload.user;
+      const team = payload.team;
+      
+      // Add safety checks for required properties
+      if (!user || !user.id) {
+        console.error('❌ Missing user information in payload');
+        return new Response('Missing user information', { status: 400 });
+      }
+      
+      if (!team || !team.id) {
+        console.error('❌ Missing team information in payload');
+        return new Response('Missing team information', { status: 400 });
+      }
       
       console.log(`Processing action: ${action.action_id} for user: ${user.id}`);
 
@@ -48,7 +60,7 @@ serve(async (req) => {
           .from('user_slack_integrations')
           .select('user_id')
           .eq('slack_user_id', user.id)
-          .eq('slack_team_id', payload.team.id)
+          .eq('slack_team_id', team.id)
           .single();
 
         if (integrationError || !slackIntegration) {
@@ -80,7 +92,9 @@ serve(async (req) => {
             ]
           };
 
-          const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+          // Get fresh bot token
+          const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
+          
           await fetch('https://slack.com/api/views.open', {
             method: 'POST',
             headers: {
@@ -116,7 +130,8 @@ serve(async (req) => {
           ]
         };
 
-        const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+        const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
+        
         const modalResponse = await fetch('https://slack.com/api/views.open', {
           method: 'POST',
           headers: {
@@ -153,7 +168,7 @@ serve(async (req) => {
         if (profileError || !existingProfile) {
           console.log(`👤 Creating new profile for user: ${slackIntegration.user_id}`);
           
-          // Extract user info from Slack payload
+          // Extract user info from Slack payload with safety checks
           const userEmail = user.profile?.email || `${user.name}@slack.user`;
           const userName = user.real_name || user.profile?.real_name || user.name || 'Slack User';
           
@@ -307,22 +322,23 @@ serve(async (req) => {
               };
 
             } else if (leaveTypeLabel === 'Paid Leave') {
-              // Get monthly balance using the RPC function
-              const { data: balanceData } = await supabase
-                .rpc('get_or_create_monthly_balance', {
-                  p_user_id: slackIntegration.user_id,
-                  p_leave_type_id: leaveTypeId,
-                  p_year: currentYear,
-                  p_month: currentMonth
-                });
+              // Direct database query for monthly leave balance
+              const { data: monthlyBalance } = await supabase
+                .from('user_monthly_leave_balances')
+                .select('*')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .eq('year', currentYear)
+                .eq('month', currentMonth)
+                .single();
 
-              if (balanceData) {
-                const remaining = Math.max(0, (balanceData.allocated_balance || 1.5) - (balanceData.used_balance || 0));
+              if (monthlyBalance) {
+                const remaining = Math.max(0, (monthlyBalance.allocated_balance || 1.5) - (monthlyBalance.used_balance || 0));
                 return {
                   remaining,
-                  used: balanceData.used_balance || 0,
-                  allowance: balanceData.allocated_balance || 1.5,
-                  carriedForward: balanceData.carried_forward || 0,
+                  used: monthlyBalance.used_balance || 0,
+                  allowance: monthlyBalance.allocated_balance || 1.5,
+                  carriedForward: monthlyBalance.carried_forward || 0,
                   canApply: remaining > 0,
                   period: 'month',
                   unit: 'days'
@@ -359,20 +375,21 @@ serve(async (req) => {
               };
 
             } else if (leaveTypeLabel === 'Annual Leave') {
-              // Get annual balance using the RPC function
-              const { data: balanceData } = await supabase
-                .rpc('get_or_create_annual_balance', {
-                  p_user_id: slackIntegration.user_id,
-                  p_leave_type_id: leaveTypeId,
-                  p_year: currentYear
-                });
+              // Direct database query for annual leave balance
+              const { data: annualBalance } = await supabase
+                .from('user_annual_leave_balances')
+                .select('*')
+                .eq('user_id', slackIntegration.user_id)
+                .eq('leave_type_id', leaveTypeId)
+                .eq('year', currentYear)
+                .single();
 
-              if (balanceData) {
-                const remaining = Math.max(0, (balanceData.allocated_balance || 18) - (balanceData.used_balance || 0));
+              if (annualBalance) {
+                const remaining = Math.max(0, (annualBalance.allocated_balance || 18) - (annualBalance.used_balance || 0));
                 return {
                   remaining,
-                  used: balanceData.used_balance || 0,
-                  allowance: balanceData.allocated_balance || 18,
+                  used: annualBalance.used_balance || 0,
+                  allowance: annualBalance.allocated_balance || 18,
                   canApply: remaining > 0,
                   period: 'year',
                   unit: 'days'
@@ -690,13 +707,20 @@ serve(async (req) => {
       
       const values = payload.view.state.values;
       const userId = payload.user.id;
+      const team = payload.team;
+      
+      // Add safety checks
+      if (!team || !team.id) {
+        console.error('❌ Missing team information in submission');
+        return new Response('Missing team information', { status: 400 });
+      }
       
       // Get the actual user ID from Slack integration
       const { data: slackIntegration } = await supabase
         .from('user_slack_integrations')
         .select('user_id')
         .eq('slack_user_id', userId)
-        .eq('slack_team_id', payload.team.id)
+        .eq('slack_team_id', team.id)
         .single();
 
       if (!slackIntegration) {

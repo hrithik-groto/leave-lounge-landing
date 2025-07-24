@@ -179,33 +179,43 @@ serve(async (req) => {
       }
     );
 
+    // Function to get fresh bot token
+    const getFreshBotToken = async () => {
+      let botToken = Deno.env.get('SLACK_BOT_TOKEN');
+      
+      // If token is missing or looks expired, try to refresh it
+      if (!botToken || botToken.includes('invalid') || isTest) {
+        console.log('Bot token missing or expired, attempting to refresh...');
+        
+        try {
+          const refreshResponse = await supabaseClient.functions.invoke('refresh-slack-token', {
+            body: { source: 'slack-notify-auto-refresh' }
+          });
+          
+          if (!refreshResponse.error) {
+            console.log('Token refresh initiated successfully');
+            // Wait a moment for the token to be potentially updated
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Try to get the updated token
+            botToken = Deno.env.get('SLACK_BOT_TOKEN');
+          } else {
+            console.error('Token refresh failed:', refreshResponse.error);
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh token:', refreshError);
+        }
+      }
+      
+      // Use the updated token from the refresh function
+      return 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
+    };
+
     // Send to appropriate Slack channels
     let channelResults = [];
 
     // Always send to admin channel for ALL leave applications (pending, approved, rejected)
     const adminChannelId = 'C0920F0V7PW'; // Admin channel ID
-    let botToken = Deno.env.get('SLACK_BOT_TOKEN');
-    
-    // If bot token is the old format or doesn't work, try to refresh it
-    if (!botToken || botToken.includes('invalid') || isTest) {
-      console.log('Bot token may be expired, attempting to refresh...');
-      
-      try {
-        const { error: refreshError } = await supabaseClient.functions.invoke('refresh-slack-token', {
-          body: { source: 'slack-notify-auto-refresh' }
-        });
-        
-        if (!refreshError) {
-          // Wait a moment for the token to be updated
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          // Get the refreshed token
-          botToken = Deno.env.get('SLACK_BOT_TOKEN');
-          console.log('Token refresh completed, using updated token');
-        }
-      } catch (refreshError) {
-        console.error('Failed to refresh token:', refreshError);
-      }
-    }
+    const botToken = await getFreshBotToken();
     
     if (adminChannelId && botToken) {
       console.log('Sending message to admin Slack channel...');
@@ -228,9 +238,9 @@ serve(async (req) => {
         console.error('Admin Slack API error:', adminData.error);
         console.error('Response details:', adminData);
         
-        // If token is invalid, try one more refresh
-        if (adminData.error === 'invalid_auth') {
-          console.log('Token invalid, attempting final refresh...');
+        // If token is still invalid, try emergency refresh
+        if (adminData.error === 'token_expired' || adminData.error === 'invalid_auth') {
+          console.log('Token still invalid, attempting emergency refresh...');
           try {
             await supabaseClient.functions.invoke('refresh-slack-token', {
               body: { source: 'emergency-refresh' }
