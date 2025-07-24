@@ -33,7 +33,7 @@ const Dashboard = () => {
   const calendarRef = useRef<{ openApplyDialog: () => void } | null>(null);
 
   // Check if current user is admin
-  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV';
+  const isAdmin = user?.id === 'user_2xwywE2Bl76vs7l68dhj6nIcCPV' || user?.id === 'user_30JDwBWQQyzlqBrhUFRCsvOjuI4';
 
   useEffect(() => {
     if (user && isLoaded) {
