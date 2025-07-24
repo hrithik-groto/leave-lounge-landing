@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap, Key, Settings, ExternalLink } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle, AlertTriangle, Zap, Key, Settings, ExternalLink, XCircle } from 'lucide-react';
 
 interface TokenUpdate {
   id: string;
@@ -21,12 +21,13 @@ const SlackTokenManager = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshStatus, setLastRefreshStatus] = useState<string>('');
+  const [isTokenExpired, setIsTokenExpired] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchTokenUpdates();
-    // Check for refresh every 5 minutes
-    const interval = setInterval(fetchTokenUpdates, 5 * 60 * 1000);
+    // Check for refresh every 3 minutes for better monitoring
+    const interval = setInterval(fetchTokenUpdates, 3 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -36,24 +37,40 @@ const SlackTokenManager = () => {
         .from('slack_token_updates')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(25);
 
       if (error) throw error;
       
       setTokenUpdates(data || []);
       
-      // Check last refresh status
+      // Check last refresh status and detect token expiration
       if (data && data.length > 0) {
         const lastUpdate = data[0];
         setLastRefreshStatus(lastUpdate.status);
         
-        // Show toast for recent failures
-        if (lastUpdate.status === 'error' || lastUpdate.status === 'manual_update_needed') {
+        // Check if token is expired based on recent error logs
+        const recentErrors = data.filter(update => 
+          update.status === 'error' && 
+          (update.new_token.includes('token_expired') || update.old_token.includes('token_expired'))
+        );
+        
+        const hasRecentTokenExpiredError = recentErrors.some(error => {
+          const errorTime = new Date(error.created_at).getTime();
+          const now = Date.now();
+          return (now - errorTime) < 30 * 60 * 1000; // Within last 30 minutes
+        });
+        
+        setIsTokenExpired(hasRecentTokenExpiredError);
+        
+        // Show toast for recent failures or expired tokens
+        if (lastUpdate.status === 'error' || lastUpdate.status === 'manual_update_needed' || hasRecentTokenExpiredError) {
           const timeSinceUpdate = Date.now() - new Date(lastUpdate.created_at).getTime();
           if (timeSinceUpdate < 5 * 60 * 1000) { // Within last 5 minutes
             toast({
-              title: "⚠️ Token Refresh Issue",
-              description: "Automatic token refresh failed. Manual update may be required.",
+              title: isTokenExpired ? "🚨 Token Expired!" : "⚠️ Token Refresh Issue",
+              description: isTokenExpired ? 
+                "Slack bot token has expired. All notifications are failing!" : 
+                "Automatic token refresh failed. Manual update may be required.",
               variant: "destructive"
             });
           }
@@ -82,6 +99,7 @@ const SlackTokenManager = () => {
       console.log('Refresh response:', data);
 
       if (data?.success) {
+        setIsTokenExpired(false);
         toast({
           title: "✅ Token Refresh Successful",
           description: data.message || "Slack tokens have been refreshed successfully!",
@@ -119,7 +137,7 @@ const SlackTokenManager = () => {
       case 'manual_update_needed':
         return <Badge className="bg-red-100 text-red-700 border-red-200"><AlertTriangle className="w-3 h-3 mr-1" />Manual Update Needed</Badge>;
       case 'error':
-        return <Badge className="bg-red-100 text-red-700 border-red-200"><AlertTriangle className="w-3 h-3 mr-1" />Error</Badge>;
+        return <Badge className="bg-red-100 text-red-700 border-red-200"><XCircle className="w-3 h-3 mr-1" />Error</Badge>;
       case 'missing_credentials':
         return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200"><AlertTriangle className="w-3 h-3 mr-1" />Missing Credentials</Badge>;
       default:
@@ -154,8 +172,8 @@ const SlackTokenManager = () => {
     );
   }
 
-  const isSystemHealthy = lastRefreshStatus === 'auto_updated' || lastRefreshStatus === '';
-  const needsManualUpdate = lastRefreshStatus === 'manual_update_needed' || lastRefreshStatus === 'error';
+  const isSystemHealthy = lastRefreshStatus === 'auto_updated' || (lastRefreshStatus === '' && !isTokenExpired);
+  const needsManualUpdate = lastRefreshStatus === 'manual_update_needed' || lastRefreshStatus === 'error' || isTokenExpired;
 
   return (
     <Card>
@@ -166,7 +184,7 @@ const SlackTokenManager = () => {
             Slack Token Manager
           </span>
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isSystemHealthy ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <div className={`w-3 h-3 rounded-full ${isSystemHealthy ? 'bg-green-500' : 'bg-red-500'} ${!isSystemHealthy ? 'animate-pulse' : ''}`}></div>
             <Button 
               onClick={handleRefreshToken}
               disabled={isRefreshing}
@@ -184,6 +202,43 @@ const SlackTokenManager = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Token Expired Alert */}
+        {isTokenExpired && (
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 animate-pulse">
+            <h4 className="font-semibold text-red-900 mb-2 flex items-center">
+              <XCircle className="w-5 h-5 mr-2 text-red-600" />
+              🚨 CRITICAL: Token Expired!
+            </h4>
+            <p className="text-sm text-red-700 mb-3">
+              The Slack bot token has expired and all notifications are failing! This needs immediate attention.
+            </p>
+            <div className="flex space-x-2">
+              <Button 
+                onClick={handleRefreshToken}
+                disabled={isRefreshing}
+                size="sm" 
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isRefreshing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                Emergency Refresh
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="border-red-300 text-red-700 hover:bg-red-100"
+                onClick={() => window.open('https://supabase.com/dashboard/project/ppuyedxxfcijdfeqpwfj/settings/functions', '_blank')}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Manual Update
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* System Status */}
         <div className={`rounded-lg p-4 ${isSystemHealthy ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <h4 className={`font-semibold mb-2 flex items-center ${isSystemHealthy ? 'text-green-900' : 'text-red-900'}`}>
@@ -193,7 +248,9 @@ const SlackTokenManager = () => {
           <p className={`text-sm ${isSystemHealthy ? 'text-green-700' : 'text-red-700'}`}>
             {isSystemHealthy 
               ? 'Automatic token refresh is working properly. Tokens are refreshed every 10 hours.'
-              : 'Token refresh system needs manual intervention. Please check the updates below.'
+              : isTokenExpired 
+                ? 'Token has expired! All Slack notifications are currently failing and need immediate attention.'
+                : 'Token refresh system needs manual intervention. Please check the updates below.'
             }
           </p>
         </div>
@@ -205,7 +262,7 @@ const SlackTokenManager = () => {
             Current Token Configuration
           </h4>
           <div className="text-sm text-blue-700 space-y-1">
-            <p><strong>Access Token:</strong> xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzE... ✅ Updated</p>
+            <p><strong>Access Token:</strong> xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzE... {isTokenExpired ? '❌ Expired' : '✅ Updated'}</p>
             <p><strong>Refresh Token:</strong> xoxe-1-My0xLTIyMTk5NjM5MTMyNzE... ✅ Available</p>
             <p className="text-xs text-blue-600 mt-2 flex items-center">
               <Clock className="w-3 h-3 mr-1" />
@@ -222,7 +279,10 @@ const SlackTokenManager = () => {
               Manual Update Required
             </h4>
             <p className="text-sm text-yellow-700 mb-3">
-              The automatic token refresh has failed. You need to update the token manually in Supabase.
+              {isTokenExpired 
+                ? 'The bot token has expired and automatic refresh has failed. You need to update the token manually in Supabase immediately.'
+                : 'The automatic token refresh has failed. You need to update the token manually in Supabase.'
+              }
             </p>
             <Button 
               size="sm" 
@@ -247,7 +307,9 @@ const SlackTokenManager = () => {
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {tokenUpdates.map((update) => (
-                <div key={update.id} className="border rounded-lg p-3 space-y-2">
+                <div key={update.id} className={`border rounded-lg p-3 space-y-2 ${
+                  update.new_token.includes('token_expired') ? 'bg-red-50 border-red-200' : ''
+                }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">
                       {new Date(update.refresh_date).toLocaleString()}
@@ -274,7 +336,10 @@ const SlackTokenManager = () => {
                   {update.status === 'error' && (
                     <div className="bg-red-50 border border-red-200 rounded p-2">
                       <p className="text-xs text-red-800">
-                        <strong>Error:</strong> Token refresh failed. Check logs for details.
+                        <strong>Error:</strong> {update.new_token.includes('token_expired') ? 
+                          'Token has expired! All Slack notifications are failing.' : 
+                          'Token refresh failed. Check logs for details.'
+                        }
                       </p>
                     </div>
                   )}
