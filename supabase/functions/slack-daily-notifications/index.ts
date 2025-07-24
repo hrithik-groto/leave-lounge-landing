@@ -27,15 +27,32 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    // Use the fresh bot token directly
+    const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
     const allUsersChannelId = Deno.env.get('SLACK_ALL_USERS_CHANNEL_ID');
 
     console.log('🔑 Checking environment variables...');
-    console.log('Bot token exists:', !!botToken);
+    console.log('Bot token configured:', !!botToken);
     console.log('Channel ID exists:', !!allUsersChannelId);
 
     if (!botToken) {
       console.error('❌ SLACK_BOT_TOKEN not found');
+      // Try to refresh token automatically
+      try {
+        console.log('🔄 Attempting automatic token refresh...');
+        const refreshResult = await supabaseClient.functions.invoke('refresh-slack-token', {
+          body: { source: 'daily-notifications-auto-refresh' }
+        });
+        
+        if (refreshResult.data?.success) {
+          console.log('✅ Token refreshed successfully');
+        } else {
+          console.error('❌ Token refresh failed:', refreshResult.data?.message);
+        }
+      } catch (refreshError) {
+        console.error('❌ Token refresh error:', refreshError);
+      }
+      
       return new Response(
         JSON.stringify({ error: 'Bot token not configured' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
@@ -257,7 +274,7 @@ Deno.serve(async (req) => {
       };
     }
 
-    // Send message to Slack with retry logic
+    // Send message to Slack with retry logic and token refresh
     console.log('📤 Sending daily notification to Slack');
     
     let slackResult;
@@ -289,6 +306,28 @@ Deno.serve(async (req) => {
           break; // Success, exit retry loop
         } else {
           console.warn(`⚠️ Slack API error (attempt ${attempts}):`, slackResult.error);
+          
+          // If token expired, try to refresh
+          if (slackResult.error === 'token_expired' && attempts < maxAttempts) {
+            console.log('🔄 Token expired, attempting refresh...');
+            try {
+              const refreshResult = await supabaseClient.functions.invoke('refresh-slack-token', {
+                body: { source: 'daily-notifications-token-expired' }
+              });
+              
+              if (refreshResult.data?.success) {
+                console.log('✅ Token refreshed, retrying...');
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+              } else {
+                console.error('❌ Token refresh failed:', refreshResult.data?.message);
+              }
+            } catch (refreshError) {
+              console.error('❌ Token refresh error:', refreshError);
+            }
+          }
+          
           if (attempts < maxAttempts && slackResult.error !== 'invalid_auth' && slackResult.error !== 'channel_not_found') {
             // Wait before retry (except for auth/channel errors which won't be fixed by retry)
             await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
@@ -309,11 +348,26 @@ Deno.serve(async (req) => {
       const errorMsg = slackResult?.error || 'Unknown error';
       console.error('❌ Failed to send Slack message after all attempts:', errorMsg);
       
+      // Log token failure to database for monitoring
+      try {
+        await supabaseClient
+          .from('slack_token_updates')
+          .insert({
+            old_token: 'daily_notification_failed',
+            new_token: errorMsg,
+            refresh_date: new Date().toISOString(),
+            status: 'error'
+          });
+      } catch (dbError) {
+        console.error('Failed to log error to database:', dbError);
+      }
+      
       // Provide specific error messages for common issues
       let userFriendlyError = errorMsg;
       switch (errorMsg) {
         case 'invalid_auth':
-          userFriendlyError = 'Invalid Slack bot token. Please check your SLACK_BOT_TOKEN secret.';
+        case 'token_expired':
+          userFriendlyError = 'Invalid or expired Slack bot token. Please check your SLACK_BOT_TOKEN secret.';
           break;
         case 'channel_not_found':
           userFriendlyError = 'Slack channel not found. Please check your SLACK_ALL_USERS_CHANNEL_ID secret.';

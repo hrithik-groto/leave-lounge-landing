@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { formatInTimeZone } from 'https://esm.sh/date-fns-tz@3.0.0';
 
@@ -25,11 +26,12 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    // Use the fresh bot token directly
+    const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
     const channelId = 'C095J2588Q5'; // Second channel for real-time notifications
 
     console.log('🔑 Checking environment variables...');
-    console.log('Bot token exists:', !!botToken);
+    console.log('Bot token configured:', !!botToken);
     console.log('Channel ID:', channelId);
 
     if (!botToken) {
@@ -91,8 +93,7 @@ Deno.serve(async (req) => {
       .from('leave_applied_users')
       .select(`
         *,
-        profiles!leave_applied_users_user_id_fkey (name, email),
-        leave_types:leave_type_id (label, color)
+        profiles!leave_applied_users_user_id_fkey (name, email)
       `)
       .in('status', ['pending', 'approved'])
       .gte('applied_at', thirtyMinutesAgoISO);
@@ -115,8 +116,26 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Send notification for each recent leave application
+    // Get leave types for each application
+    const enhancedLeaves = [];
     for (const leave of recentLeaves) {
+      const enhancedLeave = { ...leave };
+      
+      // Get leave type
+      if (leave.leave_type_id) {
+        const { data: leaveType } = await supabaseClient
+          .from('leave_types')
+          .select('label, color')
+          .eq('id', leave.leave_type_id)
+          .single();
+        enhancedLeave.leave_types = leaveType;
+      }
+      
+      enhancedLeaves.push(enhancedLeave);
+    }
+
+    // Send notification for each recent leave application
+    for (const leave of enhancedLeaves) {
       const userName = leave.profiles?.name || 'Unknown';
       const leaveType = leave.leave_types?.label || 'Leave';
       const startDate = new Date(leave.start_date);
@@ -177,6 +196,24 @@ Deno.serve(async (req) => {
 
         if (!slackResult.ok) {
           console.error('❌ Slack API error:', slackResult.error);
+          
+          // If token expired, try to refresh
+          if (slackResult.error === 'token_expired') {
+            console.log('🔄 Token expired, attempting refresh...');
+            try {
+              const refreshResult = await supabaseClient.functions.invoke('refresh-slack-token', {
+                body: { source: 'midday-notifications-token-expired' }
+              });
+              
+              if (refreshResult.data?.success) {
+                console.log('✅ Token refreshed successfully');
+              } else {
+                console.error('❌ Token refresh failed:', refreshResult.data?.message);
+              }
+            } catch (refreshError) {
+              console.error('❌ Token refresh error:', refreshError);
+            }
+          }
         } else {
           console.log(`✅ Mid-day notification sent successfully for ${userName}`);
         }
@@ -189,7 +226,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        processedLeaves: recentLeaves.length,
+        processedLeaves: enhancedLeaves.length,
         message: 'Mid-day notifications processed successfully'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
