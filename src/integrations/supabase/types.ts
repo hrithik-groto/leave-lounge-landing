@@ -898,6 +898,51 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_slack_integrations: {
         Row: {
           access_token: string | null
@@ -959,6 +1004,17 @@ export type Database = {
         Args: { p_user_id: string; p_month?: number; p_year?: number }
         Returns: Json
       }
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _user_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
       initialize_user_leave_balances: {
         Args: { user_uuid: string }
         Returns: undefined
@@ -966,6 +1022,7 @@ export type Database = {
     }
     Enums: {
       accrual_rule: "annual" | "monthly" | "pro_rata" | "fixed"
+      app_role: "admin" | "user"
       approval_decision: "approved" | "rejected"
       employee_role: "employee" | "manager" | "admin" | "hr"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
@@ -1098,6 +1155,7 @@ export const Constants = {
   public: {
     Enums: {
       accrual_rule: ["annual", "monthly", "pro_rata", "fixed"],
+      app_role: ["admin", "user"],
       approval_decision: ["approved", "rejected"],
       employee_role: ["employee", "manager", "admin", "hr"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
