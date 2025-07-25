@@ -10,7 +10,12 @@ export const useUserRoles = () => {
     queryKey: ['current-user-role'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!user) {
+        console.log('No authenticated user found');
+        return null;
+      }
+
+      console.log('Current user ID:', user.id);
 
       const { data, error } = await supabase
         .from('user_roles')
@@ -23,7 +28,9 @@ export const useUserRoles = () => {
         return 'user';
       }
 
-      return data?.role || 'user';
+      const role = data?.role || 'user';
+      console.log('User role:', role);
+      return role;
     },
   });
 
@@ -93,6 +100,7 @@ export const useUserRoles = () => {
   });
 
   const isAdmin = currentUserRole === 'admin';
+  console.log('Is admin:', isAdmin);
 
   return {
     currentUserRole,

@@ -7,7 +7,28 @@ import { Button } from '@/components/ui/button';
 
 export const Navigation = () => {
   const location = useLocation();
-  const { isAdmin } = useUserRoles();
+  const { isAdmin, isLoadingCurrentRole } = useUserRoles();
+
+  // Don't render navigation items until we know the user's role
+  if (isLoadingCurrentRole) {
+    return (
+      <nav className="bg-background border-b">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-4">
+              <Link to="/" className="text-xl font-bold">
+                Timeloo
+              </Link>
+              <div className="flex space-x-2">
+                <div className="animate-pulse h-8 w-20 bg-gray-200 rounded"></div>
+                <div className="animate-pulse h-8 w-20 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    );
+  }
 
   const filteredNavItems = navItems.filter(item => {
     if (item.adminOnly && !isAdmin) return false;
