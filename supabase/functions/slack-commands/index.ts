@@ -45,7 +45,7 @@ serve(async (req) => {
     // Use the latest bot token
     const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDk3NzIxOTA1ODItZmZjZTQyZjAyYzU5ZDIwY2NiMmE3OTNjNzk5ZmM2NmRjNmNmMDVlYTFiMDUyNGEzYjljODE0NDg4ZTY5M2RiOQ';
 
-    if (command === '/timeloo') {
+    if (command === '/leaves') {
       // Check if user is admin for admin-only features
       const userIsAdmin = await isUserAdmin(supabaseClient, 'user_2xwywE2Bl76vs7l68dhj6nIcCPV');
       
