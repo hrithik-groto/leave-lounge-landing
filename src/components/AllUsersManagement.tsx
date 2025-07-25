@@ -15,6 +15,9 @@ export const AllUsersManagement = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<'admin' | 'user'>('user');
 
+  console.log('AllUsersManagement - isAdmin:', isAdmin);
+  console.log('AllUsersManagement - allUsers:', allUsers);
+
   if (!isAdmin) {
     return (
       <Card>

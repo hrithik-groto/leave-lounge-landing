@@ -1,5 +1,5 @@
 
-import { HomeIcon, Shield, Users } from "lucide-react";
+import { HomeIcon, Shield, Users, Bell } from "lucide-react";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -40,8 +40,9 @@ export const navItems = [
   {
     title: "Test Notifications",
     to: "/test-notifications",
-    icon: <HomeIcon className="h-4 w-4" />,
+    icon: <Bell className="h-4 w-4" />,
     page: <TestNotifications />,
+    adminOnly: true,
   },
   {
     title: "Not Found",

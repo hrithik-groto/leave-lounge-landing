@@ -31,10 +31,16 @@ export const Navigation = () => {
   }
 
   const filteredNavItems = navItems.filter(item => {
-    if (item.adminOnly && !isAdmin) return false;
+    if (item.adminOnly && !isAdmin) {
+      console.log(`Filtering out ${item.title} - adminOnly: ${item.adminOnly}, isAdmin: ${isAdmin}`);
+      return false;
+    }
     if (item.to === "*") return false; // Hide not found route
     return true;
   });
+
+  console.log('Filtered nav items:', filteredNavItems.map(item => item.title));
+  console.log('Current admin status:', isAdmin);
 
   return (
     <nav className="bg-background border-b">
