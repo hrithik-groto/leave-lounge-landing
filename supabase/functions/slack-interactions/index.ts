@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -6,6 +5,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Function to check if user is admin
+const isUserAdmin = async (supabaseClient: any, userId: string) => {
+  const { data, error } = await supabaseClient
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .single();
+  
+  if (error) {
+    console.log('Error checking admin status:', error);
+    return false;
+  }
+  
+  return data?.role === 'admin';
 };
 
 serve(async (req) => {
@@ -292,6 +307,27 @@ serve(async (req) => {
 
       if (actionId === 'admin_review_requests') {
         console.log(`Processing action: ${actionId} for user: ${userId}`);
+        
+        // Check if user is admin
+        const userIsAdmin = await isUserAdmin(supabaseClient, 'user_2xwywE2Bl76vs7l68dhj6nIcCPV');
+        
+        if (!userIsAdmin) {
+          // Send ephemeral message to user
+          await fetch('https://slack.com/api/chat.postEphemeral', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${botToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              channel: payload.channel?.id,
+              user: userId,
+              text: '❌ You need admin privileges to review leave requests. Please contact your administrator.'
+            }),
+          });
+          
+          return new Response('', { status: 200 });
+        }
         
         // Get pending leave requests
         const { data: pendingRequests } = await supabaseClient
