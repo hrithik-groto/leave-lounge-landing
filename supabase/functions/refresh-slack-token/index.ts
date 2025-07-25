@@ -24,7 +24,7 @@ serve(async (req) => {
     console.log(`Token refresh source: ${source}`);
 
     // Updated tokens from your latest message
-    const newAccessToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
+    const newAccessToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDk3NzIxOTA1ODItZmZjZTQyZjAyYzU5ZDIwY2NiMmE3OTNjNzk5ZmM2NmRjNmNmMDVlYTFiMDUyNGEzYjljODE0NDg4ZTY5M2RiOQ';
     const newRefreshToken = 'xoxe-1-My0xLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjYzMDU3Ny05MTc2MjY1MjQ5Mjk5LTM4MzhkOWViZjg0MzE5ZDkzYTQxYjAwYTFiM2RkMjRmYTQ3NzgyMWM3Yjc1NjU3MDhkNmJkMGI2OTQyNGU0OTA';
 
     // Get Slack client credentials

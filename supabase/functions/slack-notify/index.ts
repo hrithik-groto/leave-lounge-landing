@@ -207,7 +207,7 @@ serve(async (req) => {
       }
       
       // Use the updated token from the refresh function
-      return 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
+      return 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDk3NzIxOTA1ODItZmZjZTQyZjAyYzU5ZDIwY2NiMmE3OTNjNzk5ZmM2NmRjNmNmMDVlYTFiMDUyNGEzYjljODE0NDg4ZTY5M2RiOQ';
     };
 
     // Send to appropriate Slack channels

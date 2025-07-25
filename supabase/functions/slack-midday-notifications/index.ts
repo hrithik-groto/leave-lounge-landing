@@ -1,4 +1,3 @@
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { formatInTimeZone } from 'https://esm.sh/date-fns-tz@3.0.0';
 
@@ -26,8 +25,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Use the fresh bot token directly
-    const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDY0Njc4MzgyOTAtNWU5OGQyZDcyNDEyNTA2MTc4NzA1ZjczNDhiZjBjMzFjOWY0M2Y2ODBhMjM2MDMyZmM0Mzk0ZjMwMDJkNTBiMw';
+    // Use the latest bot token
+    const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDk3NzIxOTA1ODItZmZjZTQyZjAyYzU5ZDIwY2NiMmE3OTNjNzk5ZmM2NmRjNmNmMDVlYTFiMDUyNGEzYjljODE0NDg4ZTY5M2RiOQ';
     const channelId = 'C095J2588Q5'; // All users channel
 
     console.log('🔑 Checking environment variables...');
@@ -51,6 +50,37 @@ Deno.serve(async (req) => {
       console.log('📧 Processing direct leave notification');
       const leave = requestBody.leaveApplication;
       
+      // Check if it's working hours (10:30 AM - 5:30 PM IST)
+      const istTimezone = 'Asia/Kolkata';
+      const now = new Date();
+      const currentIST = new Date(now.toLocaleString("en-US", {timeZone: istTimezone}));
+      const currentHour = currentIST.getHours();
+      const currentMinute = currentIST.getMinutes();
+      
+      console.log(`🕐 Current IST time: ${formatInTimeZone(now, istTimezone, 'HH:mm')}`);
+
+      // Check if it's between 10:30 AM and 5:30 PM IST
+      const isWorkingHours = (currentHour > 10 || (currentHour === 10 && currentMinute >= 30)) && 
+                             (currentHour < 17 || (currentHour === 17 && currentMinute <= 30));
+
+      if (!isWorkingHours) {
+        console.log('⏰ Outside working hours (10:30 AM - 5:30 PM IST), skipping instant notification');
+        return new Response(
+          JSON.stringify({ message: 'Outside working hours' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+
+      // Skip weekends
+      const dayOfWeek = formatInTimeZone(now, istTimezone, 'EEEE');
+      if (dayOfWeek === 'Saturday' || dayOfWeek === 'Sunday') {
+        console.log('📴 Skipping weekend - no notifications sent');
+        return new Response(
+          JSON.stringify({ message: 'Skipped weekend' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+      
       const userName = leave.user_name || 'Unknown User';
       const leaveType = leave.leave_type_label || 'Leave';
       const startDate = new Date(leave.start_date);
@@ -58,7 +88,6 @@ Deno.serve(async (req) => {
       const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
       const status = leave.status === 'pending' ? '⏳ awaiting approval' : '✅ approved';
       
-      const istTimezone = 'Asia/Kolkata';
       const formattedStartDate = formatInTimeZone(startDate, istTimezone, 'MMM dd');
       const formattedEndDate = formatInTimeZone(endDate, istTimezone, 'MMM dd');
       const dateRange = startDate.getTime() === endDate.getTime() ? 
