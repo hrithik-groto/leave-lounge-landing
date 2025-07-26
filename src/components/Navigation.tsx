@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 
 export const Navigation = () => {
   const location = useLocation();
-  const { isAdmin, isLoadingCurrentRole, currentUser } = useUserRoles();
+  const { isAdmin, isLoadingCurrentRole, currentUser, isHardcodedAdmin } = useUserRoles();
 
-  console.log('Navigation render - currentUser:', currentUser?.id, 'isAdmin:', isAdmin, 'isLoading:', isLoadingCurrentRole);
+  console.log('Navigation render - currentUser:', currentUser?.id, 'isAdmin:', isAdmin, 'isHardcodedAdmin:', isHardcodedAdmin, 'isLoading:', isLoadingCurrentRole);
 
   // Show loading state while checking user role
   if (isLoadingCurrentRole) {
@@ -32,18 +32,15 @@ export const Navigation = () => {
     );
   }
 
-  // Filter navigation items based on admin status and current route
+  // Filter navigation items based on admin status and showInNav flag
   const filteredNavItems = navItems.filter(item => {
-    // Hide the "Not Found" route from navigation
-    if (item.to === "*") return false;
-    
-    // Hide "Home" when user is authenticated (since they should use Dashboard)
-    if (item.to === "/" && currentUser) return false;
+    // Don't show items marked as not for navigation
+    if (item.showInNav === false) return false;
     
     // If item requires admin access, only show to admins
     if (item.adminOnly) {
-      console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}, currentUser: ${currentUser?.id}`);
-      return isAdmin;
+      console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}, isHardcodedAdmin: ${isHardcodedAdmin}, currentUser: ${currentUser?.id}`);
+      return isAdmin || isHardcodedAdmin;
     }
     
     return true;

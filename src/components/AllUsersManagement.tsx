@@ -11,15 +11,23 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { format } from 'date-fns';
 
 export const AllUsersManagement = () => {
-  const { allUsers, isLoadingUsers, updateUserRole, isAdmin, isHardcodedAdmin } = useUserRoles();
+  const { allUsers, isLoadingUsers, updateUserRole, isAdmin, isHardcodedAdmin, currentUser } = useUserRoles();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<'admin' | 'user'>('user');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
-  console.log('AllUsersManagement render:', { isAdmin, isHardcodedAdmin, allUsers });
+  console.log('AllUsersManagement render:', { 
+    isAdmin, 
+    isHardcodedAdmin, 
+    currentUser: currentUser?.id,
+    allUsers: allUsers?.length,
+    isLoadingUsers 
+  });
 
-  // Only hardcoded admins can access this page
-  if (!isAdmin) {
+  // Check if user has admin access (either hardcoded admin or admin role)
+  const hasAdminAccess = isAdmin || isHardcodedAdmin;
+
+  if (!hasAdminAccess) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
         <div className="max-w-4xl mx-auto">
@@ -33,6 +41,11 @@ export const AllUsersManagement = () => {
                 <p className="text-red-600 max-w-md mx-auto">
                   You don't have permission to access this page. Only system administrators can manage user roles.
                 </p>
+                <div className="text-sm text-red-500 bg-red-100 p-3 rounded">
+                  <p>Current user: {currentUser?.id || 'Not authenticated'}</p>
+                  <p>Is Admin: {isAdmin ? 'Yes' : 'No'}</p>
+                  <p>Is Hardcoded Admin: {isHardcodedAdmin ? 'Yes' : 'No'}</p>
+                </div>
               </div>
             </CardContent>
           </Card>

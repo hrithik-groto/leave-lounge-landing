@@ -13,12 +13,21 @@ export const useUserRoles = () => {
   const queryClient = useQueryClient();
 
   // Get current user and determine if they're admin
-  const { data: currentUser, isLoading: isLoadingCurrentUser } = useQuery({
+  const { data: currentUser, isLoading: isLoadingCurrentUser, error: userError } = useQuery({
     queryKey: ['current-user'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      console.log('Current authenticated user:', user);
-      return user;
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) {
+          console.error('Error getting user:', error);
+          return null;
+        }
+        console.log('Current authenticated user:', user);
+        return user;
+      } catch (error) {
+        console.error('Error in getUser query:', error);
+        return null;
+      }
     },
   });
 
@@ -40,48 +49,57 @@ export const useUserRoles = () => {
 
       if (isHardcodedAdmin) {
         // Ensure the user has admin role in the database
-        const { data: existingRole } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', currentUser.id)
-          .single();
-
-        if (!existingRole || existingRole.role !== 'admin') {
-          console.log('Setting admin role in database for:', currentUser.id);
-          const { error } = await supabase
+        try {
+          const { data: existingRole } = await supabase
             .from('user_roles')
-            .upsert({
-              user_id: currentUser.id,
-              role: 'admin',
-              assigned_by: currentUser.id,
-              assigned_at: new Date().toISOString()
-            }, {
-              onConflict: 'user_id'
-            });
+            .select('role')
+            .eq('user_id', currentUser.id)
+            .single();
 
-          if (error) {
-            console.error('Error setting admin role:', error);
+          if (!existingRole || existingRole.role !== 'admin') {
+            console.log('Setting admin role in database for:', currentUser.id);
+            const { error } = await supabase
+              .from('user_roles')
+              .upsert({
+                user_id: currentUser.id,
+                role: 'admin',
+                assigned_by: currentUser.id,
+                assigned_at: new Date().toISOString()
+              }, {
+                onConflict: 'user_id'
+              });
+
+            if (error) {
+              console.error('Error setting admin role:', error);
+            }
           }
+        } catch (error) {
+          console.error('Error checking/setting admin role:', error);
         }
         
         return 'admin';
       }
 
       // For non-hardcoded users, check database
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', currentUser.id)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', currentUser.id)
+          .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching user role:', error);
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching user role:', error);
+          return 'user';
+        }
+
+        const role = data?.role || 'user';
+        console.log('Database user role:', role);
+        return role;
+      } catch (error) {
+        console.error('Error in user role query:', error);
         return 'user';
       }
-
-      const role = data?.role || 'user';
-      console.log('Database user role:', role);
-      return role;
     },
     enabled: !!currentUser,
   });
@@ -92,38 +110,43 @@ export const useUserRoles = () => {
     queryFn: async () => {
       console.log('Fetching all users with roles...');
       
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          name,
-          email,
-          created_at,
-          user_roles (
-            role,
-            assigned_by,
-            assigned_at
-          )
-        `)
-        .order('created_at', { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select(`
+            id,
+            name,
+            email,
+            created_at,
+            user_roles (
+              role,
+              assigned_by,
+              assigned_at
+            )
+          `)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching users:', error);
-        throw error;
+        if (error) {
+          console.error('Error fetching users:', error);
+          throw error;
+        }
+
+        const usersWithRoles = data?.map(user => ({
+          ...user,
+          role: user.user_roles?.[0]?.role || 'user',
+          assigned_by: user.user_roles?.[0]?.assigned_by,
+          assigned_at: user.user_roles?.[0]?.assigned_at,
+          isHardcodedAdmin: ADMIN_USER_IDS.includes(user.id)
+        })) || [];
+
+        console.log('All users with roles:', usersWithRoles);
+        return usersWithRoles;
+      } catch (error) {
+        console.error('Error in all users query:', error);
+        return [];
       }
-
-      const usersWithRoles = data?.map(user => ({
-        ...user,
-        role: user.user_roles?.[0]?.role || 'user',
-        assigned_by: user.user_roles?.[0]?.assigned_by,
-        assigned_at: user.user_roles?.[0]?.assigned_at,
-        isHardcodedAdmin: ADMIN_USER_IDS.includes(user.id)
-      })) || [];
-
-      console.log('All users with roles:', usersWithRoles);
-      return usersWithRoles;
     },
-    enabled: currentUserRole === 'admin',
+    enabled: currentUserRole === 'admin' || (currentUser && ADMIN_USER_IDS.includes(currentUser.id)),
   });
 
   const updateUserRole = useMutation({
@@ -172,7 +195,8 @@ export const useUserRoles = () => {
     isAdmin,
     isHardcodedAdmin,
     currentUserId: currentUser?.id,
-    allUsersCount: allUsers?.length
+    allUsersCount: allUsers?.length,
+    userError: userError?.message
   });
 
   return {

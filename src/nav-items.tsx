@@ -1,5 +1,5 @@
 
-import { HomeIcon, Shield, Users, Bell, Calendar, FileText, Clock, Settings } from "lucide-react";
+import { Shield, Users, Bell, Calendar, FileText, Clock, Settings } from "lucide-react";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -14,8 +14,9 @@ export const navItems = [
   {
     title: "Home",
     to: "/",
-    icon: <HomeIcon className="h-4 w-4" />,
+    icon: <Calendar className="h-4 w-4" />,
     page: <Index />,
+    showInNav: false, // Don't show in navigation, only used for routing
   },
   {
     title: "Dashboard",
@@ -24,17 +25,17 @@ export const navItems = [
     page: <Dashboard />,
   },
   {
-    title: "Admin Dashboard",
-    to: "/admin",
-    icon: <Shield className="h-4 w-4" />,
-    page: <AdminDashboard />,
-    adminOnly: true,
-  },
-  {
     title: "All Users",
     to: "/all-users",
     icon: <Users className="h-4 w-4" />,
     page: <AllUsers />,
+    adminOnly: true,
+  },
+  {
+    title: "Admin Dashboard",
+    to: "/admin",
+    icon: <Shield className="h-4 w-4" />,
+    page: <AdminDashboard />,
     adminOnly: true,
   },
   {
@@ -47,7 +48,8 @@ export const navItems = [
   {
     title: "Not Found",
     to: "*",
-    icon: <HomeIcon className="h-4 w-4" />,
+    icon: <Calendar className="h-4 w-4" />,
     page: <NotFound />,
+    showInNav: false, // Don't show in navigation, only used for routing
   },
 ];
