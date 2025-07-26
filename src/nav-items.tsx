@@ -12,13 +12,6 @@ import NotFound from "./pages/NotFound";
  */
 export const navItems = [
   {
-    title: "Home",
-    to: "/",
-    icon: <Calendar className="h-4 w-4" />,
-    page: <Index />,
-    showInNav: false, // Don't show in navigation, only used for routing
-  },
-  {
     title: "Dashboard",
     to: "/dashboard",
     icon: <Calendar className="h-4 w-4" />,
@@ -37,6 +30,7 @@ export const navItems = [
     icon: <Shield className="h-4 w-4" />,
     page: <AdminDashboard />,
     adminOnly: true,
+    showInNav: false, // Don't show in main nav, access through other means
   },
   {
     title: "Test Notifications",
@@ -44,6 +38,14 @@ export const navItems = [
     icon: <Bell className="h-4 w-4" />,
     page: <TestNotifications />,
     adminOnly: true,
+    showInNav: false, // Don't show in main nav
+  },
+  {
+    title: "Home",
+    to: "/",
+    icon: <Calendar className="h-4 w-4" />,
+    page: <Index />,
+    showInNav: false, // Don't show in navigation, only used for routing
   },
   {
     title: "Not Found",

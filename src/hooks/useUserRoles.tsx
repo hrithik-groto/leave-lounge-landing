@@ -29,6 +29,7 @@ export const useUserRoles = () => {
         return null;
       }
     },
+    retry: 1,
   });
 
   // Check if current user is admin based on hard-coded admin IDs
@@ -102,52 +103,64 @@ export const useUserRoles = () => {
       }
     },
     enabled: Boolean(currentUser),
+    retry: 1,
   });
 
   // Fetch all users with their roles (only for admins)
-  const { data: allUsers, isLoading: isLoadingUsers } = useQuery({
+  const { data: allUsers, isLoading: isLoadingUsers, error: usersError } = useQuery({
     queryKey: ['all-users-with-roles'],
     queryFn: async () => {
       console.log('Fetching all users with roles...');
       
       try {
-        // Fix the Supabase query by specifying the exact relationship
-        const { data, error } = await supabase
+        // Get all profiles
+        const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
-          .select(`
-            id,
-            name,
-            email,
-            created_at,
-            user_roles!user_roles_user_id_fkey (
-              role,
-              assigned_by,
-              assigned_at
-            )
-          `)
+          .select('id, name, email, created_at')
           .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Error fetching users:', error);
-          throw error;
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+          throw profilesError;
         }
 
-        const usersWithRoles = data?.map(user => ({
-          ...user,
-          role: user.user_roles?.[0]?.role || 'user',
-          assigned_by: user.user_roles?.[0]?.assigned_by,
-          assigned_at: user.user_roles?.[0]?.assigned_at,
-          isHardcodedAdmin: ADMIN_USER_IDS.includes(user.id)
-        })) || [];
+        if (!profiles) {
+          console.log('No profiles found');
+          return [];
+        }
+
+        // Get all user roles
+        const { data: userRoles, error: rolesError } = await supabase
+          .from('user_roles')
+          .select('user_id, role, assigned_by, assigned_at');
+
+        if (rolesError) {
+          console.error('Error fetching user roles:', rolesError);
+          // Continue without roles data instead of failing completely
+        }
+
+        // Combine profiles with roles
+        const usersWithRoles = profiles.map(profile => {
+          const userRole = userRoles?.find(role => role.user_id === profile.id);
+          return {
+            ...profile,
+            role: userRole?.role || 'user',
+            assigned_by: userRole?.assigned_by,
+            assigned_at: userRole?.assigned_at,
+            isHardcodedAdmin: ADMIN_USER_IDS.includes(profile.id),
+            user_roles: userRole ? [userRole] : []
+          };
+        });
 
         console.log('All users with roles:', usersWithRoles);
         return usersWithRoles;
       } catch (error) {
         console.error('Error in all users query:', error);
-        return [];
+        throw error;
       }
     },
     enabled: Boolean(currentUserRole === 'admin' || (currentUser && ADMIN_USER_IDS.includes(currentUser.id))),
+    retry: 1,
   });
 
   const updateUserRole = useMutation({
@@ -197,7 +210,8 @@ export const useUserRoles = () => {
     isHardcodedAdmin,
     currentUserId: currentUser?.id,
     allUsersCount: allUsers?.length,
-    userError: userError?.message
+    userError: userError?.message,
+    usersError: usersError?.message
   });
 
   return {
@@ -208,6 +222,7 @@ export const useUserRoles = () => {
     isLoadingUsers,
     updateUserRole,
     isAdmin,
-    isHardcodedAdmin
+    isHardcodedAdmin,
+    usersError
   };
 };

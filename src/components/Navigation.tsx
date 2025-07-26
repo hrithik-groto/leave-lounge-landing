@@ -32,6 +32,9 @@ export const Navigation = () => {
     );
   }
 
+  // Check if user has admin access (either role-based admin or hardcoded admin)
+  const hasAdminAccess = isAdmin || isHardcodedAdmin;
+
   // Filter navigation items based on admin status and showInNav flag
   const filteredNavItems = navItems.filter(item => {
     // Don't show items marked as not for navigation
@@ -39,8 +42,8 @@ export const Navigation = () => {
     
     // If item requires admin access, only show to admins
     if (item.adminOnly === true) {
-      console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}, isHardcodedAdmin: ${isHardcodedAdmin}, currentUser: ${currentUser?.id}`);
-      return isAdmin || isHardcodedAdmin;
+      console.log(`Checking admin-only item ${item.title} - hasAdminAccess: ${hasAdminAccess}, currentUser: ${currentUser?.id}`);
+      return hasAdminAccess;
     }
     
     return true;
@@ -57,7 +60,7 @@ export const Navigation = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-4">
-            <Link to="/" className="text-xl font-bold">
+            <Link to="/dashboard" className="text-xl font-bold">
               Timeloo
             </Link>
             <div className="flex space-x-2">

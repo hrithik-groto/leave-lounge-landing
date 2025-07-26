@@ -6,12 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Users, Shield, User, Crown, Settings, AlertTriangle } from 'lucide-react';
+import { Users, Shield, User, Crown, Settings, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { format } from 'date-fns';
 
 export const AllUsersManagement = () => {
-  const { allUsers, isLoadingUsers, updateUserRole, isAdmin, isHardcodedAdmin, currentUser } = useUserRoles();
+  const { allUsers, isLoadingUsers, updateUserRole, isAdmin, isHardcodedAdmin, currentUser, usersError } = useUserRoles();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<'admin' | 'user'>('user');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -21,7 +21,8 @@ export const AllUsersManagement = () => {
     isHardcodedAdmin, 
     currentUser: currentUser?.id,
     allUsers: allUsers?.length,
-    isLoadingUsers 
+    isLoadingUsers,
+    usersError: usersError?.message
   });
 
   // Check if user has admin access (either hardcoded admin or admin role)
@@ -64,6 +65,34 @@ export const AllUsersManagement = () => {
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto"></div>
                 <h3 className="text-lg font-medium text-gray-700">Loading Users</h3>
                 <p className="text-gray-500">Please wait while we fetch all user data...</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (usersError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          <Card className="border-yellow-200 bg-yellow-50">
+            <CardContent className="p-12">
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto">
+                  <AlertCircle className="h-8 w-8 text-yellow-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-yellow-800">Error Loading Users</h2>
+                <p className="text-yellow-600 max-w-md mx-auto">
+                  There was an error loading the user data. Please try refreshing the page.
+                </p>
+                <div className="text-sm text-yellow-500 bg-yellow-100 p-3 rounded">
+                  <p>Error: {usersError.message}</p>
+                </div>
+                <Button onClick={() => window.location.reload()} className="mt-4">
+                  Refresh Page
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -222,7 +251,7 @@ export const AllUsersManagement = () => {
                         </div>
                       </TableCell>
                       <TableCell className="py-4 text-gray-600">
-                        {format(new Date(user.created_at), 'MMM dd, yyyy')}
+                        {user.created_at ? format(new Date(user.created_at), 'MMM dd, yyyy') : 'Unknown'}
                       </TableCell>
                       <TableCell className="py-4">
                         {user.isHardcodedAdmin ? (
