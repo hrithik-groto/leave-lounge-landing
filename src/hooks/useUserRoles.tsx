@@ -48,7 +48,7 @@ export const useUserRoles = () => {
 
         if (!existingRole || existingRole.role !== 'admin') {
           console.log('Setting admin role in database for:', currentUser.id);
-          await supabase
+          const { error } = await supabase
             .from('user_roles')
             .upsert({
               user_id: currentUser.id,
@@ -58,12 +58,16 @@ export const useUserRoles = () => {
             }, {
               onConflict: 'user_id'
             });
+
+          if (error) {
+            console.error('Error setting admin role:', error);
+          }
         }
         
         return 'admin';
       }
 
-      // For non-hardcoded admins, check database
+      // For non-hardcoded users, check database
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
@@ -167,7 +171,8 @@ export const useUserRoles = () => {
     currentUserRole,
     isAdmin,
     isHardcodedAdmin,
-    currentUserId: currentUser?.id
+    currentUserId: currentUser?.id,
+    allUsersCount: allUsers?.length
   });
 
   return {

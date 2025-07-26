@@ -1,5 +1,5 @@
 
-import { HomeIcon, Shield, Users, Bell } from "lucide-react";
+import { HomeIcon, Shield, Users, Bell, Calendar, FileText, Clock, Settings } from "lucide-react";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -20,7 +20,7 @@ export const navItems = [
   {
     title: "Dashboard",
     to: "/dashboard",
-    icon: <HomeIcon className="h-4 w-4" />,
+    icon: <Calendar className="h-4 w-4" />,
     page: <Dashboard />,
   },
   {

@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 
 export const Navigation = () => {
   const location = useLocation();
-  const { isAdmin, isLoadingCurrentRole } = useUserRoles();
+  const { isAdmin, isLoadingCurrentRole, currentUser } = useUserRoles();
 
-  console.log('Navigation render - isAdmin:', isAdmin, 'isLoading:', isLoadingCurrentRole);
+  console.log('Navigation render - currentUser:', currentUser?.id, 'isAdmin:', isAdmin, 'isLoading:', isLoadingCurrentRole);
 
   // Show loading state while checking user role
   if (isLoadingCurrentRole) {
@@ -32,21 +32,28 @@ export const Navigation = () => {
     );
   }
 
-  // Filter navigation items based on admin status
+  // Filter navigation items based on admin status and current route
   const filteredNavItems = navItems.filter(item => {
     // Hide the "Not Found" route from navigation
     if (item.to === "*") return false;
     
+    // Hide "Home" when user is authenticated (since they should use Dashboard)
+    if (item.to === "/" && currentUser) return false;
+    
     // If item requires admin access, only show to admins
     if (item.adminOnly) {
-      console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}`);
+      console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}, currentUser: ${currentUser?.id}`);
       return isAdmin;
     }
     
     return true;
   });
 
-  console.log('Filtered nav items:', filteredNavItems.map(item => ({ title: item.title, adminOnly: item.adminOnly })));
+  console.log('Filtered nav items:', filteredNavItems.map(item => ({ 
+    title: item.title, 
+    adminOnly: item.adminOnly,
+    to: item.to 
+  })));
 
   return (
     <nav className="bg-background border-b">
@@ -59,7 +66,7 @@ export const Navigation = () => {
             <div className="flex space-x-2">
               {filteredNavItems.map((item) => {
                 const isActive = location.pathname === item.to;
-                console.log(`Nav item ${item.title} - isActive: ${isActive}, path: ${item.to}`);
+                console.log(`Nav item ${item.title} - isActive: ${isActive}, path: ${item.to}, adminOnly: ${item.adminOnly}`);
                 
                 return (
                   <Button
@@ -72,7 +79,7 @@ export const Navigation = () => {
                       {item.icon}
                       {item.title}
                       {item.adminOnly && (
-                        <span className="text-xs bg-red-100 text-red-600 px-1 rounded">Admin</span>
+                        <span className="text-xs bg-red-100 text-red-600 px-1 rounded ml-1">Admin</span>
                       )}
                     </Link>
                   </Button>
