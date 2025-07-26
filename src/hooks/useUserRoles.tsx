@@ -101,7 +101,7 @@ export const useUserRoles = () => {
         return 'user';
       }
     },
-    enabled: !!currentUser,
+    enabled: Boolean(currentUser),
   });
 
   // Fetch all users with their roles (only for admins)
@@ -111,6 +111,7 @@ export const useUserRoles = () => {
       console.log('Fetching all users with roles...');
       
       try {
+        // Fix the Supabase query by specifying the exact relationship
         const { data, error } = await supabase
           .from('profiles')
           .select(`
@@ -118,7 +119,7 @@ export const useUserRoles = () => {
             name,
             email,
             created_at,
-            user_roles (
+            user_roles!user_roles_user_id_fkey (
               role,
               assigned_by,
               assigned_at
@@ -146,7 +147,7 @@ export const useUserRoles = () => {
         return [];
       }
     },
-    enabled: currentUserRole === 'admin' || (currentUser && ADMIN_USER_IDS.includes(currentUser.id)),
+    enabled: Boolean(currentUserRole === 'admin' || (currentUser && ADMIN_USER_IDS.includes(currentUser.id))),
   });
 
   const updateUserRole = useMutation({

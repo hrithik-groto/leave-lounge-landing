@@ -38,7 +38,7 @@ export const Navigation = () => {
     if (item.showInNav === false) return false;
     
     // If item requires admin access, only show to admins
-    if (item.adminOnly) {
+    if (item.adminOnly === true) {
       console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}, isHardcodedAdmin: ${isHardcodedAdmin}, currentUser: ${currentUser?.id}`);
       return isAdmin || isHardcodedAdmin;
     }
