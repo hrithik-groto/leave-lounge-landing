@@ -8,8 +8,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Define the two admin user IDs
+const ADMIN_USER_IDS = [
+  'user_2xwywE2Bl76vs7l68dhj6nIcCPV',
+  'user_30JDwBWQQyzlqBrhUFRCsvOjuI4'
+];
+
 // Function to check if user is admin
 const isUserAdmin = async (supabaseClient: any, userId: string) => {
+  // First check if they are hardcoded admin
+  if (ADMIN_USER_IDS.includes(userId)) {
+    console.log('User is hardcoded admin:', userId);
+    return true;
+  }
+  
+  // Then check database for assigned admin role
   const { data, error } = await supabaseClient
     .from('user_roles')
     .select('role')
@@ -21,7 +34,9 @@ const isUserAdmin = async (supabaseClient: any, userId: string) => {
     return false;
   }
   
-  return data?.role === 'admin';
+  const isDbAdmin = data?.role === 'admin';
+  console.log('User admin status from DB:', isDbAdmin);
+  return isDbAdmin;
 };
 
 serve(async (req) => {
@@ -46,7 +61,8 @@ serve(async (req) => {
     const botToken = 'xoxe.xoxb-1-MS0yLTIyMTk5NjM5MTMyNzEtOTA4MTEzMjM2MzY5Ny05MDgxMTMyNjMwNTc3LTkyNDk3NzIxOTA1ODItZmZjZTQyZjAyYzU5ZDIwY2NiMmE3OTNjNzk5ZmM2NmRjNmNmMDVlYTFiMDUyNGEzYjljODE0NDg4ZTY5M2RiOQ';
 
     if (command === '/leaves') {
-      // Check if user is admin for admin-only features
+      // Check if user is admin - this will be based on the Slack user ID mapping to our system user ID
+      // For now, we'll check against the hardcoded admin user (this would need proper mapping in production)
       const userIsAdmin = await isUserAdmin(supabaseClient, 'user_2xwywE2Bl76vs7l68dhj6nIcCPV');
       
       const blocks = [
@@ -141,7 +157,7 @@ serve(async (req) => {
       text: 'Sorry, there was an error processing your request.'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500
+      status: 200
     });
   }
 });

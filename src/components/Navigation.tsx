@@ -9,7 +9,9 @@ export const Navigation = () => {
   const location = useLocation();
   const { isAdmin, isLoadingCurrentRole } = useUserRoles();
 
-  // Don't render navigation items until we know the user's role
+  console.log('Navigation render - isAdmin:', isAdmin, 'isLoading:', isLoadingCurrentRole);
+
+  // Show loading state while checking user role
   if (isLoadingCurrentRole) {
     return (
       <nav className="bg-background border-b">
@@ -30,17 +32,21 @@ export const Navigation = () => {
     );
   }
 
+  // Filter navigation items based on admin status
   const filteredNavItems = navItems.filter(item => {
-    if (item.adminOnly && !isAdmin) {
-      console.log(`Filtering out ${item.title} - adminOnly: ${item.adminOnly}, isAdmin: ${isAdmin}`);
-      return false;
+    // Hide the "Not Found" route from navigation
+    if (item.to === "*") return false;
+    
+    // If item requires admin access, only show to admins
+    if (item.adminOnly) {
+      console.log(`Checking admin-only item ${item.title} - isAdmin: ${isAdmin}`);
+      return isAdmin;
     }
-    if (item.to === "*") return false; // Hide not found route
+    
     return true;
   });
 
-  console.log('Filtered nav items:', filteredNavItems.map(item => item.title));
-  console.log('Current admin status:', isAdmin);
+  console.log('Filtered nav items:', filteredNavItems.map(item => ({ title: item.title, adminOnly: item.adminOnly })));
 
   return (
     <nav className="bg-background border-b">
@@ -51,19 +57,27 @@ export const Navigation = () => {
               Timeloo
             </Link>
             <div className="flex space-x-2">
-              {filteredNavItems.map((item) => (
-                <Button
-                  key={item.to}
-                  variant={location.pathname === item.to ? "default" : "ghost"}
-                  size="sm"
-                  asChild
-                >
-                  <Link to={item.to} className="flex items-center gap-2">
-                    {item.icon}
-                    {item.title}
-                  </Link>
-                </Button>
-              ))}
+              {filteredNavItems.map((item) => {
+                const isActive = location.pathname === item.to;
+                console.log(`Nav item ${item.title} - isActive: ${isActive}, path: ${item.to}`);
+                
+                return (
+                  <Button
+                    key={item.to}
+                    variant={isActive ? "default" : "ghost"}
+                    size="sm"
+                    asChild
+                  >
+                    <Link to={item.to} className="flex items-center gap-2">
+                      {item.icon}
+                      {item.title}
+                      {item.adminOnly && (
+                        <span className="text-xs bg-red-100 text-red-600 px-1 rounded">Admin</span>
+                      )}
+                    </Link>
+                  </Button>
+                );
+              })}
             </div>
           </div>
         </div>
